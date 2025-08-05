@@ -1,6 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import or_
 from app.models.user import User
+from typing import List
 
 async def get_user_by_mobile(db: AsyncSession, mobile_number: str):
     result = await db.execute(select(User).where(User.mobile_number == mobile_number))
@@ -34,3 +36,20 @@ async def update_user_details(db: AsyncSession, user_id: int, name: str, profile
         await db.commit()
         await db.refresh(user)
     return user
+
+async def get_all_users(db: AsyncSession) -> List[User]:
+    """Get all users for contact list"""
+    result = await db.execute(select(User).where(User.name.isnot(None)))
+    return result.scalars().all()
+
+async def search_users(db: AsyncSession, query: str) -> List[User]:
+    """Search users by name or mobile number"""
+    result = await db.execute(
+        select(User).where(
+            or_(
+                User.name.ilike(f"%{query}%"),
+                User.mobile_number.ilike(f"%{query}%")
+            )
+        )
+    )
+    return result.scalars().all()
