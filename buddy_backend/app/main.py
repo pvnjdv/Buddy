@@ -8,6 +8,7 @@ from app.api.user import router as user_router
 from app.api.task import router as task_router
 from app.api.chat import router as chat_router
 from app.api.buddy import router as buddy_router
+from app.api.notes import router as notes_router
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -21,3 +22,4 @@ app.include_router(user_router)
 app.include_router(task_router)
 app.include_router(chat_router)
 app.include_router(buddy_router)
+app.include_router(notes_router)
