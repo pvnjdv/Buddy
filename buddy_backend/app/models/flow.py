@@ -1,11 +1,9 @@
 from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Enum, Float
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSON
+from app.core.database import Base
 from datetime import datetime
 import enum
-
-Base = declarative_base()
 
 class FlowStatus(enum.Enum):
     active = "active"
@@ -54,6 +52,7 @@ class ProjectFlow(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
+    user = relationship("User", back_populates="flows")
     checkpoints = relationship("FlowCheckpoint", back_populates="flow", cascade="all, delete-orphan")
     buddy_messages = relationship("BuddyFlowMessage", back_populates="flow", cascade="all, delete-orphan")
 

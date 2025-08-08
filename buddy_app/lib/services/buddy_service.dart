@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'task_service.dart';
 import '../models/flow_models.dart';
+import 'auth_service.dart';
 
 class BuddyService {
   static const String baseUrl = 'http://192.168.209.3:8000';
@@ -75,12 +76,18 @@ class BuddyService {
     _chatHistory.add(userMessage);
 
     try {
+      final token = await AuthService.getToken();
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({
           'prompt': prompt,
-          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
+          'chat_history': _chatHistory
+              .map((msg) => {'role': msg.role.name, 'content': msg.content})
+              .toList(),
           'is_flow_request': isFlowRequest,
         }),
       );
@@ -147,12 +154,18 @@ class BuddyService {
     final url = Uri.parse('$baseUrl/buddy/generate-flow');
 
     try {
+      final token = await AuthService.getToken();
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({
           'project_description': projectDescription,
-          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
+          'chat_history': _chatHistory
+              .map((msg) => {'role': msg.role.name, 'content': msg.content})
+              .toList(),
         }),
       );
 
@@ -176,13 +189,19 @@ class BuddyService {
     final url = Uri.parse('$baseUrl/buddy/checkpoint-help');
 
     try {
+      final token = await AuthService.getToken();
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({
           'flow_id': flowId,
           'checkpoint_id': checkpointId,
-          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
+          'chat_history': _chatHistory
+              .map((msg) => {'role': msg.role.name, 'content': msg.content})
+              .toList(),
         }),
       );
 
@@ -220,9 +239,13 @@ class BuddyService {
     final url = Uri.parse('$baseUrl/buddy/flow-progress');
 
     try {
+      final token = await AuthService.getToken();
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({
           'flow_id': flowId,
           'checkpoint_index': checkpointIndex,

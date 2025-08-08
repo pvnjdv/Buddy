@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
@@ -49,10 +50,10 @@ except Exception as e:
 # Initialize enhanced Buddy AI
 buddy_ai = BuddyAI()
 
-@router.post("/buddy/ask")
+@router.post("/ask")
 async def ask_buddy(
     query: BuddyQuery,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
@@ -76,8 +77,8 @@ async def ask_buddy(
             )
             
             db.add(db_flow)
-            db.commit()
-            db.refresh(db_flow)
+            await db.commit()
+            await db.refresh(db_flow)
             
             # Create checkpoints
             for i, checkpoint_data in enumerate(flow_data["checkpoints"]):
@@ -93,8 +94,8 @@ async def ask_buddy(
                 )
                 db.add(db_checkpoint)
             
-            db.commit()
-            db.refresh(db_flow)
+            await db.commit()
+            await db.refresh(db_flow)
             
             response_text = f"I've created a project flow for '{flow_data['title']}' with {len(flow_data['checkpoints'])} checkpoints! You can track your progress and get help at each step. The estimated duration is {flow_data['estimated_duration']}."
             
@@ -116,7 +117,7 @@ async def ask_buddy(
                 context=MessageContext.flow_creation
             )
             db.add(ai_message)
-            db.commit()
+            await db.commit()
             
             return {
                 "response": response_text,
@@ -160,7 +161,7 @@ async def ask_buddy(
                 context=MessageContext.general
             )
             db.add(ai_message)
-            db.commit()
+            await db.commit()
             
             return {
                 "response": response_text,
@@ -173,7 +174,7 @@ async def ask_buddy(
 @router.post("/buddy/generate-flow")
 async def generate_flow(
     request: FlowGenerationRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Generate a project flow from description"""
@@ -193,8 +194,8 @@ async def generate_flow(
         )
         
         db.add(db_flow)
-        db.commit()
-        db.refresh(db_flow)
+        await db.commit()
+        await db.refresh(db_flow)
         
         # Create checkpoints
         for i, checkpoint_data in enumerate(flow_data["checkpoints"]):
@@ -210,8 +211,8 @@ async def generate_flow(
             )
             db.add(db_checkpoint)
         
-        db.commit()
-        db.refresh(db_flow)
+        await db.commit()
+        await db.refresh(db_flow)
         
         return {"flow": db_flow}
         
@@ -222,33 +223,36 @@ async def generate_flow(
 async def get_checkpoint_help(
     flow_id: int,
     checkpoint_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Get AI help for a specific checkpoint"""
     try:
         # Get flow and checkpoint
-        flow = db.query(ProjectFlow).filter(
+        flow_result = await db.execute(select(ProjectFlow).filter(
             ProjectFlow.id == flow_id,
             ProjectFlow.user_id == current_user.id
-        ).first()
+        ))
+        flow = flow_result.scalar_one_or_none()
         
         if not flow:
             raise HTTPException(status_code=404, detail="Flow not found")
         
-        checkpoint = db.query(FlowCheckpoint).filter(
+        checkpoint_result = await db.execute(select(FlowCheckpoint).filter(
             FlowCheckpoint.id == checkpoint_id,
             FlowCheckpoint.flow_id == flow_id
-        ).first()
+        ))
+        checkpoint = checkpoint_result.scalar_one_or_none()
         
         if not checkpoint:
             raise HTTPException(status_code=404, detail="Checkpoint not found")
         
         # Get recent chat history for context
-        recent_messages = db.query(BuddyFlowMessage).filter(
+        messages_result = await db.execute(select(BuddyFlowMessage).filter(
             BuddyFlowMessage.user_id == current_user.id,
             BuddyFlowMessage.flow_id == flow_id
-        ).order_by(BuddyFlowMessage.timestamp.desc()).limit(10).all()
+        ).order_by(BuddyFlowMessage.timestamp.desc()).limit(10))
+        recent_messages = messages_result.scalars().all()
         
         # Generate help using AI
         help_content = await buddy_ai.get_checkpoint_help(
@@ -267,7 +271,7 @@ async def get_checkpoint_help(
             context=MessageContext.checkpoint_help
         )
         db.add(help_message)
-        db.commit()
+        await db.commit()
         
         return {"help": help_content}
         
@@ -279,15 +283,16 @@ async def get_checkpoint_help(
 @router.post("/buddy/flow-progress")
 async def update_flow_progress(
     request: FlowProgressUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Update flow progress and get AI encouragement"""
     try:
-        flow = db.query(ProjectFlow).filter(
+        flow_result = await db.execute(select(ProjectFlow).filter(
             ProjectFlow.id == request.flow_id,
             ProjectFlow.user_id == current_user.id
-        ).first()
+        ))
+        flow = flow_result.scalar_one_or_none()
         
         if not flow:
             raise HTTPException(status_code=404, detail="Flow not found")
@@ -308,7 +313,7 @@ async def update_flow_progress(
             context=MessageContext.flow_progress
         )
         db.add(progress_msg)
-        db.commit()
+        await db.commit()
         
         return {"message": progress_message}
         
