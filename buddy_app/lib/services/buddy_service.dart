@@ -1,12 +1,23 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'task_service.dart';
 import '../models/flow_models.dart';
-import 'auth_service.dart';
 
 class BuddyService {
   static const String baseUrl = 'http://192.168.209.3:8000';
   static List<FlowBuddyMessage> _chatHistory = [];
+
+  // Helper method to get authenticated headers
+  static Future<Map<String, String>> _getAuthHeaders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt');
+
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
 
   // Get chat history
   static List<FlowBuddyMessage> getChatHistory() {
@@ -76,18 +87,13 @@ class BuddyService {
     _chatHistory.add(userMessage);
 
     try {
-      final token = await AuthService.getToken();
+      final headers = await _getAuthHeaders();
       final response = await http.post(
         url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: headers,
         body: jsonEncode({
           'prompt': prompt,
-          'chat_history': _chatHistory
-              .map((msg) => {'role': msg.role.name, 'content': msg.content})
-              .toList(),
+          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
           'is_flow_request': isFlowRequest,
         }),
       );
@@ -154,18 +160,13 @@ class BuddyService {
     final url = Uri.parse('$baseUrl/buddy/generate-flow');
 
     try {
-      final token = await AuthService.getToken();
+      final headers = await _getAuthHeaders();
       final response = await http.post(
         url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: headers,
         body: jsonEncode({
           'project_description': projectDescription,
-          'chat_history': _chatHistory
-              .map((msg) => {'role': msg.role.name, 'content': msg.content})
-              .toList(),
+          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
         }),
       );
 
@@ -189,19 +190,14 @@ class BuddyService {
     final url = Uri.parse('$baseUrl/buddy/checkpoint-help');
 
     try {
-      final token = await AuthService.getToken();
+      final headers = await _getAuthHeaders();
       final response = await http.post(
         url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: headers,
         body: jsonEncode({
           'flow_id': flowId,
           'checkpoint_id': checkpointId,
-          'chat_history': _chatHistory
-              .map((msg) => {'role': msg.role.name, 'content': msg.content})
-              .toList(),
+          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
         }),
       );
 
@@ -239,13 +235,10 @@ class BuddyService {
     final url = Uri.parse('$baseUrl/buddy/flow-progress');
 
     try {
-      final token = await AuthService.getToken();
+      final headers = await _getAuthHeaders();
       final response = await http.post(
         url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: headers,
         body: jsonEncode({
           'flow_id': flowId,
           'checkpoint_index': checkpointIndex,
@@ -522,5 +515,55 @@ Need more specific help? Just ask me about any particular aspect!''';
     String userId,
   ) async {
     return await TaskService.createTaskFromTimeline(timelineData, userId);
+  }
+
+  // AI Mode Switching Methods
+
+  // Get current AI mode status
+  static Future<Map<String, dynamic>?> getAIStatus() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/buddy/status'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        print('Failed to get AI status: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('Error getting AI status: $e');
+      return null;
+    }
+  }
+
+  // Switch AI mode between 'local' and 'api'
+  static Future<bool> switchAIMode(String mode) async {
+    try {
+      if (mode != 'local' && mode != 'api') {
+        print('Invalid mode: $mode. Must be "local" or "api"');
+        return false;
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/buddy/switch-mode'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'mode': mode}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('AI mode switched to: ${data['current_mode']}');
+        return true;
+      } else {
+        print('Failed to switch AI mode: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error switching AI mode: $e');
+      return false;
+    }
   }
 }

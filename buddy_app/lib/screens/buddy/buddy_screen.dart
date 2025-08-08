@@ -20,6 +20,10 @@ class _BuddyScreenState extends State<BuddyScreen>
   bool _isTyping = false;
   late AnimationController _typingController;
 
+  // AI Mode State
+  String _currentAIMode = 'api'; // Default to API mode
+  bool _isLoadingMode = false;
+
   @override
   void initState() {
     super.initState();
@@ -28,6 +32,7 @@ class _BuddyScreenState extends State<BuddyScreen>
       vsync: this,
     );
     _loadChatHistory();
+    _loadAIStatus();
   }
 
   @override
@@ -52,6 +57,49 @@ class _BuddyScreenState extends State<BuddyScreen>
           )
           .toList();
     });
+  }
+
+  // AI Mode Management Methods
+
+  Future<void> _loadAIStatus() async {
+    try {
+      final status = await BuddyService.getAIStatus();
+      if (status != null && mounted) {
+        setState(() {
+          _currentAIMode = status['current_mode'] ?? 'api';
+        });
+      }
+    } catch (e) {
+      print('Failed to load AI status: $e');
+    }
+  }
+
+  Future<void> _switchAIMode() async {
+    final newMode = _currentAIMode == 'local' ? 'api' : 'local';
+
+    setState(() {
+      _isLoadingMode = true;
+    });
+
+    try {
+      final success = await BuddyService.switchAIMode(newMode);
+      if (success && mounted) {
+        setState(() {
+          _currentAIMode = newMode;
+        });
+        _showSnackBar('AI mode switched to ${newMode.toUpperCase()}');
+      } else {
+        _showSnackBar('Failed to switch AI mode');
+      }
+    } catch (e) {
+      _showSnackBar('Error switching AI mode: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingMode = false;
+        });
+      }
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -160,6 +208,12 @@ class _BuddyScreenState extends State<BuddyScreen>
     );
   }
 
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -179,16 +233,34 @@ class _BuddyScreenState extends State<BuddyScreen>
               child: const Icon(Icons.smart_toy, color: Colors.white, size: 20),
             ),
             const SizedBox(width: 12),
-            const Column(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Buddy AI',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
-                Text(
-                  'Your AI Assistant',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                Row(
+                  children: [
+                    Icon(
+                      _currentAIMode == 'local' ? Icons.computer : Icons.cloud,
+                      size: 12,
+                      color: _currentAIMode == 'local'
+                          ? Colors.green
+                          : Colors.blue,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_currentAIMode.toUpperCase()} Mode',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _currentAIMode == 'local'
+                            ? Colors.green
+                            : Colors.blue,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -214,16 +286,39 @@ class _BuddyScreenState extends State<BuddyScreen>
                 case 'clear':
                   _clearChat();
                   break;
+                case 'switch_mode':
+                  _switchAIMode();
+                  break;
               }
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
+            itemBuilder: (context) => [
+              const PopupMenuItem(
                 value: 'clear',
                 child: Row(
                   children: [
                     Icon(Icons.clear_all),
                     SizedBox(width: 8),
                     Text('Clear chat'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'switch_mode',
+                child: Row(
+                  children: [
+                    Icon(
+                      _isLoadingMode
+                          ? Icons.hourglass_empty
+                          : (_currentAIMode == 'local'
+                                ? Icons.cloud
+                                : Icons.computer),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isLoadingMode
+                          ? 'Switching...'
+                          : 'Switch to ${_currentAIMode == 'local' ? 'API' : 'Local'} mode',
+                    ),
                   ],
                 ),
               ),

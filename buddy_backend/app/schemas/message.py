@@ -13,4 +13,4 @@ class MessageRead(BaseModel):
     timestamp: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True

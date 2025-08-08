@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 import json
@@ -22,19 +21,17 @@ router = APIRouter(prefix="/flows", tags=["flows"])
 @router.get("/", response_model=List[ProjectFlowResponse])
 async def get_user_flows(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Get all project flows for the current user"""
-    stmt = select(ProjectFlow).where(ProjectFlow.user_id == current_user.id)
-    result = await db.execute(stmt)
-    flows = result.scalars().all()
+    flows = db.query(ProjectFlow).filter(ProjectFlow.user_id == current_user.id).all()
     return flows
 
 @router.post("/", response_model=ProjectFlowResponse)
 async def create_flow(
     flow_data: ProjectFlowCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Create a new project flow"""
     db_flow = ProjectFlow(
@@ -73,7 +70,7 @@ async def create_flow(
 async def get_flow(
     flow_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Get a specific project flow"""
     flow = db.query(ProjectFlow).filter(
@@ -91,7 +88,7 @@ async def update_flow(
     flow_id: int,
     flow_data: ProjectFlowUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Update a project flow"""
     flow = db.query(ProjectFlow).filter(
@@ -114,7 +111,7 @@ async def update_flow(
 async def delete_flow(
     flow_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Delete a project flow"""
     flow = db.query(ProjectFlow).filter(
@@ -135,7 +132,7 @@ async def update_checkpoint_status(
     checkpoint_id: int,
     is_completed: bool,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Update checkpoint completion status"""
     flow = db.query(ProjectFlow).filter(
@@ -186,7 +183,7 @@ async def get_checkpoint_help(
     flow_id: int,
     checkpoint_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Get AI help for a specific checkpoint"""
     flow = db.query(ProjectFlow).filter(
@@ -237,7 +234,7 @@ async def get_checkpoint_help(
 async def generate_flow_from_description(
     request: FlowGenerationRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Generate a project flow from description using AI"""
     buddy_ai = BuddyAI()
@@ -299,7 +296,7 @@ async def generate_flow_from_description(
 async def get_flow_messages(
     flow_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Get all Buddy messages related to a flow"""
     flow = db.query(ProjectFlow).filter(
@@ -323,7 +320,7 @@ async def update_flow_progress(
     checkpoint_index: int,
     is_completed: bool,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """Update flow progress and get AI encouragement"""
     flow = db.query(ProjectFlow).filter(

@@ -52,7 +52,6 @@ class ProjectFlow(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    user = relationship("User", back_populates="flows")
     checkpoints = relationship("FlowCheckpoint", back_populates="flow", cascade="all, delete-orphan")
     buddy_messages = relationship("BuddyFlowMessage", back_populates="flow", cascade="all, delete-orphan")
 

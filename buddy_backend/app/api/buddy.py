@@ -1,13 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.flow import ProjectFlow, FlowCheckpoint, BuddyFlowMessage, FlowStatus, FlowDifficulty, CheckpointType, MessageContext
 from app.models.user import User
-from app.ai.model_loader import load_ai_model
 from app.ai.buddy_ai import BuddyAI
 from app.dependencies import get_current_user
 import json
@@ -17,17 +15,17 @@ router = APIRouter()
 
 class BuddyQuery(BaseModel):
     prompt: str
-    chat_history: Optional[List[Dict[str, str]]] = []
+    chat_history: Optional[List[Dict[str, Any]]] = []
     is_flow_request: Optional[bool] = False
 
 class TimelineQuery(BaseModel):
     project_description: str
-    chat_history: Optional[List[Dict[str, str]]] = []
+    chat_history: Optional[List[Dict[str, Any]]] = []
 
 class CheckpointHelp(BaseModel):
     task_id: str
     checkpoint: str
-    chat_history: Optional[List[Dict[str, str]]] = []
+    chat_history: Optional[List[Dict[str, Any]]] = []
 
 class FlowGenerationRequest(BaseModel):
     project_description: str
@@ -38,22 +36,13 @@ class FlowProgressUpdate(BaseModel):
     checkpoint_index: int
     is_completed: bool
 
-MODEL_NAME = settings.MODEL_NAME
-MODEL_PATH = settings.MODEL_PATH
-
-try:
-    ai_model = load_ai_model(MODEL_NAME, MODEL_PATH)
-except Exception as e:
-    print(f"❌ Failed to load model: {e}")
-    ai_model = None
-
-# Initialize enhanced Buddy AI
+# Initialize enhanced Buddy AI with unified AI client
 buddy_ai = BuddyAI()
 
-@router.post("/ask")
+@router.post("/buddy/ask")
 async def ask_buddy(
     query: BuddyQuery,
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
@@ -77,8 +66,8 @@ async def ask_buddy(
             )
             
             db.add(db_flow)
-            await db.commit()
-            await db.refresh(db_flow)
+            db.commit()
+            db.refresh(db_flow)
             
             # Create checkpoints
             for i, checkpoint_data in enumerate(flow_data["checkpoints"]):
@@ -94,8 +83,8 @@ async def ask_buddy(
                 )
                 db.add(db_checkpoint)
             
-            await db.commit()
-            await db.refresh(db_flow)
+            db.commit()
+            db.refresh(db_flow)
             
             response_text = f"I've created a project flow for '{flow_data['title']}' with {len(flow_data['checkpoints'])} checkpoints! You can track your progress and get help at each step. The estimated duration is {flow_data['estimated_duration']}."
             
@@ -117,7 +106,7 @@ async def ask_buddy(
                 context=MessageContext.flow_creation
             )
             db.add(ai_message)
-            await db.commit()
+            db.commit()
             
             return {
                 "response": response_text,
@@ -133,17 +122,14 @@ async def ask_buddy(
         
         else:
             # Regular chat response
-            if ai_model is None:
-                response_text = "I'm currently not available. The AI model is not loaded. Please try again later."
-            else:
-                # Build context with chat history
-                context = "You are Buddy, a helpful AI assistant. Previous conversation:\n"
-                for msg in query.chat_history[-10:]:  # Last 10 messages for context
-                    role = "User" if msg.get('role') == 'user' else "Buddy"
-                    context += f"{role}: {msg.get('content', '')}\n"
-                
-                context += f"\nUser: {query.prompt}\nBuddy:"
-                response_text = ai_model.generate_response(context)
+            # Build context with chat history
+            context = "You are Buddy, a helpful AI assistant. Previous conversation:\n"
+            for msg in query.chat_history[-10:]:  # Last 10 messages for context
+                role = "User" if msg.get('role') == 'user' else "Buddy"
+                context += f"{role}: {msg.get('content', '')}\n"
+            
+            context += f"\nUser: {query.prompt}\nBuddy:"
+            response_text = await buddy_ai.generate_ai_response(context)
             
             # Save general conversation
             user_message = BuddyFlowMessage(
@@ -161,7 +147,7 @@ async def ask_buddy(
                 context=MessageContext.general
             )
             db.add(ai_message)
-            await db.commit()
+            db.commit()
             
             return {
                 "response": response_text,
@@ -174,7 +160,7 @@ async def ask_buddy(
 @router.post("/buddy/generate-flow")
 async def generate_flow(
     request: FlowGenerationRequest,
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Generate a project flow from description"""
@@ -194,8 +180,8 @@ async def generate_flow(
         )
         
         db.add(db_flow)
-        await db.commit()
-        await db.refresh(db_flow)
+        db.commit()
+        db.refresh(db_flow)
         
         # Create checkpoints
         for i, checkpoint_data in enumerate(flow_data["checkpoints"]):
@@ -211,8 +197,8 @@ async def generate_flow(
             )
             db.add(db_checkpoint)
         
-        await db.commit()
-        await db.refresh(db_flow)
+        db.commit()
+        db.refresh(db_flow)
         
         return {"flow": db_flow}
         
@@ -223,36 +209,33 @@ async def generate_flow(
 async def get_checkpoint_help(
     flow_id: int,
     checkpoint_id: int,
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Get AI help for a specific checkpoint"""
     try:
         # Get flow and checkpoint
-        flow_result = await db.execute(select(ProjectFlow).filter(
+        flow = db.query(ProjectFlow).filter(
             ProjectFlow.id == flow_id,
             ProjectFlow.user_id == current_user.id
-        ))
-        flow = flow_result.scalar_one_or_none()
+        ).first()
         
         if not flow:
             raise HTTPException(status_code=404, detail="Flow not found")
         
-        checkpoint_result = await db.execute(select(FlowCheckpoint).filter(
+        checkpoint = db.query(FlowCheckpoint).filter(
             FlowCheckpoint.id == checkpoint_id,
             FlowCheckpoint.flow_id == flow_id
-        ))
-        checkpoint = checkpoint_result.scalar_one_or_none()
+        ).first()
         
         if not checkpoint:
             raise HTTPException(status_code=404, detail="Checkpoint not found")
         
         # Get recent chat history for context
-        messages_result = await db.execute(select(BuddyFlowMessage).filter(
+        recent_messages = db.query(BuddyFlowMessage).filter(
             BuddyFlowMessage.user_id == current_user.id,
             BuddyFlowMessage.flow_id == flow_id
-        ).order_by(BuddyFlowMessage.timestamp.desc()).limit(10))
-        recent_messages = messages_result.scalars().all()
+        ).order_by(BuddyFlowMessage.timestamp.desc()).limit(10).all()
         
         # Generate help using AI
         help_content = await buddy_ai.get_checkpoint_help(
@@ -271,7 +254,7 @@ async def get_checkpoint_help(
             context=MessageContext.checkpoint_help
         )
         db.add(help_message)
-        await db.commit()
+        db.commit()
         
         return {"help": help_content}
         
@@ -283,16 +266,15 @@ async def get_checkpoint_help(
 @router.post("/buddy/flow-progress")
 async def update_flow_progress(
     request: FlowProgressUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Update flow progress and get AI encouragement"""
     try:
-        flow_result = await db.execute(select(ProjectFlow).filter(
+        flow = db.query(ProjectFlow).filter(
             ProjectFlow.id == request.flow_id,
             ProjectFlow.user_id == current_user.id
-        ))
-        flow = flow_result.scalar_one_or_none()
+        ).first()
         
         if not flow:
             raise HTTPException(status_code=404, detail="Flow not found")
@@ -313,7 +295,7 @@ async def update_flow_progress(
             context=MessageContext.flow_progress
         )
         db.add(progress_msg)
-        await db.commit()
+        db.commit()
         
         return {"message": progress_message}
         
@@ -324,10 +306,6 @@ async def update_flow_progress(
 
 @router.post("/buddy/generate-timeline")
 async def generate_project_timeline(query: TimelineQuery):
-    if ai_model is None:
-        # Fallback response
-        return _fallback_timeline_response(query.project_description)
-
     try:
         prompt = f"""Create a detailed project timeline for: {query.project_description}
 
@@ -339,7 +317,7 @@ Please provide:
 
 Format your response as a structured timeline that can be broken into manageable tasks."""
 
-        response = ai_model.generate_response(prompt)
+        response = await buddy_ai.generate_ai_response(prompt)
         
         # Parse AI response into structured data
         timeline_data = _parse_timeline_response(response, query.project_description)
@@ -350,9 +328,6 @@ Format your response as a structured timeline that can be broken into manageable
 
 @router.post("/buddy/checkpoint-help")
 async def get_checkpoint_help(query: CheckpointHelp):
-    if ai_model is None:
-        return {"help": "I'm currently not available to provide checkpoint help. Please try again later."}
-
     try:
         prompt = f"""The user is working on task {query.task_id} and has reached checkpoint: {query.checkpoint}
 
@@ -364,7 +339,7 @@ Please provide specific, actionable help for this checkpoint. Include:
 
 Be encouraging and practical in your advice."""
 
-        response = ai_model.generate_response(prompt)
+        response = await buddy_ai.generate_ai_response(prompt)
         return {"help": response}
         
     except Exception as e:
@@ -442,3 +417,39 @@ def _parse_timeline_response(ai_response: str, project_description: str):
         
     except Exception:
         return _fallback_timeline_response(project_description)
+
+
+class ModeSwitch(BaseModel):
+    mode: str  # "local" or "api"
+
+@router.get("/buddy/status")
+async def get_ai_status():
+    """Get current AI mode and status"""
+    try:
+        current_mode = buddy_ai.ai_client.current_mode
+        return {
+            "current_mode": current_mode,
+            "available_modes": ["local", "api"],
+            "model_info": {
+                "local_model": settings.MODEL_NAME,
+                "api_model": settings.GROQ_MODEL
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting status: {str(e)}")
+
+@router.post("/buddy/switch-mode")
+async def switch_ai_mode(mode_request: ModeSwitch):
+    """Switch between local and API AI modes"""
+    try:
+        if mode_request.mode not in ["local", "api"]:
+            raise HTTPException(status_code=400, detail="Mode must be 'local' or 'api'")
+        
+        buddy_ai.ai_client.switch_mode(mode_request.mode)
+        
+        return {
+            "message": f"AI mode switched to {mode_request.mode}",
+            "current_mode": mode_request.mode
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error switching mode: {str(e)}")

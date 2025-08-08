@@ -3,11 +3,15 @@ import json
 import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from app.ai.model_loader import UnifiedAIClient
 
 class BuddyAI:
     """Enhanced Buddy AI for project flow generation and assistance"""
     
     def __init__(self):
+        # Initialize the unified AI client
+        self.ai_client = UnifiedAIClient()
+        
         self.flow_templates = {
             "website": {
                 "title": "Website Development Project",
@@ -521,3 +525,11 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
             "project_description": "",
             "confidence": 0.0
         }
+
+    async def generate_ai_response(self, prompt: str, chat_history: List[Dict[str, str]] = None) -> str:
+        """Generate AI response using the unified AI client"""
+        try:
+            return await self.ai_client.generate_response(prompt, chat_history or [])
+        except Exception as e:
+            print(f"Error generating AI response: {e}")
+            return "I apologize, but I'm having trouble generating a response right now. Please try again later."
