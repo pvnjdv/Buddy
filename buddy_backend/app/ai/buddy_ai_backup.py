@@ -179,44 +179,66 @@ class BuddyAI:
         """Generate an intelligent project flow using AI"""
         try:
             # Enhanced AI-powered flow generation
-            prompt = f"""
-You are an expert project manager. Create a detailed, actionable project timeline for: "{description}"
+            prompt = f"""Create a detailed project timeline for: "{description}"
 
-Generate a comprehensive project flow with this exact JSON structure:
+IMPORTANT: Respond ONLY with valid JSON, no other text before or after.
 
 {{
-    "title": "Clear, descriptive project title",
-    "difficulty": "easy|medium|hard|expert",
-    "estimated_duration": "realistic timeframe (e.g., '2-3 weeks', '1 month')",
-    "tags": ["relevant", "project", "tags"],
+    "title": "Project Title for {description}",
+    "difficulty": "easy",
+    "estimated_duration": "2-4 weeks",
+    "tags": ["relevant", "tags"],
     "checkpoints": [
         {{
-            "title": "Specific checkpoint name",
-            "description": "Detailed, actionable description of what needs to be accomplished",
-            "type": "task|milestone|review|testing",
-            "estimated_time": "realistic time estimate",
-            "requirements": ["specific prerequisites or resources needed"],
-            "deliverables": ["concrete outputs or results"],
-            "buddy_help_prompt": "Specific guidance I should provide at this checkpoint"
+            "title": "Planning & Research",
+            "description": "Define project scope, gather requirements, and research best practices",
+            "type": "milestone",
+            "estimated_time": "2-3 days",
+            "requirements": ["Project brief", "Initial requirements"],
+            "deliverables": ["Requirements document", "Project plan", "Timeline"],
+            "buddy_help_prompt": "I'll help you define clear requirements and create a solid project foundation"
+        }},
+        {{
+            "title": "Setup & Preparation",
+            "description": "Set up development environment and gather necessary resources",
+            "type": "task", 
+            "estimated_time": "1-2 days",
+            "requirements": ["Approved plan", "Access to tools"],
+            "deliverables": ["Development environment", "Resource setup", "Initial structure"],
+            "buddy_help_prompt": "I'll guide you through setting up everything you need to start development"
+        }},
+        {{
+            "title": "Core Development",
+            "description": "Build the main features and functionality",
+            "type": "task",
+            "estimated_time": "1-2 weeks", 
+            "requirements": ["Setup completion", "Clear specifications"],
+            "deliverables": ["Core functionality", "Main features", "Working prototype"],
+            "buddy_help_prompt": "I'll provide step-by-step guidance for implementing core features efficiently"
+        }},
+        {{
+            "title": "Testing & Quality Assurance",
+            "description": "Test thoroughly, fix bugs, and ensure quality standards",
+            "type": "testing",
+            "estimated_time": "3-5 days",
+            "requirements": ["Feature completion", "Testing criteria"],
+            "deliverables": ["Test results", "Bug fixes", "Quality report"],
+            "buddy_help_prompt": "I'll help you create comprehensive tests and ensure everything works perfectly"
+        }},
+        {{
+            "title": "Final Polish & Launch",
+            "description": "Final optimizations, documentation, and project launch",
+            "type": "review",
+            "estimated_time": "2-3 days",
+            "requirements": ["Testing completion", "Launch criteria"],
+            "deliverables": ["Final product", "Documentation", "Launch plan"],
+            "buddy_help_prompt": "I'll guide you through final preparations and ensure a successful launch"
         }}
     ]
 }}
 
-Requirements:
-- Include 6-10 comprehensive checkpoints
-- Make each checkpoint specific and actionable
-- Include realistic time estimates
-- Add buddy_help_prompt for AI guidance at each step
-- Consider dependencies between checkpoints
-- Include testing, review, and launch phases
-- Make deliverables concrete and measurable
-
-Create a professional timeline for: {description}
-"""
-
             response = await self.ai_client.generate_response(prompt)
             
-            # Try to parse the JSON response
             try:
                 # Clean the response to extract JSON
                 json_start = response.find('{')
@@ -232,7 +254,8 @@ Create a professional timeline for: {description}
                 # If parsing fails, use intelligent templates
                 return self._generate_intelligent_template(description)
                 
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                print(f"JSON parsing failed: {e}")
                 # Fallback to intelligent templates
                 return self._generate_intelligent_template(description)
                 

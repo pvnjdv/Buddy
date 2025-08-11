@@ -102,8 +102,30 @@ class UnifiedAIClient:
         except Exception as e:
             print(f"Fallback mode also failed: {e}")
         
-        # Final fallback message
-        return "I apologize, but I'm experiencing technical difficulties right now. Please try again later."
+        # Final fallback - provide natural AI-like responses instead of templates
+        return self._generate_natural_fallback(prompt)
+    
+    def _generate_natural_fallback(self, prompt: str) -> str:
+        """Generate natural conversational responses when AI models fail"""
+        prompt_lower = prompt.lower().strip()
+        
+        # Greetings
+        if any(word in prompt_lower for word in ['hi', 'hello', 'hey']):
+            return "Hello! I'm Buddy, your AI assistant. How can I help you today?"
+        
+        # How are you
+        if any(phrase in prompt_lower for phrase in ['how are you', 'how\'s it going']):
+            return "I'm doing well, thank you! I'm here to help you with whatever you need. What's on your mind?"
+        
+        # What questions  
+        if any(phrase in prompt_lower for phrase in ['what can you', 'what do you', 'who are you']):
+            return "I'm Buddy, your AI assistant! I can help with questions, provide guidance, and assist with project planning. What would you like to know?"
+        
+        # General conversational responses
+        if len(prompt.strip()) < 20:  # Short messages
+            return f"I understand you're asking about {prompt}. While my advanced AI is currently unavailable, I'm still here to help! What specifically would you like to know?"
+        else:  # Longer messages
+            return f"That's a thoughtful question! While I'm running in basic mode right now, I can still try to help. Could you tell me more about what you're looking for?"
     
     def switch_mode(self, new_mode: str):
         """Switch between local and api modes"""

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update, delete
+from sqlalchemy.orm import joinedload
 from typing import List, Optional
 from datetime import datetime
 import json
@@ -21,17 +23,22 @@ router = APIRouter(prefix="/flows", tags=["flows"])
 @router.get("/", response_model=List[ProjectFlowResponse])
 async def get_user_flows(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get all project flows for the current user"""
-    flows = db.query(ProjectFlow).filter(ProjectFlow.user_id == current_user.id).all()
+    result = await db.execute(
+        select(ProjectFlow)
+        .options(joinedload(ProjectFlow.checkpoints))
+        .filter(ProjectFlow.user_id == current_user.id)
+    )
+    flows = result.scalars().unique().all()
     return flows
 
 @router.post("/", response_model=ProjectFlowResponse)
 async def create_flow(
     flow_data: ProjectFlowCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Create a new project flow"""
     db_flow = ProjectFlow(
@@ -45,8 +52,8 @@ async def create_flow(
     )
     
     db.add(db_flow)
-    db.commit()
-    db.refresh(db_flow)
+    await db.commit()
+    await db.refresh(db_flow)
     
     # Create checkpoints
     for checkpoint_data in flow_data.checkpoints:
@@ -62,21 +69,26 @@ async def create_flow(
         )
         db.add(db_checkpoint)
     
-    db.commit()
-    db.refresh(db_flow)
+    await db.commit()
+    await db.refresh(db_flow)
     return db_flow
 
 @router.get("/{flow_id}", response_model=ProjectFlowResponse)
 async def get_flow(
     flow_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get a specific project flow"""
-    flow = db.query(ProjectFlow).filter(
-        ProjectFlow.id == flow_id,
-        ProjectFlow.user_id == current_user.id
-    ).first()
+    result = await db.execute(
+        select(ProjectFlow)
+        .options(joinedload(ProjectFlow.checkpoints))
+        .filter(
+            ProjectFlow.id == flow_id,
+            ProjectFlow.user_id == current_user.id
+        )
+    )
+    flow = result.scalar_one_or_none()
     
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -88,13 +100,16 @@ async def update_flow(
     flow_id: int,
     flow_data: ProjectFlowUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Update a project flow"""
-    flow = db.query(ProjectFlow).filter(
-        ProjectFlow.id == flow_id,
-        ProjectFlow.user_id == current_user.id
-    ).first()
+    result = await db.execute(
+        select(ProjectFlow).filter(
+            ProjectFlow.id == flow_id,
+            ProjectFlow.user_id == current_user.id
+        )
+    )
+    flow = result.scalar_one_or_none()
     
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -103,27 +118,30 @@ async def update_flow(
         setattr(flow, field, value)
     
     flow.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(flow)
+    await db.commit()
+    await db.refresh(flow)
     return flow
 
 @router.delete("/{flow_id}")
 async def delete_flow(
     flow_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Delete a project flow"""
-    flow = db.query(ProjectFlow).filter(
-        ProjectFlow.id == flow_id,
-        ProjectFlow.user_id == current_user.id
-    ).first()
+    result = await db.execute(
+        select(ProjectFlow).filter(
+            ProjectFlow.id == flow_id,
+            ProjectFlow.user_id == current_user.id
+        )
+    )
+    flow = result.scalar_one_or_none()
     
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     
-    db.delete(flow)
-    db.commit()
+    await db.delete(flow)
+    await db.commit()
     return {"message": "Flow deleted successfully"}
 
 @router.patch("/{flow_id}/checkpoints/{checkpoint_id}", response_model=ProjectFlowResponse)
@@ -132,21 +150,27 @@ async def update_checkpoint_status(
     checkpoint_id: int,
     is_completed: bool,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Update checkpoint completion status"""
-    flow = db.query(ProjectFlow).filter(
-        ProjectFlow.id == flow_id,
-        ProjectFlow.user_id == current_user.id
-    ).first()
+    result = await db.execute(
+        select(ProjectFlow).filter(
+            ProjectFlow.id == flow_id,
+            ProjectFlow.user_id == current_user.id
+        )
+    )
+    flow = result.scalar_one_or_none()
     
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     
-    checkpoint = db.query(FlowCheckpoint).filter(
-        FlowCheckpoint.id == checkpoint_id,
-        FlowCheckpoint.flow_id == flow_id
-    ).first()
+    checkpoint_result = await db.execute(
+        select(FlowCheckpoint).filter(
+            FlowCheckpoint.id == checkpoint_id,
+            FlowCheckpoint.flow_id == flow_id
+        )
+    )
+    checkpoint = checkpoint_result.scalar_one_or_none()
     
     if not checkpoint:
         raise HTTPException(status_code=404, detail="Checkpoint not found")
@@ -174,8 +198,8 @@ async def update_checkpoint_status(
         flow.status = FlowStatus.active
     
     flow.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(flow)
+    await db.commit()
+    await db.refresh(flow)
     return flow
 
 @router.post("/{flow_id}/checkpoints/{checkpoint_id}/help")
@@ -183,30 +207,39 @@ async def get_checkpoint_help(
     flow_id: int,
     checkpoint_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get AI help for a specific checkpoint"""
-    flow = db.query(ProjectFlow).filter(
-        ProjectFlow.id == flow_id,
-        ProjectFlow.user_id == current_user.id
-    ).first()
+    result = await db.execute(
+        select(ProjectFlow).filter(
+            ProjectFlow.id == flow_id,
+            ProjectFlow.user_id == current_user.id
+        )
+    )
+    flow = result.scalar_one_or_none()
     
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     
-    checkpoint = db.query(FlowCheckpoint).filter(
-        FlowCheckpoint.id == checkpoint_id,
-        FlowCheckpoint.flow_id == flow_id
-    ).first()
+    checkpoint_result = await db.execute(
+        select(FlowCheckpoint).filter(
+            FlowCheckpoint.id == checkpoint_id,
+            FlowCheckpoint.flow_id == flow_id
+        )
+    )
+    checkpoint = checkpoint_result.scalar_one_or_none()
     
     if not checkpoint:
         raise HTTPException(status_code=404, detail="Checkpoint not found")
     
     # Get recent chat history for context
-    recent_messages = db.query(BuddyFlowMessage).filter(
-        BuddyFlowMessage.user_id == current_user.id,
-        BuddyFlowMessage.flow_id == flow_id
-    ).order_by(BuddyFlowMessage.timestamp.desc()).limit(10).all()
+    messages_result = await db.execute(
+        select(BuddyFlowMessage).filter(
+            BuddyFlowMessage.user_id == current_user.id,
+            BuddyFlowMessage.flow_id == flow_id
+        ).order_by(BuddyFlowMessage.timestamp.desc()).limit(10)
+    )
+    recent_messages = messages_result.scalars().all()
     
     # Generate help using AI
     buddy_ai = BuddyAI()
@@ -226,7 +259,7 @@ async def get_checkpoint_help(
         context=MessageContext.checkpoint_help
     )
     db.add(help_message)
-    db.commit()
+    await db.commit()
     
     return {"help": help_content}
 
@@ -234,7 +267,7 @@ async def get_checkpoint_help(
 async def generate_flow_from_description(
     request: FlowGenerationRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Generate a project flow from description using AI"""
     buddy_ai = BuddyAI()
@@ -256,8 +289,8 @@ async def generate_flow_from_description(
     )
     
     db.add(db_flow)
-    db.commit()
-    db.refresh(db_flow)
+    await db.commit()
+    await db.refresh(db_flow)
     
     # Create checkpoints
     for i, checkpoint_data in enumerate(flow_data["checkpoints"]):
@@ -273,8 +306,8 @@ async def generate_flow_from_description(
         )
         db.add(db_checkpoint)
     
-    db.commit()
-    db.refresh(db_flow)
+    await db.commit()
+    await db.refresh(db_flow)
     
     # Save generation message
     generation_message = BuddyFlowMessage(
@@ -285,7 +318,7 @@ async def generate_flow_from_description(
         context=MessageContext.flow_creation
     )
     db.add(generation_message)
-    db.commit()
+    await db.commit()
     
     return {
         "flow": db_flow,
@@ -296,21 +329,27 @@ async def generate_flow_from_description(
 async def get_flow_messages(
     flow_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Get all Buddy messages related to a flow"""
-    flow = db.query(ProjectFlow).filter(
-        ProjectFlow.id == flow_id,
-        ProjectFlow.user_id == current_user.id
-    ).first()
+    result = await db.execute(
+        select(ProjectFlow).filter(
+            ProjectFlow.id == flow_id,
+            ProjectFlow.user_id == current_user.id
+        )
+    )
+    flow = result.scalar_one_or_none()
     
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     
-    messages = db.query(BuddyFlowMessage).filter(
-        BuddyFlowMessage.flow_id == flow_id,
-        BuddyFlowMessage.user_id == current_user.id
-    ).order_by(BuddyFlowMessage.timestamp.asc()).all()
+    messages_result = await db.execute(
+        select(BuddyFlowMessage).filter(
+            BuddyFlowMessage.flow_id == flow_id,
+            BuddyFlowMessage.user_id == current_user.id
+        ).order_by(BuddyFlowMessage.timestamp.asc())
+    )
+    messages = messages_result.scalars().all()
     
     return messages
 
@@ -320,13 +359,16 @@ async def update_flow_progress(
     checkpoint_index: int,
     is_completed: bool,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """Update flow progress and get AI encouragement"""
-    flow = db.query(ProjectFlow).filter(
-        ProjectFlow.id == flow_id,
-        ProjectFlow.user_id == current_user.id
-    ).first()
+    result = await db.execute(
+        select(ProjectFlow).filter(
+            ProjectFlow.id == flow_id,
+            ProjectFlow.user_id == current_user.id
+        )
+    )
+    flow = result.scalar_one_or_none()
     
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -348,6 +390,6 @@ async def update_flow_progress(
         context=MessageContext.flow_progress
     )
     db.add(progress_msg)
-    db.commit()
+    await db.commit()
     
     return {"message": progress_message}

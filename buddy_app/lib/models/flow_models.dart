@@ -626,6 +626,7 @@ class FlowBuddyMessage extends BuddyMessage {
   final String? flowId;
   final String? checkpointId;
   final MessageContext context;
+  final Map<String, dynamic>? flowData; // For storing flow preview data
 
   FlowBuddyMessage({
     required super.id,
@@ -635,6 +636,7 @@ class FlowBuddyMessage extends BuddyMessage {
     this.flowId,
     this.checkpointId,
     this.context = MessageContext.general,
+    this.flowData,
   });
 
   factory FlowBuddyMessage.fromJson(Map<String, dynamic> json) {
@@ -654,6 +656,7 @@ class FlowBuddyMessage extends BuddyMessage {
         (e) => e.name == json['context'],
         orElse: () => MessageContext.general,
       ),
+      flowData: json['flow_data'] as Map<String, dynamic>?,
     );
   }
 
@@ -664,6 +667,7 @@ class FlowBuddyMessage extends BuddyMessage {
       'flow_id': flowId,
       'checkpoint_id': checkpointId,
       'context': context.name,
+      'flow_data': flowData,
     });
     return json;
   }

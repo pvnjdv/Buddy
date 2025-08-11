@@ -78,8 +78,8 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
 
     try {
       final help = await BuddyService.getCheckpointHelp(
-        _flow.id,
-        checkpoint.id,
+        flowId: _flow.id.toString(),
+        checkpointName: checkpoint.title,
       );
       Navigator.of(context).pop(); // Close loading dialog
 
@@ -98,7 +98,9 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
               ),
             ],
           ),
-          content: SingleChildScrollView(child: Text(help)),
+          content: SingleChildScrollView(
+            child: Text(help['response'] ?? 'No help available.'),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),

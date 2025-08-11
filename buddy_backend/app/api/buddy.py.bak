@@ -300,10 +300,11 @@ Would you like me to create a preview for your project?
                 "suggestion": f"Preview flow for {flow_analysis['project_description']}"
             }
         
-        # Regular AI conversation - use Groq API directly
+        # Regular AI conversation
         response = await buddy_ai.generate_ai_response(
             prompt=query.prompt,
-            chat_history=query.chat_history
+            chat_history=query.chat_history,
+            is_flow_request=False
         )
         
         # Save conversation to database
@@ -413,36 +414,27 @@ async def get_checkpoint_help(
     """Get AI help for a specific checkpoint"""
     try:
         # Get flow and checkpoint
-        flow_result = await db.execute(
-            select(ProjectFlow).filter(
-                ProjectFlow.id == flow_id,
-                ProjectFlow.user_id == current_user.id
-            )
-        )
-        flow = flow_result.scalar_one_or_none()
+        flow = db.query(ProjectFlow).filter(
+            ProjectFlow.id == flow_id,
+            ProjectFlow.user_id == current_user.id
+        ).first()
         
         if not flow:
             raise HTTPException(status_code=404, detail="Flow not found")
         
-        checkpoint_result = await db.execute(
-            select(FlowCheckpoint).filter(
-                FlowCheckpoint.id == checkpoint_id,
-                FlowCheckpoint.flow_id == flow_id
-            )
-        )
-        checkpoint = checkpoint_result.scalar_one_or_none()
+        checkpoint = db.query(FlowCheckpoint).filter(
+            FlowCheckpoint.id == checkpoint_id,
+            FlowCheckpoint.flow_id == flow_id
+        ).first()
         
         if not checkpoint:
             raise HTTPException(status_code=404, detail="Checkpoint not found")
         
         # Get recent chat history for context
-        messages_result = await db.execute(
-            select(BuddyFlowMessage).filter(
-                BuddyFlowMessage.user_id == current_user.id,
-                BuddyFlowMessage.flow_id == flow_id
-            ).order_by(BuddyFlowMessage.timestamp.desc()).limit(10)
-        )
-        recent_messages = messages_result.scalars().all()
+        recent_messages = db.query(BuddyFlowMessage).filter(
+            BuddyFlowMessage.user_id == current_user.id,
+            BuddyFlowMessage.flow_id == flow_id
+        ).order_by(BuddyFlowMessage.timestamp.desc()).limit(10).all()
         
         # Generate help using AI
         help_content = await buddy_ai.get_checkpoint_help(
@@ -478,13 +470,10 @@ async def update_flow_progress(
 ):
     """Update flow progress and get AI encouragement"""
     try:
-        flow_result = await db.execute(
-            select(ProjectFlow).filter(
-                ProjectFlow.id == request.flow_id,
-                ProjectFlow.user_id == current_user.id
-            )
-        )
-        flow = flow_result.scalar_one_or_none()
+        flow = db.query(ProjectFlow).filter(
+            ProjectFlow.id == request.flow_id,
+            ProjectFlow.user_id == current_user.id
+        ).first()
         
         if not flow:
             raise HTTPException(status_code=404, detail="Flow not found")
@@ -554,72 +543,6 @@ Be encouraging and practical in your advice."""
         
     except Exception as e:
         return {"help": f"Sorry, I couldn't provide help for this checkpoint: {str(e)}"}
-
-def _generate_simple_response(prompt: str) -> str:
-    """Generate simple conversational responses when AI is unavailable"""
-    prompt_lower = prompt.lower().strip()
-    
-    # Greetings
-    if any(word in prompt_lower for word in ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening']):
-        return "Hello! I'm your Buddy assistant. I can help you with project management, creating flows, and general questions. How can I assist you today?"
-    
-    # How are you
-    if any(phrase in prompt_lower for phrase in ['how are you', 'how do you do', 'how\'s it going']):
-        return "I'm doing well, thank you for asking! I'm here and ready to help you with your projects. What would you like to work on?"
-    
-    # What can you do
-    if any(phrase in prompt_lower for phrase in ['what can you do', 'what do you do', 'help me', 'what are you', 'who are you']):
-        return """I'm Buddy, your AI assistant! I can help you with:
-
-🎯 **Project Flows**: Create structured project timelines with checkpoints
-📋 **Task Management**: Break down complex projects into manageable steps  
-💬 **General Chat**: Answer questions and provide guidance
-🔧 **Project Help**: Assist with specific project challenges
-
-Try saying:
-- "Create flow for website development"
-- "Help me plan a mobile app"
-- Or just ask me anything!
-
-What would you like to work on?"""
-    
-    # Thank you
-    if any(word in prompt_lower for word in ['thank', 'thanks', 'thx']):
-        return "You're welcome! I'm always here to help. Is there anything else you'd like to work on?"
-    
-    # Goodbye
-    if any(word in prompt_lower for word in ['bye', 'goodbye', 'see you', 'later']):
-        return "Goodbye! Feel free to come back anytime you need help with your projects. Have a great day!"
-    
-    # Questions about buddy
-    if any(word in prompt_lower for word in ['buddy', 'your name']):
-        return "I'm Buddy, your AI project assistant! I specialize in helping you create and manage projects through structured flows and providing guidance along the way."
-    
-    # Weather (common question)
-    if 'weather' in prompt_lower:
-        return "I don't have access to weather information, but I can help you plan projects that might be weather-dependent! What are you working on?"
-    
-    # Time questions
-    if any(word in prompt_lower for word in ['time', 'date', 'today']):
-        return "I can help you manage project timelines and deadlines! Are you working on any projects that need scheduling?"
-    
-    # Programming questions
-    if any(word in prompt_lower for word in ['code', 'coding', 'programming', 'development', 'developer']):
-        return "I can help you plan software development projects! Try asking me to 'create flow for [your project]' to get a structured development timeline."
-    
-    # General work/project questions
-    if any(word in prompt_lower for word in ['work', 'project', 'task', 'job']):
-        return "I'd love to help you with your work or project! Can you tell me more about what you're working on? I can create structured flows to help you organize and complete your tasks."
-    
-    # Default conversational response
-    return f"""That's an interesting question! While I'm currently in basic mode, I can still help you with project planning and management.
-
-Here are some things I can do:
-🎯 **Create Project Flows**: Ask me to "create flow for [your project]"
-📋 **Project Planning**: Help break down ideas into actionable steps
-💡 **General Guidance**: Provide advice on project management
-
-What would you like to work on today?"""
 
 def _fallback_timeline_response(project_description: str):
     """Fallback response when AI model is not available"""

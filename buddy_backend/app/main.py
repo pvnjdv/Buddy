@@ -1,5 +1,6 @@
 # app/main.py (cleaned)
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import engine
 from app.models.user import User
@@ -12,6 +13,15 @@ from app.api.notes import router as notes_router
 from app.api.flows import router as flows_router
 
 app = FastAPI(title=settings.APP_NAME)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 async def startup():

@@ -66,7 +66,246 @@ class BuddyService {
     return description;
   }
 
-  // Enhanced AI chat with flow context
+  // Interactive Flow Creation - Preview Flow
+  static Future<Map<String, dynamic>> previewFlow(String prompt) async {
+    final url = Uri.parse('$baseUrl/buddy/preview-flow');
+
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: jsonEncode({
+          'prompt': prompt,
+          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['is_flow_request'] == true) {
+          // Add the preview message to chat history
+          final previewMessage = FlowBuddyMessage(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            content: data['preview_text'],
+            role: BuddyRole.assistant,
+            timestamp: DateTime.now(),
+            context: MessageContext.flowCreation,
+            flowData: data['flow_data'],
+          );
+          _chatHistory.add(previewMessage);
+
+          return {
+            'success': true,
+            'response': data['preview_text'],
+            'flow_data': data['flow_data'],
+            'needs_confirmation': data['needs_confirmation'] ?? false,
+          };
+        } else {
+          return {
+            'success': false,
+            'response':
+                data['message'] ??
+                'This doesn\'t appear to be a flow creation request.',
+          };
+        }
+      } else {
+        return {
+          'success': false,
+          'response': 'Failed to generate flow preview. Please try again.',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'response': 'Error generating flow preview: $e',
+      };
+    }
+  }
+
+  // Confirm and Create Flow
+  static Future<Map<String, dynamic>> confirmFlow({
+    required Map<String, dynamic> flowData,
+    required bool confirmed,
+    String? modifications,
+  }) async {
+    final url = Uri.parse('$baseUrl/buddy/confirm-flow');
+
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: jsonEncode({
+          'flow_data': flowData,
+          'confirmed': confirmed,
+          'modifications': modifications,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        // Add confirmation message to chat history
+        final confirmMessage = FlowBuddyMessage(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: data['message'],
+          role: BuddyRole.assistant,
+          timestamp: DateTime.now(),
+          context: MessageContext.flowCreation,
+          flowId: data['flow_id']?.toString(),
+        );
+        _chatHistory.add(confirmMessage);
+
+        return {
+          'success': data['success'] ?? false,
+          'response': data['message'],
+          'flow_id': data['flow_id'],
+          'flow_title': data['flow_title'],
+        };
+      } else {
+        return {
+          'success': false,
+          'response': 'Failed to create flow. Please try again.',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'response': 'Error creating flow: $e'};
+    }
+  }
+
+  // Get Checkpoint-Specific Help
+  static Future<Map<String, dynamic>> getCheckpointHelp({
+    required String flowId,
+    required String checkpointName,
+    String? specificQuestion,
+  }) async {
+    final url = Uri.parse('$baseUrl/buddy/checkpoint-help');
+
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: jsonEncode({
+          'task_id': flowId,
+          'checkpoint': specificQuestion ?? checkpointName,
+          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        // Add checkpoint help to chat history
+        final helpMessage = FlowBuddyMessage(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          content: data['response'],
+          role: BuddyRole.assistant,
+          timestamp: DateTime.now(),
+          context: MessageContext.checkpointHelp,
+          flowId: flowId,
+        );
+        _chatHistory.add(helpMessage);
+
+        return {'success': true, 'response': data['response']};
+      } else {
+        return {
+          'success': false,
+          'response': 'Failed to get checkpoint help. Please try again.',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'response': 'Error getting checkpoint help: $e',
+      };
+    }
+  }
+
+  // Enhanced Ask Buddy with flow detection
+  static Future<Map<String, dynamic>> askBuddyEnhanced(String prompt) async {
+    // Check if this is a flow creation request
+    if (isFlowCreationRequest(prompt)) {
+      return await previewFlow(prompt);
+    }
+
+    // Check if this is a flow confirmation
+    if (_isFlowConfirmation(prompt)) {
+      // Get the last flow data from chat history
+      final lastFlowMessage = _chatHistory.reversed.firstWhere(
+        (msg) => msg.flowData != null,
+        orElse: () => FlowBuddyMessage(
+          id: '',
+          content: '',
+          role: BuddyRole.user,
+          timestamp: DateTime.now(),
+          context: MessageContext.general,
+        ),
+      );
+
+      if (lastFlowMessage.flowData != null) {
+        final confirmed = _parseConfirmation(prompt);
+        final modifications = _extractModifications(prompt);
+
+        return await confirmFlow(
+          flowData: lastFlowMessage.flowData!,
+          confirmed: confirmed,
+          modifications: modifications,
+        );
+      }
+    }
+
+    // Regular AI chat
+    return await askBuddy(prompt);
+  }
+
+  // Helper methods for flow confirmation
+  static bool _isFlowConfirmation(String prompt) {
+    final confirmations = [
+      'yes, create it',
+      'add this flow',
+      'create the flow',
+      'yes create',
+      'confirm',
+      'modify:',
+      'change:',
+      'update:',
+      'no',
+      'cancel',
+    ];
+
+    return confirmations.any((phrase) => prompt.toLowerCase().contains(phrase));
+  }
+
+  static bool _parseConfirmation(String prompt) {
+    final positive = ['yes', 'create', 'add', 'confirm', 'proceed'];
+    final negative = ['no', 'cancel', 'stop'];
+
+    final promptLower = prompt.toLowerCase();
+
+    if (negative.any((word) => promptLower.contains(word))) {
+      return false;
+    }
+
+    return positive.any((word) => promptLower.contains(word)) ||
+        promptLower.startsWith('modify:') ||
+        promptLower.startsWith('change:');
+  }
+
+  static String? _extractModifications(String prompt) {
+    final modifications = ['modify:', 'change:', 'update:', 'adjust:'];
+
+    for (final prefix in modifications) {
+      if (prompt.toLowerCase().startsWith(prefix)) {
+        return prompt.substring(prefix.length).trim();
+      }
+    }
+
+    return null;
+  }
+
   static Future<Map<String, dynamic>> askBuddy(String prompt) async {
     final url = Uri.parse('$baseUrl/buddy/ask');
 
@@ -182,8 +421,8 @@ class BuddyService {
     }
   }
 
-  // Generate checkpoint help
-  static Future<String> getCheckpointHelp(
+  // Generate checkpoint help (legacy method)
+  static Future<String> getCheckpointHelpLegacy(
     String flowId,
     String checkpointId,
   ) async {

@@ -67,6 +67,7 @@ class FlowCheckpoint(Base):
     estimated_time = Column(String(100), default="1 day")
     requirements = Column(JSON, default=list)
     deliverables = Column(JSON, default=list)
+    buddy_help_prompt = Column(Text, nullable=True)  # AI guidance for this checkpoint
     is_completed = Column(Boolean, default=False)
     completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
