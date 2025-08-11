@@ -8,6 +8,11 @@ async def get_user_by_mobile(db: AsyncSession, mobile_number: str):
     result = await db.execute(select(User).where(User.mobile_number == mobile_number))
     return result.scalar_one_or_none()
 
+async def get_user_by_id(db: AsyncSession, user_id: int):
+    """Get user by ID"""
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+
 async def create_or_update_otp(db: AsyncSession, mobile_number: str, otp: str):
     user = await get_user_by_mobile(db, mobile_number)
     if user:

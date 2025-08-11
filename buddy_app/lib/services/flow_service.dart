@@ -1,17 +1,61 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_service.dart';
 import '../models/flow_models.dart';
-
-const baseUrl = 'http://192.168.209.3:8000';
+import '../config/api_config.dart';
 
 class FlowService {
+  static const String _flowsKey = 'user_flows';
+
+  // Local storage methods
+  static Future<void> _saveFlowsLocally(List<ProjectFlow> flows) async {
+    final prefs = await SharedPreferences.getInstance();
+    final flowsJson = flows.map((flow) => flow.toJson()).toList();
+    await prefs.setString(_flowsKey, jsonEncode(flowsJson));
+  }
+
+  static Future<List<ProjectFlow>> _getLocalFlows() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final flowsString = prefs.getString(_flowsKey);
+      if (flowsString != null) {
+        final List<dynamic> flowsJson = jsonDecode(flowsString);
+        return flowsJson.map((json) => ProjectFlow.fromJson(json)).toList();
+      }
+    } catch (e) {
+      print('Error reading local flows: $e');
+    }
+    return [];
+  }
+
+  static Future<void> _addFlowLocally(ProjectFlow flow) async {
+    final existingFlows = await _getLocalFlows();
+    existingFlows.add(flow);
+    await _saveFlowsLocally(existingFlows);
+  }
+
+  static Future<void> _updateFlowLocally(ProjectFlow updatedFlow) async {
+    final existingFlows = await _getLocalFlows();
+    final index = existingFlows.indexWhere((flow) => flow.id == updatedFlow.id);
+    if (index != -1) {
+      existingFlows[index] = updatedFlow;
+      await _saveFlowsLocally(existingFlows);
+    }
+  }
+
+  static Future<void> _deleteFlowLocally(String flowId) async {
+    final existingFlows = await _getLocalFlows();
+    existingFlows.removeWhere((flow) => flow.id == flowId);
+    await _saveFlowsLocally(existingFlows);
+  }
+
   // Project Flow methods
   static Future<List<ProjectFlow>> getProjectFlows() async {
     try {
       final token = await AuthService.getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/flows/'),
+        Uri.parse('${ApiConfig.baseUrl}/flows/'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -20,13 +64,23 @@ class FlowService {
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = jsonDecode(response.body);
-        return jsonList.map((json) => ProjectFlow.fromJson(json)).toList();
+        final apiFlows = jsonList
+            .map((json) => ProjectFlow.fromJson(json))
+            .toList();
+
+        // Combine API flows with local flows
+        final localFlows = await _getLocalFlows();
+        final allFlows = [...apiFlows, ...localFlows];
+
+        return allFlows;
       } else {
         throw Exception('Failed to load flows: ${response.statusCode}');
       }
     } catch (e) {
-      // Return mock flows for development
-      return _getMockFlows();
+      // Return local flows + mock flows for development
+      final localFlows = await _getLocalFlows();
+      final mockFlows = _getMockFlows();
+      return [...localFlows, ...mockFlows];
     }
   }
 
@@ -53,7 +107,7 @@ class FlowService {
       );
 
       final response = await http.post(
-        Uri.parse('$baseUrl/flows/'),
+        Uri.parse('${ApiConfig.baseUrl}/flows/'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -67,8 +121,8 @@ class FlowService {
         throw Exception('Failed to create flow: ${response.statusCode}');
       }
     } catch (e) {
-      // Return flow with generated ID for development
-      return ProjectFlow(
+      // Save flow locally when API is not available
+      final localFlow = ProjectFlow(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: title,
         description: description,
@@ -79,6 +133,11 @@ class FlowService {
         difficulty: difficulty,
         tags: tags,
       );
+
+      // Add to local storage
+      await _addFlowLocally(localFlow);
+
+      return localFlow;
     }
   }
 
@@ -86,7 +145,7 @@ class FlowService {
     try {
       final token = await AuthService.getToken();
       final response = await http.put(
-        Uri.parse('$baseUrl/flows/${flow.id}'),
+        Uri.parse('${ApiConfig.baseUrl}/flows/${flow.id}'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -100,7 +159,10 @@ class FlowService {
         throw Exception('Failed to update flow: ${response.statusCode}');
       }
     } catch (e) {
-      return flow.copyWith(updatedAt: DateTime.now());
+      // Update flow locally when API is not available
+      final updatedFlow = flow.copyWith(updatedAt: DateTime.now());
+      await _updateFlowLocally(updatedFlow);
+      return updatedFlow;
     }
   }
 
@@ -108,15 +170,23 @@ class FlowService {
     try {
       final token = await AuthService.getToken();
       final response = await http.delete(
-        Uri.parse('$baseUrl/flows/$flowId'),
+        Uri.parse('${ApiConfig.baseUrl}/flows/$flowId'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
       );
 
-      return response.statusCode == 200 || response.statusCode == 204;
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        // Also try to delete from local storage in case it exists there too
+        await _deleteFlowLocally(flowId);
+        return true;
+      } else {
+        throw Exception('Failed to delete flow: ${response.statusCode}');
+      }
     } catch (e) {
+      // Delete from local storage when API is not available
+      await _deleteFlowLocally(flowId);
       return true;
     }
   }
@@ -129,7 +199,9 @@ class FlowService {
     try {
       final token = await AuthService.getToken();
       final response = await http.patch(
-        Uri.parse('$baseUrl/flows/$flowId/checkpoints/$checkpointId'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId',
+        ),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -157,7 +229,9 @@ class FlowService {
     try {
       final token = await AuthService.getToken();
       final response = await http.post(
-        Uri.parse('$baseUrl/flows/$flowId/checkpoints/$checkpointId/help'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId/help',
+        ),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -182,7 +256,7 @@ class FlowService {
     try {
       final token = await AuthService.getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/notes/'),
+        Uri.parse('${ApiConfig.baseUrl}/notes/'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -205,7 +279,7 @@ class FlowService {
     try {
       final token = await AuthService.getToken();
       final response = await http.post(
-        Uri.parse('$baseUrl/notes/'),
+        Uri.parse('${ApiConfig.baseUrl}/notes/'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -232,7 +306,7 @@ class FlowService {
     try {
       final token = await AuthService.getToken();
       final response = await http.put(
-        Uri.parse('$baseUrl/notes/${note.id}'),
+        Uri.parse('${ApiConfig.baseUrl}/notes/${note.id}'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -255,7 +329,7 @@ class FlowService {
     try {
       final token = await AuthService.getToken();
       final response = await http.delete(
-        Uri.parse('$baseUrl/notes/$noteId'),
+        Uri.parse('${ApiConfig.baseUrl}/notes/$noteId'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -273,7 +347,9 @@ class FlowService {
     try {
       final token = await AuthService.getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/notes/search?q=${Uri.encodeComponent(query)}'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/notes/search?q=${Uri.encodeComponent(query)}',
+        ),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -303,7 +379,7 @@ class FlowService {
     try {
       final token = await AuthService.getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/notes/labels'),
+        Uri.parse('${ApiConfig.baseUrl}/notes/labels'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -559,7 +635,7 @@ class EnhancedChatService {
     try {
       final token = await AuthService.getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/chats/contacts'),
+        Uri.parse('${ApiConfig.baseUrl}/chats/contacts'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -581,7 +657,7 @@ class EnhancedChatService {
     try {
       final token = await AuthService.getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/chats/$contactId/messages'),
+        Uri.parse('${ApiConfig.baseUrl}/chats/$contactId/messages'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -616,7 +692,7 @@ class EnhancedChatService {
       );
 
       final response = await http.post(
-        Uri.parse('$baseUrl/chats/send'),
+        Uri.parse('${ApiConfig.baseUrl}/chats/send'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

@@ -1,14 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
-
-const baseUrl = 'http://192.168.209.3:8000';
+import '../config/api_config.dart';
 
 class TaskService {
   static Future<List<dynamic>> getTasks() async {
     final token = await AuthService.getToken();
     final response = await http.get(
-      Uri.parse('$baseUrl/tasks/'),
+      Uri.parse('${ApiConfig.baseUrl}/tasks/'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -23,7 +22,7 @@ class TaskService {
   static Future<bool> createTask(String title, String description) async {
     final token = await AuthService.getToken();
     final response = await http.post(
-      Uri.parse('$baseUrl/tasks/'),
+      Uri.parse('${ApiConfig.baseUrl}/tasks/'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -39,7 +38,7 @@ class TaskService {
   ) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/tasks/create-from-timeline'),
+        Uri.parse('${ApiConfig.baseUrl}/tasks/create-from-timeline'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId, 'timeline_data': timelineData}),
       );
@@ -54,7 +53,7 @@ class TaskService {
     try {
       final token = await AuthService.getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/tasks/$taskId/progress'),
+        Uri.parse('${ApiConfig.baseUrl}/tasks/$taskId/progress'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -79,7 +78,7 @@ class TaskService {
     try {
       final token = await AuthService.getToken();
       final response = await http.patch(
-        Uri.parse('$baseUrl/tasks/$taskId/checkpoint'),
+        Uri.parse('${ApiConfig.baseUrl}/tasks/$taskId/checkpoint'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

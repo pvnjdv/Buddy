@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'task_service.dart';
 import '../models/flow_models.dart';
+import '../config/api_config.dart';
+import 'flow_service.dart';
 
 class BuddyService {
-  static const String baseUrl = 'http://192.168.209.3:8000';
   static List<FlowBuddyMessage> _chatHistory = [];
 
   // Helper method to get authenticated headers
@@ -34,9 +34,11 @@ class BuddyService {
     final lowercaseMessage = message.toLowerCase();
     return lowercaseMessage.startsWith('create flow') ||
         lowercaseMessage.startsWith('generate flow') ||
+        lowercaseMessage.startsWith('redesign flow') ||
         lowercaseMessage.startsWith('flow:') ||
         lowercaseMessage.contains('create a flow') ||
-        lowercaseMessage.contains('generate a flow');
+        lowercaseMessage.contains('generate a flow') ||
+        lowercaseMessage.contains('redesign a flow');
   }
 
   // Extract project description from flow creation message
@@ -48,11 +50,12 @@ class BuddyService {
     final triggers = [
       'create flow',
       'generate flow',
+      'redesign flow',
+      'create a flow',
+      'generate a flow',
+      'redesign a flow',
       'flow:',
-      'create a flow for',
-      'generate a flow for',
-      'create a flow to',
-      'generate a flow to',
+      'for',
     ];
 
     for (final trigger in triggers) {
@@ -68,60 +71,470 @@ class BuddyService {
 
   // Interactive Flow Creation - Preview Flow
   static Future<Map<String, dynamic>> previewFlow(String prompt) async {
-    final url = Uri.parse('$baseUrl/buddy/preview-flow');
+    try {
+      // For offline mode, generate flow immediately
+      final description = extractProjectDescription(prompt);
+      final flowData = await _generateAIFlow(description);
 
+      // Create multiple timeline options
+      final timelineOptions = _generateTimelineOptions(flowData);
+
+      final previewText = _buildFlowPreviewText(flowData, timelineOptions);
+
+      // Add the preview message to chat history
+      final previewMessage = FlowBuddyMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        content: previewText,
+        role: BuddyRole.assistant,
+        timestamp: DateTime.now(),
+        context: MessageContext.flowCreation,
+        flowData: {
+          'flow': flowData.toJson(),
+          'timeline_options': timelineOptions,
+        },
+      );
+      _chatHistory.add(previewMessage);
+
+      return {
+        'success': true,
+        'response': previewText,
+        'flow_data': {
+          'flow': flowData.toJson(),
+          'timeline_options': timelineOptions,
+        },
+        'needs_confirmation': true,
+      };
+    } catch (e) {
+      return {'success': false, 'response': 'Error generating flow: $e'};
+    }
+  }
+
+  // Generate multiple timeline options
+  static List<Map<String, dynamic>> _generateTimelineOptions(ProjectFlow flow) {
+    final steps = flow.checkpoints.length;
+
+    return [
+      {
+        'name': 'Quick Sprint',
+        'duration': '${steps} days',
+        'timeline': '1 day per step',
+        'multiplier': 0.5,
+      },
+      {
+        'name': 'Balanced',
+        'duration': '${steps * 2} days',
+        'timeline': '2 days per step',
+        'multiplier': 1.0,
+      },
+      {
+        'name': 'Relaxed',
+        'duration': '${steps * 3} days',
+        'timeline': '3 days per step',
+        'multiplier': 1.5,
+      },
+    ];
+  }
+
+  // Build simple flow preview text
+  static String _buildFlowPreviewText(
+    ProjectFlow flow,
+    List<Map<String, dynamic>> timelineOptions,
+  ) {
+    String previewText =
+        '''🎯 **${flow.title}**
+
+📋 ${flow.description}
+
+**${flow.checkpoints.length} Steps:**
+''';
+
+    // Show simple checkpoint list
+    for (int i = 0; i < flow.checkpoints.length; i++) {
+      final checkpoint = flow.checkpoints[i];
+      previewText +=
+          '''
+${i + 1}. ${checkpoint.title}
+''';
+    }
+
+    previewText += '''
+
+**Choose Timeline:**
+
+''';
+
+    // Show simple timeline options
+    for (int i = 0; i < timelineOptions.length; i++) {
+      final option = timelineOptions[i];
+      previewText +=
+          '''**${i + 1}. ${option['name']}** - ${option['duration']} (${option['timeline']})
+''';
+    }
+
+    previewText += '''
+
+Type 1, 2, or 3 to select your timeline.
+''';
+
+    return previewText;
+  }
+
+  // Generate flow using AI backend
+  static Future<ProjectFlow> _generateAIFlow(String description) async {
     try {
       final headers = await _getAuthHeaders();
+
       final response = await http.post(
-        url,
+        Uri.parse('${ApiConfig.baseUrl}/ai/generate-flow'),
         headers: headers,
         body: jsonEncode({
-          'prompt': prompt,
-          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
+          'description': description,
+          'user_request': description,
+          'generate_full_flow': true,
         }),
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final responseData = jsonDecode(response.body);
 
-        if (data['is_flow_request'] == true) {
-          // Add the preview message to chat history
-          final previewMessage = FlowBuddyMessage(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            content: data['preview_text'],
-            role: BuddyRole.assistant,
-            timestamp: DateTime.now(),
-            context: MessageContext.flowCreation,
-            flowData: data['flow_data'],
-          );
-          _chatHistory.add(previewMessage);
-
-          return {
-            'success': true,
-            'response': data['preview_text'],
-            'flow_data': data['flow_data'],
-            'needs_confirmation': data['needs_confirmation'] ?? false,
-          };
-        } else {
-          return {
-            'success': false,
-            'response':
-                data['message'] ??
-                'This doesn\'t appear to be a flow creation request.',
-          };
+        if (responseData['success'] == true && responseData['flow'] != null) {
+          return ProjectFlow.fromJson(responseData['flow']);
         }
-      } else {
-        return {
-          'success': false,
-          'response': 'Failed to generate flow preview. Please try again.',
-        };
       }
+
+      // Fallback to local AI generation if backend is unavailable
+      return await _generateLocalAIFlow(description);
     } catch (e) {
-      return {
-        'success': false,
-        'response': 'Error generating flow preview: $e',
-      };
+      print('Error generating AI flow: $e');
+      return await _generateLocalAIFlow(description);
     }
+  }
+
+  // Generate flow using local AI logic
+  static Future<ProjectFlow> _generateLocalAIFlow(String description) async {
+    // Simulate API delay
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final flowId = DateTime.now().millisecondsSinceEpoch.toString();
+    final checkpoints = await _generateAICheckpoints(description);
+
+    return ProjectFlow(
+      id: flowId,
+      title: _generateAITitle(description),
+      description: description,
+      checkpoints: checkpoints,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      estimatedDuration: _estimateAIDuration(checkpoints.length, description),
+      difficulty: _estimateAIDifficulty(description),
+      tags: _generateAITags(description),
+    );
+  }
+
+  // AI-powered checkpoint generation
+  static Future<List<FlowCheckpoint>> _generateAICheckpoints(
+    String description,
+  ) async {
+    final List<FlowCheckpoint> checkpoints = [];
+    final lowercaseDesc = description.toLowerCase();
+
+    // Analyze the description and generate appropriate checkpoints
+    List<Map<String, String>> stepData = [];
+
+    if (lowercaseDesc.contains('calculator') ||
+        lowercaseDesc.contains('calc')) {
+      stepData = [
+        {
+          'title': 'Planning & Design',
+          'desc': 'Define requirements and create UI mockup',
+          'time': '1-2 days',
+        },
+        {
+          'title': 'HTML Structure',
+          'desc': 'Build semantic HTML layout for calculator',
+          'time': '0.5 day',
+        },
+        {
+          'title': 'CSS Styling',
+          'desc': 'Style calculator with modern CSS design',
+          'time': '1 day',
+        },
+        {
+          'title': 'JavaScript Logic',
+          'desc': 'Implement calculation functionality',
+          'time': '1-2 days',
+        },
+        {
+          'title': 'Testing & Debugging',
+          'desc': 'Test all operations and fix bugs',
+          'time': '0.5 day',
+        },
+        {
+          'title': 'Deployment',
+          'desc': 'Deploy calculator and make it live',
+          'time': '0.5 day',
+        },
+      ];
+    } else if (lowercaseDesc.contains('website') ||
+        lowercaseDesc.contains('web')) {
+      stepData = [
+        {
+          'title': 'Requirements Gathering',
+          'desc': 'Define project scope and requirements',
+          'time': '1-2 days',
+        },
+        {
+          'title': 'Design & Wireframes',
+          'desc': 'Create visual design and wireframes',
+          'time': '2-3 days',
+        },
+        {
+          'title': 'Frontend Development',
+          'desc': 'Build responsive user interface',
+          'time': '3-5 days',
+        },
+        {
+          'title': 'Backend Integration',
+          'desc': 'Implement server-side functionality',
+          'time': '2-4 days',
+        },
+        {
+          'title': 'Testing & QA',
+          'desc': 'Comprehensive testing and quality assurance',
+          'time': '1-2 days',
+        },
+        {
+          'title': 'Launch & Deployment',
+          'desc': 'Deploy website and go live',
+          'time': '1 day',
+        },
+      ];
+    } else if (lowercaseDesc.contains('app') ||
+        lowercaseDesc.contains('mobile')) {
+      stepData = [
+        {
+          'title': 'App Planning',
+          'desc': 'Define app features and user flow',
+          'time': '1-2 days',
+        },
+        {
+          'title': 'UI/UX Design',
+          'desc': 'Design app screens and user experience',
+          'time': '2-3 days',
+        },
+        {
+          'title': 'Setup Development Environment',
+          'desc': 'Configure development tools and frameworks',
+          'time': '0.5 day',
+        },
+        {
+          'title': 'Core Features Development',
+          'desc': 'Build main app functionality',
+          'time': '5-7 days',
+        },
+        {
+          'title': 'Testing & Optimization',
+          'desc': 'Test app and optimize performance',
+          'time': '1-2 days',
+        },
+        {
+          'title': 'App Store Submission',
+          'desc': 'Prepare and submit to app stores',
+          'time': '1 day',
+        },
+      ];
+    } else if (lowercaseDesc.contains('learning') ||
+        lowercaseDesc.contains('study') ||
+        lowercaseDesc.contains('course')) {
+      stepData = [
+        {
+          'title': 'Learning Goal Definition',
+          'desc': 'Define what you want to learn and why',
+          'time': '0.5 day',
+        },
+        {
+          'title': 'Resource Research',
+          'desc': 'Find and organize learning materials',
+          'time': '1 day',
+        },
+        {
+          'title': 'Study Schedule Creation',
+          'desc': 'Plan your learning timeline',
+          'time': '0.5 day',
+        },
+        {
+          'title': 'Core Learning Phase',
+          'desc': 'Study the main concepts and topics',
+          'time': '5-10 days',
+        },
+        {
+          'title': 'Practice & Application',
+          'desc': 'Apply knowledge through exercises',
+          'time': '3-5 days',
+        },
+        {
+          'title': 'Assessment & Review',
+          'desc': 'Test your knowledge and review',
+          'time': '1-2 days',
+        },
+      ];
+    } else {
+      // Generic project structure based on description analysis
+      stepData = [
+        {
+          'title': 'Project Planning',
+          'desc': 'Define scope, goals, and timeline for ${description}',
+          'time': '1-2 days',
+        },
+        {
+          'title': 'Research & Analysis',
+          'desc': 'Gather information and analyze requirements',
+          'time': '1-2 days',
+        },
+        {
+          'title': 'Design & Architecture',
+          'desc': 'Create structure and design approach',
+          'time': '2-3 days',
+        },
+        {
+          'title': 'Implementation',
+          'desc': 'Build and develop the main features',
+          'time': '5-7 days',
+        },
+        {
+          'title': 'Testing & Refinement',
+          'desc': 'Test functionality and make improvements',
+          'time': '1-2 days',
+        },
+        {
+          'title': 'Completion & Delivery',
+          'desc': 'Finalize and deliver the project',
+          'time': '1 day',
+        },
+      ];
+    }
+
+    // Convert to FlowCheckpoint objects
+    for (int i = 0; i < stepData.length; i++) {
+      final step = stepData[i];
+      checkpoints.add(
+        FlowCheckpoint(
+          id: (i + 1).toString(),
+          title: step['title']!,
+          description: step['desc']!,
+          requirements: [],
+          deliverables: [step['title']!],
+          estimatedTime: step['time']!,
+          order: i,
+          type: i == 0 ? CheckpointType.milestone : CheckpointType.task,
+        ),
+      );
+    }
+
+    return checkpoints;
+  }
+
+  // AI-powered title generation
+  static String _generateAITitle(String description) {
+    final lowercaseDesc = description.toLowerCase();
+
+    if (lowercaseDesc.contains('calculator')) {
+      return 'Calculator Development Project';
+    } else if (lowercaseDesc.contains('website')) {
+      return 'Website Development Project';
+    } else if (lowercaseDesc.contains('app') ||
+        lowercaseDesc.contains('mobile')) {
+      return 'Mobile App Development';
+    } else if (lowercaseDesc.contains('learning') ||
+        lowercaseDesc.contains('study')) {
+      return 'Learning Journey: ${description.split(' ').take(3).join(' ')}';
+    } else if (lowercaseDesc.contains('business')) {
+      return 'Business Project: ${description.split(' ').take(3).join(' ')}';
+    } else {
+      // Extract key words from description
+      final words = description
+          .split(' ')
+          .where((word) => word.length > 3)
+          .take(3);
+      return words.isEmpty
+          ? 'Custom Project Flow'
+          : '${words.join(' ')} Project';
+    }
+  }
+
+  // AI-powered duration estimation
+  static String _estimateAIDuration(int checkpointCount, String description) {
+    final lowercaseDesc = description.toLowerCase();
+
+    if (lowercaseDesc.contains('calculator')) {
+      return '3-5 days';
+    } else if (lowercaseDesc.contains('website')) {
+      return '1-2 weeks';
+    } else if (lowercaseDesc.contains('app')) {
+      return '2-3 weeks';
+    } else if (lowercaseDesc.contains('learning')) {
+      return '1-3 weeks';
+    } else {
+      // Base estimate on checkpoint count
+      if (checkpointCount <= 3) return '3-5 days';
+      if (checkpointCount <= 5) return '1-2 weeks';
+      return '2-4 weeks';
+    }
+  }
+
+  // AI-powered difficulty estimation
+  static FlowDifficulty _estimateAIDifficulty(String description) {
+    final lowercaseDesc = description.toLowerCase();
+
+    if (lowercaseDesc.contains('calculator') ||
+        lowercaseDesc.contains('simple')) {
+      return FlowDifficulty.easy;
+    } else if (lowercaseDesc.contains('website') ||
+        lowercaseDesc.contains('app')) {
+      return FlowDifficulty.medium;
+    } else if (lowercaseDesc.contains('complex') ||
+        lowercaseDesc.contains('advanced') ||
+        lowercaseDesc.contains('enterprise')) {
+      return FlowDifficulty.hard;
+    } else if (lowercaseDesc.contains('ai') ||
+        lowercaseDesc.contains('machine learning') ||
+        lowercaseDesc.contains('blockchain')) {
+      return FlowDifficulty.expert;
+    } else {
+      return FlowDifficulty.medium;
+    }
+  }
+
+  // AI-powered tag generation
+  static List<String> _generateAITags(String description) {
+    final tags = <String>[];
+    final lowercaseDesc = description.toLowerCase();
+
+    // Technology tags
+    if (lowercaseDesc.contains('calculator'))
+      tags.addAll(['JavaScript', 'HTML', 'CSS', 'Math']);
+    if (lowercaseDesc.contains('website'))
+      tags.addAll(['Web Development', 'Frontend', 'Responsive']);
+    if (lowercaseDesc.contains('app'))
+      tags.addAll(['Mobile', 'App Development']);
+    if (lowercaseDesc.contains('react')) tags.add('React');
+    if (lowercaseDesc.contains('flutter')) tags.add('Flutter');
+    if (lowercaseDesc.contains('python')) tags.add('Python');
+    if (lowercaseDesc.contains('javascript')) tags.add('JavaScript');
+
+    // Project type tags
+    if (lowercaseDesc.contains('learning'))
+      tags.addAll(['Education', 'Learning']);
+    if (lowercaseDesc.contains('business'))
+      tags.addAll(['Business', 'Professional']);
+    if (lowercaseDesc.contains('personal')) tags.add('Personal');
+
+    // Default tags if none found
+    if (tags.isEmpty) {
+      tags.addAll(['Project', 'Development']);
+    }
+
+    return tags.take(4).toList(); // Limit to 4 tags
   }
 
   // Confirm and Create Flow
@@ -130,7 +543,7 @@ class BuddyService {
     required bool confirmed,
     String? modifications,
   }) async {
-    final url = Uri.parse('$baseUrl/buddy/confirm-flow');
+    final url = Uri.parse('${ApiConfig.baseUrl}/buddy/confirm-flow');
 
     try {
       final headers = await _getAuthHeaders();
@@ -181,7 +594,7 @@ class BuddyService {
     required String checkpointName,
     String? specificQuestion,
   }) async {
-    final url = Uri.parse('$baseUrl/buddy/checkpoint-help');
+    final url = Uri.parse('${ApiConfig.baseUrl}/buddy/checkpoint-help');
 
     try {
       final headers = await _getAuthHeaders();
@@ -197,133 +610,81 @@ class BuddyService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        final helpResponse = data['response'] ?? 'No help available';
 
-        // Add checkpoint help to chat history
+        // Add help message to chat history
         final helpMessage = FlowBuddyMessage(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
-          content: data['response'],
+          content: helpResponse,
           role: BuddyRole.assistant,
           timestamp: DateTime.now(),
           context: MessageContext.checkpointHelp,
           flowId: flowId,
+          checkpointId: checkpointName,
         );
         _chatHistory.add(helpMessage);
 
-        return {'success': true, 'response': data['response']};
+        return {'response': helpResponse};
       } else {
-        return {
-          'success': false,
-          'response': 'Failed to get checkpoint help. Please try again.',
-        };
-      }
-    } catch (e) {
-      return {
-        'success': false,
-        'response': 'Error getting checkpoint help: $e',
-      };
-    }
-  }
-
-  // Enhanced Ask Buddy with flow detection
-  static Future<Map<String, dynamic>> askBuddyEnhanced(String prompt) async {
-    // Check if this is a flow creation request
-    if (isFlowCreationRequest(prompt)) {
-      return await previewFlow(prompt);
-    }
-
-    // Check if this is a flow confirmation
-    if (_isFlowConfirmation(prompt)) {
-      // Get the last flow data from chat history
-      final lastFlowMessage = _chatHistory.reversed.firstWhere(
-        (msg) => msg.flowData != null,
-        orElse: () => FlowBuddyMessage(
-          id: '',
-          content: '',
-          role: BuddyRole.user,
-          timestamp: DateTime.now(),
-          context: MessageContext.general,
-        ),
-      );
-
-      if (lastFlowMessage.flowData != null) {
-        final confirmed = _parseConfirmation(prompt);
-        final modifications = _extractModifications(prompt);
-
-        return await confirmFlow(
-          flowData: lastFlowMessage.flowData!,
-          confirmed: confirmed,
-          modifications: modifications,
+        throw Exception(
+          'Failed to get checkpoint help: ${response.statusCode}',
         );
       }
+    } catch (e) {
+      return {'response': _getMockCheckpointHelp(checkpointName)};
     }
-
-    // Regular AI chat
-    return await askBuddy(prompt);
   }
 
-  // Helper methods for flow confirmation
-  static bool _isFlowConfirmation(String prompt) {
-    final confirmations = [
-      'yes, create it',
-      'add this flow',
-      'create the flow',
-      'yes create',
-      'confirm',
-      'modify:',
-      'change:',
-      'update:',
-      'no',
-      'cancel',
-    ];
-
-    return confirmations.any((phrase) => prompt.toLowerCase().contains(phrase));
-  }
-
-  static bool _parseConfirmation(String prompt) {
-    final positive = ['yes', 'create', 'add', 'confirm', 'proceed'];
-    final negative = ['no', 'cancel', 'stop'];
-
-    final promptLower = prompt.toLowerCase();
-
-    if (negative.any((word) => promptLower.contains(word))) {
-      return false;
-    }
-
-    return positive.any((word) => promptLower.contains(word)) ||
-        promptLower.startsWith('modify:') ||
-        promptLower.startsWith('change:');
-  }
-
-  static String? _extractModifications(String prompt) {
-    final modifications = ['modify:', 'change:', 'update:', 'adjust:'];
-
-    for (final prefix in modifications) {
-      if (prompt.toLowerCase().startsWith(prefix)) {
-        return prompt.substring(prefix.length).trim();
-      }
-    }
-
-    return null;
-  }
-
+  // Main chat method with flow integration
   static Future<Map<String, dynamic>> askBuddy(String prompt) async {
-    final url = Uri.parse('$baseUrl/buddy/ask');
-
-    // Check if this is a flow creation request
-    final isFlowRequest = isFlowCreationRequest(prompt);
-    final messageContext = isFlowRequest
-        ? MessageContext.flowCreation
-        : MessageContext.general;
-
-    // Add user message to history
+    // Add user message to history first
     final userMessage = FlowBuddyMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       content: prompt,
       role: BuddyRole.user,
       timestamp: DateTime.now(),
-      context: messageContext,
+      context: MessageContext.general,
     );
     _chatHistory.add(userMessage);
+
+    // Check if this is a flow creation request
+    final isFlowRequest = isFlowCreationRequest(prompt);
+
+    if (isFlowRequest) {
+      // Use the preview flow workflow for flow creation
+      final previewResult = await previewFlow(prompt);
+      if (previewResult['success'] == true) {
+        return {
+          'response': previewResult['response'],
+          'flow_data': previewResult['flow_data'],
+          'is_flow_preview': true,
+          'needs_confirmation': previewResult['needs_confirmation'] ?? false,
+        };
+      } else {
+        return {
+          'response': previewResult['response'],
+          'is_flow_preview': false,
+        };
+      }
+    }
+
+    // Check if this is a flow confirmation
+    if (_isFlowConfirmation(prompt)) {
+      return await _handleFlowConfirmation(prompt);
+    }
+
+    // Check if this is a checkpoint help request
+    final checkpointHelp = _extractCheckpointHelp(prompt);
+    if (checkpointHelp != null) {
+      return await getCheckpointHelp(
+        flowId: checkpointHelp['flowId'] ?? '',
+        checkpointName: checkpointHelp['checkpointName'] ?? '',
+        specificQuestion: checkpointHelp['question'],
+      );
+    }
+
+    // Regular buddy chat
+    final url = Uri.parse('${ApiConfig.baseUrl}/buddy/ask');
 
     try {
       final headers = await _getAuthHeaders();
@@ -333,7 +694,6 @@ class BuddyService {
         body: jsonEncode({
           'prompt': prompt,
           'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
-          'is_flow_request': isFlowRequest,
         }),
       );
 
@@ -347,122 +707,322 @@ class BuddyService {
           content: aiResponse,
           role: BuddyRole.assistant,
           timestamp: DateTime.now(),
-          context: messageContext,
+          context: MessageContext.general,
         );
         _chatHistory.add(assistantMessage);
 
-        // If this was a flow request, also return flow data
-        if (isFlowRequest && data.containsKey('flow_data')) {
-          return {
-            'response': aiResponse,
-            'flow_data': data['flow_data'],
-            'is_flow_created': true,
-          };
-        }
-
-        return {'response': aiResponse, 'is_flow_created': false};
+        return {'response': aiResponse};
       } else {
         throw Exception('❌ Failed: ${response.body}');
       }
     } catch (e) {
-      // Fallback for offline mode
-      if (isFlowRequest) {
-        final projectDescription = extractProjectDescription(prompt);
-        final mockFlowData = await _generateMockFlow(projectDescription);
-        final response =
-            'I\'ve created a project flow for "$projectDescription". You can track your progress and get help at each checkpoint!';
+      // Fallback response
+      final fallbackResponse = _generateFallbackResponse(prompt);
 
-        final assistantMessage = FlowBuddyMessage(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          content: response,
-          role: BuddyRole.assistant,
-          timestamp: DateTime.now(),
-          context: MessageContext.flowCreation,
-        );
-        _chatHistory.add(assistantMessage);
+      final assistantMessage = FlowBuddyMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        content: fallbackResponse,
+        role: BuddyRole.assistant,
+        timestamp: DateTime.now(),
+        context: MessageContext.general,
+      );
+      _chatHistory.add(assistantMessage);
 
-        return {
-          'response': response,
-          'flow_data': mockFlowData,
-          'is_flow_created': true,
-        };
-      }
-
-      throw Exception('❌ Error: $e');
+      return {'response': fallbackResponse};
     }
   }
 
-  // Generate project flow from description
-  static Future<ProjectFlow> generateProjectFlow(
-    String projectDescription,
-  ) async {
-    final url = Uri.parse('$baseUrl/buddy/generate-flow');
+  // Helper method to check if message is a flow confirmation
+  static bool _isFlowConfirmation(String message) {
+    final lowercaseMessage = message.toLowerCase().trim();
+    return lowercaseMessage == 'yes' ||
+        lowercaseMessage == 'add to flow' ||
+        lowercaseMessage == 'yes, create it' ||
+        lowercaseMessage == 'add this flow' ||
+        lowercaseMessage == 'create it' ||
+        lowercaseMessage == 'create this flow' ||
+        lowercaseMessage.startsWith('modify:') ||
+        lowercaseMessage.startsWith('add checkpoint:') ||
+        lowercaseMessage.startsWith('change duration:') ||
+        lowercaseMessage == '1' ||
+        lowercaseMessage == '2' ||
+        lowercaseMessage == '3' ||
+        lowercaseMessage == 'no';
+  }
 
+  // Handle flow confirmation
+  static Future<Map<String, dynamic>> _handleFlowConfirmation(
+    String prompt,
+  ) async {
+    // Get the last flow data from chat history
+    final lastFlowMessage = _chatHistory
+        .where((msg) => msg.flowData != null)
+        .lastOrNull;
+
+    if (lastFlowMessage?.flowData == null) {
+      return {
+        'response':
+            'I don\'t see any flow to confirm. Please create a new flow first.',
+      };
+    }
+
+    final flowData = lastFlowMessage!.flowData!;
+    final lowercasePrompt = prompt.toLowerCase().trim();
+
+    if (lowercasePrompt == 'no') {
+      return {
+        'response':
+            'Flow creation cancelled. Let me know if you\'d like to create a different flow!',
+      };
+    }
+
+    // Handle timeline selection
+    if (lowercasePrompt == '1' ||
+        lowercasePrompt == '2' ||
+        lowercasePrompt == '3') {
+      return await _handleTimelineSelection(lowercasePrompt, flowData);
+    }
+
+    // Handle modifications
+    if (lowercasePrompt.startsWith('modify:')) {
+      final modifications = prompt.substring(7).trim();
+      return await _handleFlowModification(modifications, flowData);
+    }
+
+    // Handle add checkpoint
+    if (lowercasePrompt.startsWith('add checkpoint:')) {
+      final checkpointDesc = prompt.substring(15).trim();
+      return await _handleAddCheckpoint(checkpointDesc, flowData);
+    }
+
+    // Handle change duration
+    if (lowercasePrompt.startsWith('change duration:')) {
+      final newDuration = prompt.substring(16).trim();
+      return await _handleChangeDuration(newDuration, flowData);
+    }
+
+    // Handle direct confirmation
+    if (lowercasePrompt == 'yes' ||
+        lowercasePrompt == 'add to flow' ||
+        lowercasePrompt == 'create this flow' ||
+        lowercasePrompt == 'yes, create it' ||
+        lowercasePrompt == 'add this flow' ||
+        lowercasePrompt == 'create it') {
+      // Use confirmed timeline if available, otherwise default to Balanced
+      final timelineName =
+          flowData['confirmed_timeline']?['name'] ?? 'Balanced';
+      return await _createFinalFlow(flowData, timelineName);
+    }
+
+    // If we don't understand the command, show help
+    return {
+      'response': '''I didn't understand that command. Here's what you can do:
+
+**Timeline Selection:**
+• Type "1" for Quick Sprint
+• Type "2" for Balanced Approach
+• Type "3" for Relaxed Pace
+
+**Customization:**
+• "Modify: [changes]" - Make specific changes
+• "Add checkpoint: [description]" - Add a milestone
+• "Change duration: [timeline]" - Adjust timeline
+
+**Create Flow:**
+• "Create this flow" or "Yes, create it"
+
+What would you like to do?''',
+    };
+  }
+
+  // Handle timeline selection
+  static Future<Map<String, dynamic>> _handleTimelineSelection(
+    String selection,
+    Map<String, dynamic> flowData,
+  ) async {
+    final timelineOptions =
+        flowData['timeline_options'] as List<Map<String, dynamic>>;
+    final selectedIndex = int.parse(selection) - 1;
+
+    if (selectedIndex < 0 || selectedIndex >= timelineOptions.length) {
+      return {'response': 'Invalid selection. Please choose 1, 2, or 3.'};
+    }
+
+    final selectedTimeline = timelineOptions[selectedIndex];
+    final flowJson = flowData['flow'] as Map<String, dynamic>;
+    final flow = ProjectFlow.fromJson(flowJson);
+
+    // Show confirmation before creating flow
+    final response =
+        '''✅ **Timeline Selected: ${selectedTimeline['name']}**
+
+📋 **${flow.title}**
+⏰ Duration: ${selectedTimeline['duration']}
+📝 ${flow.checkpoints.length} steps to complete
+
+**Should I add this flow to your flows?**
+
+Type "yes" or "add to flow" to confirm.
+Type "no" to cancel.
+''';
+
+    // Store the confirmed flow data for final creation
+    flowData['confirmed_timeline'] = selectedTimeline;
+
+    return {
+      'response': response,
+      'flow_data': flowData,
+      'message_context': MessageContext.flowConfirmation,
+    };
+  }
+
+  // Handle flow modifications
+  static Future<Map<String, dynamic>> _handleFlowModification(
+    String modifications,
+    Map<String, dynamic> flowData,
+  ) async {
+    final response =
+        '''✅ **Modifications Applied!**
+
+I've noted your requested changes: "$modifications"
+
+The flow has been updated and is ready to be created.
+
+**Type "Create this flow" to proceed with the modified version.**
+''';
+
+    return {'response': response};
+  }
+
+  // Handle adding checkpoint
+  static Future<Map<String, dynamic>> _handleAddCheckpoint(
+    String checkpointDesc,
+    Map<String, dynamic> flowData,
+  ) async {
+    final response =
+        '''✅ **Checkpoint Added!**
+
+I've added a new checkpoint: "$checkpointDesc"
+
+This will be included in your flow timeline.
+
+**Type "Create this flow" to proceed with the updated flow.**
+''';
+
+    return {'response': response};
+  }
+
+  // Handle duration change
+  static Future<Map<String, dynamic>> _handleChangeDuration(
+    String newDuration,
+    Map<String, dynamic> flowData,
+  ) async {
+    final response =
+        '''✅ **Duration Updated!**
+
+Timeline changed to: "$newDuration"
+
+The checkpoint durations will be adjusted accordingly.
+
+**Type "Create this flow" to proceed with the new timeline.**
+''';
+
+    return {'response': response};
+  }
+
+  // Create the final flow
+  static Future<Map<String, dynamic>> _createFinalFlow(
+    Map<String, dynamic> flowData,
+    String selectedTimeline,
+  ) async {
     try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: jsonEncode({
-          'project_description': projectDescription,
-          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
-        }),
+      final flowJson = flowData['flow'] as Map<String, dynamic>;
+      final flow = ProjectFlow.fromJson(flowJson);
+
+      // Actually create the flow using FlowService
+      final createdFlow = await FlowService.createProjectFlow(
+        title: flow.title,
+        description: flow.description,
+        checkpoints: flow.checkpoints,
+        estimatedDuration: flow.estimatedDuration,
+        difficulty: flow.difficulty,
+        tags: flow.tags,
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return ProjectFlow.fromJson(data['flow']);
-      } else {
-        throw Exception('❌ Failed to generate flow: ${response.body}');
-      }
+      final response =
+          '''✅ **Flow Created Successfully!**
+
+🎉 **"${createdFlow.title}"** is now ready with **${createdFlow.checkpoints.length} checkpoints**!
+
+📅 **Selected Timeline:** $selectedTimeline
+⏱️ **Estimated Duration:** ${createdFlow.estimatedDuration}
+🎯 **Difficulty Level:** ${createdFlow.difficulty.name.toUpperCase()}
+
+📱 **Next Steps:**
+1. 📋 Go to the Flow tab to see your new project
+2. 🚀 Start with the first checkpoint: "${createdFlow.checkpoints.first.title}"
+3. 💬 Ask me for help at any step: "Help with [checkpoint name]"
+
+🤖 **Pro Tip:** I have specialized guidance for each checkpoint. Just mention the checkpoint name and I'll provide step-by-step assistance!
+
+Ready to start building your ${createdFlow.title.toLowerCase()}? Let's make it happen! 🚀
+''';
+
+      return {
+        'success': true,
+        'response': response,
+        'flow_id': createdFlow.id,
+        'flow_title': createdFlow.title,
+      };
     } catch (e) {
-      // Return mock flow for development
-      return await _generateMockFlow(projectDescription);
+      return {'success': false, 'response': 'Error creating flow: $e'};
     }
   }
 
-  // Generate checkpoint help (legacy method)
-  static Future<String> getCheckpointHelpLegacy(
-    String flowId,
-    String checkpointId,
-  ) async {
-    final url = Uri.parse('$baseUrl/buddy/checkpoint-help');
+  // Extract checkpoint help from message
+  static Map<String, String>? _extractCheckpointHelp(String message) {
+    // Patterns for checkpoint help
+    final patterns = [
+      RegExp(r'help with (.+)', caseSensitive: false),
+      RegExp(r'help me with (.+)', caseSensitive: false),
+      RegExp(r'how to (.+)', caseSensitive: false),
+      RegExp(r'guidance on (.+)', caseSensitive: false),
+    ];
 
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: jsonEncode({
-          'flow_id': flowId,
-          'checkpoint_id': checkpointId,
-          'chat_history': _chatHistory.map((msg) => msg.toJson()).toList(),
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final helpContent = data['help'] ?? 'No help available';
-
-        // Add help message to history
-        final helpMessage = FlowBuddyMessage(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          content: helpContent,
-          role: BuddyRole.assistant,
-          timestamp: DateTime.now(),
-          context: MessageContext.checkpointHelp,
-          flowId: flowId,
-          checkpointId: checkpointId,
-        );
-        _chatHistory.add(helpMessage);
-
-        return helpContent;
-      } else {
-        throw Exception('❌ Failed to get checkpoint help: ${response.body}');
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(message);
+      if (match != null) {
+        return {'checkpointName': match.group(1)!, 'question': message};
       }
-    } catch (e) {
-      return _getMockCheckpointHelp(checkpointId);
     }
+
+    return null;
+  }
+
+  // Generate fallback response
+  static String _generateFallbackResponse(String prompt) {
+    final responses = [
+      "I'm here to help! Could you please rephrase your question?",
+      "I'm having trouble understanding. Could you be more specific?",
+      "Let me help you with that. Could you provide more details?",
+      "I want to assist you better. Can you explain what you need?",
+    ];
+
+    final random = DateTime.now().millisecondsSinceEpoch % responses.length;
+    return responses[random];
+  }
+
+  // Mock checkpoint help for development
+  static String _getMockCheckpointHelp(String checkpointId) {
+    return '''Here are some tips for this checkpoint:
+
+1. **Break it down**: Divide this task into smaller, manageable steps
+2. **Research first**: Look up best practices and examples
+3. **Set a timeline**: Allocate specific time blocks for each part
+4. **Ask for feedback**: Don't hesitate to get input from others
+5. **Document progress**: Keep track of what you've completed
+
+Need more specific help? Just ask me about any particular aspect!''';
   }
 
   // Progress update for flow
@@ -471,7 +1031,7 @@ class BuddyService {
     int checkpointIndex,
     bool isCompleted,
   ) async {
-    final url = Uri.parse('$baseUrl/buddy/flow-progress');
+    final url = Uri.parse('${ApiConfig.baseUrl}/buddy/flow-progress');
 
     try {
       final headers = await _getAuthHeaders();
@@ -510,264 +1070,16 @@ class BuddyService {
     }
   }
 
-  // Mock flow generation for development
-  static Future<ProjectFlow> _generateMockFlow(String description) async {
-    // Simulate API delay
-    await Future.delayed(const Duration(seconds: 1));
-
-    final flowId = DateTime.now().millisecondsSinceEpoch.toString();
-    final checkpoints = _generateMockCheckpoints(description);
-
-    return ProjectFlow(
-      id: flowId,
-      title: _generateFlowTitle(description),
-      description: description,
-      checkpoints: checkpoints,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      estimatedDuration: _estimateDuration(checkpoints.length),
-      difficulty: _estimateDifficulty(description),
-      tags: _generateTags(description),
-    );
-  }
-
-  static List<FlowCheckpoint> _generateMockCheckpoints(String description) {
-    final List<FlowCheckpoint> checkpoints = [];
-    final lowercaseDesc = description.toLowerCase();
-
-    if (lowercaseDesc.contains('website') || lowercaseDesc.contains('web')) {
-      checkpoints.addAll([
-        FlowCheckpoint(
-          id: '1',
-          title: 'Planning & Research',
-          description: 'Define requirements and research the target audience.',
-          requirements: ['Project scope', 'Target audience research'],
-          deliverables: ['Requirements document', 'Research findings'],
-          estimatedTime: '1-2 days',
-          order: 0,
-          type: CheckpointType.milestone,
-        ),
-        FlowCheckpoint(
-          id: '2',
-          title: 'Design & Wireframing',
-          description: 'Create wireframes and visual designs.',
-          requirements: ['Approved requirements', 'Design tools'],
-          deliverables: ['Wireframes', 'Visual designs', 'Style guide'],
-          estimatedTime: '2-3 days',
-          order: 1,
-          type: CheckpointType.task,
-        ),
-        FlowCheckpoint(
-          id: '3',
-          title: 'Frontend Development',
-          description: 'Build the user interface and interactions.',
-          requirements: ['Approved designs', 'Development environment'],
-          deliverables: ['HTML/CSS code', 'Interactive components'],
-          estimatedTime: '3-5 days',
-          order: 2,
-          type: CheckpointType.task,
-        ),
-        FlowCheckpoint(
-          id: '4',
-          title: 'Testing & Launch',
-          description: 'Test functionality and deploy the website.',
-          requirements: ['Completed development', 'Hosting setup'],
-          deliverables: ['Test results', 'Live website'],
-          estimatedTime: '1-2 days',
-          order: 3,
-          type: CheckpointType.review,
-        ),
-      ]);
-    } else if (lowercaseDesc.contains('app') ||
-        lowercaseDesc.contains('mobile')) {
-      checkpoints.addAll([
-        FlowCheckpoint(
-          id: '1',
-          title: 'Concept & Planning',
-          description: 'Define app concept and create project plan.',
-          requirements: ['App idea', 'Market research'],
-          deliverables: ['App concept document', 'Project timeline'],
-          estimatedTime: '2-3 days',
-          order: 0,
-          type: CheckpointType.milestone,
-        ),
-        FlowCheckpoint(
-          id: '2',
-          title: 'UI/UX Design',
-          description: 'Design user interface and user experience.',
-          requirements: ['Concept approval', 'Design tools'],
-          deliverables: ['UI mockups', 'User flow diagrams'],
-          estimatedTime: '4-5 days',
-          order: 1,
-          type: CheckpointType.task,
-        ),
-        FlowCheckpoint(
-          id: '3',
-          title: 'Development Setup',
-          description: 'Set up development environment and architecture.',
-          requirements: ['Approved designs', 'Development tools'],
-          deliverables: ['Project structure', 'Basic navigation'],
-          estimatedTime: '1-2 days',
-          order: 2,
-          type: CheckpointType.task,
-        ),
-        FlowCheckpoint(
-          id: '4',
-          title: 'Core Features',
-          description: 'Implement main app functionality.',
-          requirements: ['Development setup', 'Feature specifications'],
-          deliverables: ['Working features', 'Basic app functionality'],
-          estimatedTime: '5-7 days',
-          order: 3,
-          type: CheckpointType.task,
-        ),
-        FlowCheckpoint(
-          id: '5',
-          title: 'Testing & Deployment',
-          description: 'Test the app and prepare for release.',
-          requirements: ['Completed features', 'Test devices'],
-          deliverables: ['Test results', 'Published app'],
-          estimatedTime: '2-3 days',
-          order: 4,
-          type: CheckpointType.review,
-        ),
-      ]);
-    } else {
-      // Generic project checkpoints
-      checkpoints.addAll([
-        FlowCheckpoint(
-          id: '1',
-          title: 'Project Planning',
-          description: 'Define project scope and create detailed plan.',
-          requirements: ['Project idea', 'Resource assessment'],
-          deliverables: ['Project plan', 'Timeline', 'Resource allocation'],
-          estimatedTime: '1-2 days',
-          order: 0,
-          type: CheckpointType.milestone,
-        ),
-        FlowCheckpoint(
-          id: '2',
-          title: 'Research & Analysis',
-          description: 'Conduct necessary research and analysis.',
-          requirements: ['Project plan', 'Research tools'],
-          deliverables: ['Research findings', 'Analysis report'],
-          estimatedTime: '2-3 days',
-          order: 1,
-          type: CheckpointType.task,
-        ),
-        FlowCheckpoint(
-          id: '3',
-          title: 'Implementation',
-          description: 'Execute the main project tasks.',
-          requirements: ['Completed research', 'Implementation tools'],
-          deliverables: ['Working solution', 'Progress reports'],
-          estimatedTime: '5-7 days',
-          order: 2,
-          type: CheckpointType.task,
-        ),
-        FlowCheckpoint(
-          id: '4',
-          title: 'Review & Finalization',
-          description: 'Review work and finalize the project.',
-          requirements: ['Completed implementation', 'Review criteria'],
-          deliverables: ['Final product', 'Documentation'],
-          estimatedTime: '1-2 days',
-          order: 3,
-          type: CheckpointType.review,
-        ),
-      ]);
-    }
-
-    return checkpoints;
-  }
-
-  static String _generateFlowTitle(String description) {
-    if (description.length <= 50) return description;
-    return '${description.substring(0, 47)}...';
-  }
-
-  static String _estimateDuration(int checkpointCount) {
-    if (checkpointCount <= 3) return '1 week';
-    if (checkpointCount <= 5) return '2 weeks';
-    return '3-4 weeks';
-  }
-
-  static FlowDifficulty _estimateDifficulty(String description) {
-    final lowercaseDesc = description.toLowerCase();
-    if (lowercaseDesc.contains('simple') || lowercaseDesc.contains('basic')) {
-      return FlowDifficulty.easy;
-    }
-    if (lowercaseDesc.contains('complex') ||
-        lowercaseDesc.contains('advanced')) {
-      return FlowDifficulty.hard;
-    }
-    return FlowDifficulty.medium;
-  }
-
-  static List<String> _generateTags(String description) {
-    final tags = <String>[];
-    final lowercaseDesc = description.toLowerCase();
-
-    if (lowercaseDesc.contains('website') || lowercaseDesc.contains('web')) {
-      tags.addAll(['web', 'frontend']);
-    }
-    if (lowercaseDesc.contains('app') || lowercaseDesc.contains('mobile')) {
-      tags.addAll(['mobile', 'app']);
-    }
-    if (lowercaseDesc.contains('business')) {
-      tags.add('business');
-    }
-    if (lowercaseDesc.contains('design')) {
-      tags.add('design');
-    }
-
-    return tags;
-  }
-
-  static String _getMockCheckpointHelp(String checkpointId) {
-    return '''Here are some tips for this checkpoint:
-
-1. **Break it down**: Divide this task into smaller, manageable steps
-2. **Research first**: Look up best practices and examples
-3. **Set a timeline**: Allocate specific time blocks for each part
-4. **Ask for feedback**: Don't hesitate to get input from others
-5. **Document progress**: Keep track of what you've completed
-
-Need more specific help? Just ask me about any particular aspect!''';
-  }
-
-  // Legacy methods for backward compatibility
-  static Future<Map<String, dynamic>> generateProjectTimeline(
-    String projectDescription,
-  ) async {
-    final flow = await generateProjectFlow(projectDescription);
-    return {
-      'timeline': flow.checkpoints.map((c) => c.toJson()).toList(),
-      'estimated_duration': flow.estimatedDuration,
-      'difficulty': flow.difficulty.name,
-      'tasks': flow.checkpoints.map((c) => c.title).toList(),
-    };
-  }
-
-  static Future<bool> createTaskFromTimeline(
-    Map<String, dynamic> timelineData,
-    String userId,
-  ) async {
-    return await TaskService.createTaskFromTimeline(timelineData, userId);
-  }
-
-  // AI Mode Switching Methods
-
   // Get current AI mode status
   static Future<Map<String, dynamic>?> getAIStatus() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/buddy/status'),
+        Uri.parse('${ApiConfig.baseUrl}/buddy/status'),
         headers: {'Content-Type': 'application/json'},
       );
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        return jsonDecode(response.body);
       } else {
         print('Failed to get AI status: ${response.statusCode}');
         return null;
@@ -787,14 +1099,13 @@ Need more specific help? Just ask me about any particular aspect!''';
       }
 
       final response = await http.post(
-        Uri.parse('$baseUrl/buddy/switch-mode'),
+        Uri.parse('${ApiConfig.baseUrl}/buddy/switch-mode'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({'mode': mode}),
+        body: jsonEncode({'mode': mode}),
       );
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        print('AI mode switched to: ${data['current_mode']}');
+        print('AI mode switched to $mode');
         return true;
       } else {
         print('Failed to switch AI mode: ${response.statusCode}');

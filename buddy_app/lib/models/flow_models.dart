@@ -250,10 +250,13 @@ class ChatContact {
   });
 
   factory ChatContact.fromJson(Map<String, dynamic> json) {
+    final name = json['name']?.toString() ?? '';
+    final phoneNumber = json['phone_number']?.toString();
+
     return ChatContact(
       id: json['id']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
-      phoneNumber: json['phone_number']?.toString(),
+      name: name.isNotEmpty ? name : (phoneNumber ?? 'Unknown'),
+      phoneNumber: phoneNumber,
       email: json['email']?.toString(),
       profileImageUrl: json['profile_image_url']?.toString(),
       lastMessage: json['last_message']?.toString(),
@@ -673,4 +676,10 @@ class FlowBuddyMessage extends BuddyMessage {
   }
 }
 
-enum MessageContext { general, flowCreation, checkpointHelp, flowProgress }
+enum MessageContext {
+  general,
+  flowCreation,
+  flowConfirmation,
+  checkpointHelp,
+  flowProgress,
+}

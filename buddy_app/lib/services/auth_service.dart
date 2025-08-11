@@ -1,13 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
-const baseUrl = 'http://192.168.209.3:8000';
+import '../config/api_config.dart';
 
 class AuthService {
   static Future<bool> requestOtp(String mobile) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/auth/request-otp'),
+      Uri.parse('${ApiConfig.baseUrl}/auth/request-otp'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'mobile_number': mobile}),
     );
@@ -20,7 +19,7 @@ class AuthService {
 
   static Future<bool> verifyOtp(String mobile, String otp) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/auth/verify-otp'),
+      Uri.parse('${ApiConfig.baseUrl}/auth/verify-otp'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'mobile_number': mobile, 'otp': otp}),
     );
@@ -45,7 +44,7 @@ class AuthService {
   ) async {
     final token = await getToken();
     final response = await http.post(
-      Uri.parse('$baseUrl/users/details'),
+      Uri.parse('${ApiConfig.baseUrl}/users/details'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -64,7 +63,7 @@ class AuthService {
   static Future<Map<String, dynamic>?> getUserDetails(String mobile) async {
     final token = await getToken();
     final response = await http.get(
-      Uri.parse('$baseUrl/users/by-mobile/$mobile'),
+      Uri.parse('${ApiConfig.baseUrl}/users/by-mobile/$mobile'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',

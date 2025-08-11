@@ -302,7 +302,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   String _getInitials(String name) {
-    final parts = name.split(' ');
+    if (name.trim().isEmpty) {
+      return 'U';
+    }
+
+    final parts = name
+        .trim()
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .toList();
     if (parts.length >= 2) {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     } else if (parts.isNotEmpty) {

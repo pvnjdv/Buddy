@@ -129,6 +129,43 @@ class _FlowScreenState extends State<FlowScreen> {
                     ),
                   ),
                   _buildStatusChip(flow.status),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_vert, color: Colors.grey[600]),
+                    onSelected: (value) => _handleFlowAction(value, flow),
+                    itemBuilder: (BuildContext context) => [
+                      const PopupMenuItem<String>(
+                        value: 'rename',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 20),
+                            SizedBox(width: 8),
+                            Text('Rename'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'redesign',
+                        child: Row(
+                          children: [
+                            Icon(Icons.design_services, size: 20),
+                            SizedBox(width: 8),
+                            Text('Redesign'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, size: 20, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -337,6 +374,161 @@ class _FlowScreenState extends State<FlowScreen> {
   void _navigateToFlowDetail(ProjectFlow flow) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => FlowDetailScreen(flow: flow)),
+    );
+  }
+
+  void _handleFlowAction(String action, ProjectFlow flow) {
+    switch (action) {
+      case 'rename':
+        _showRenameDialog(flow);
+        break;
+      case 'redesign':
+        _showRedesignDialog(flow);
+        break;
+      case 'delete':
+        _showDeleteDialog(flow);
+        break;
+    }
+  }
+
+  void _showRenameDialog(ProjectFlow flow) {
+    final TextEditingController controller = TextEditingController(
+      text: flow.title,
+    );
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Rename Flow'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Flow Name',
+              border: OutlineInputBorder(),
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (controller.text.trim().isNotEmpty) {
+                  await _renameFlow(flow, controller.text.trim());
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text('Rename'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showRedesignDialog(ProjectFlow flow) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Redesign Flow'),
+          content: Text(
+            'This will create a new version of "${flow.title}" with updated checkpoints and timeline. The original flow will be kept.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _redesignFlow(flow);
+              },
+              child: const Text('Redesign'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDeleteDialog(ProjectFlow flow) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete Flow'),
+          content: Text(
+            'Are you sure you want to delete "${flow.title}"? This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _deleteFlow(flow);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _renameFlow(ProjectFlow flow, String newName) async {
+    try {
+      final updatedFlow = flow.copyWith(
+        title: newName,
+        updatedAt: DateTime.now(),
+      );
+
+      await FlowService.updateProjectFlow(updatedFlow);
+      await _refreshFlows();
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Flow renamed to "$newName"')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error renaming flow: $e')));
+    }
+  }
+
+  Future<void> _deleteFlow(ProjectFlow flow) async {
+    try {
+      await FlowService.deleteProjectFlow(flow.id);
+      await _refreshFlows();
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Flow "${flow.title}" deleted')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error deleting flow: $e')));
+    }
+  }
+
+  void _redesignFlow(ProjectFlow flow) {
+    // Navigate to buddy screen with redesign context
+    Navigator.of(context).pushNamed(
+      '/buddy',
+      arguments: {
+        'action': 'redesign_flow',
+        'flow': flow,
+        'initial_message':
+            'redesign flow: ${flow.description} - please create an improved version with better checkpoints and timeline',
+      },
     );
   }
 }

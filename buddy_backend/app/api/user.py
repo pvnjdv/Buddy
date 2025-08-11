@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from app.dependencies import get_db, get_current_user
 from app.schemas.user import UserDetails, UserRead
-from app.crud.user import update_user_details, get_user_by_mobile as crud_get_user_by_mobile, get_all_users, search_users
+from app.crud.user import update_user_details, get_user_by_mobile as crud_get_user_by_mobile, get_user_by_id, get_all_users, search_users
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -23,12 +23,17 @@ async def add_details(
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@router.get("/by-mobile/{mobile}", response_model=UserRead)
-async def get_user_by_mobile(
-    mobile: str,
+@router.get("/by-mobile/{mobile_number}", response_model=UserRead)
+async def get_user_by_mobile_endpoint(
+    mobile_number: str,
     db: AsyncSession = Depends(get_db)
 ):
-    user = await crud_get_user_by_mobile(db, mobile)
+    """Get user by mobile number"""
+    # URL decode the mobile number
+    import urllib.parse
+    decoded_mobile = urllib.parse.unquote(mobile_number)
+    
+    user = await crud_get_user_by_mobile(db, decoded_mobile)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
@@ -60,7 +65,7 @@ async def get_user_profile(
     db: AsyncSession = Depends(get_db)
 ):
     """Get user profile by ID"""
-    user = await crud_get_user_by_mobile(db, str(user_id))  # This needs to be updated in CRUD
+    user = await get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
