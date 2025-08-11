@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     # Groq API Configuration
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.1-8b-instant"  # Updated to current supported model
+    
+    # Email Configuration
+    SENDER_EMAIL: str = ""
+    SENDER_APP_PASSWORD: str = ""
+    TARGET_EMAIL: str = ""
 
     class Config:
         env_file = ".env"
