@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "insecure-key"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30  # 1 month refresh token validity
     
     # AI Configuration
     AI_MODE: str = "local"  # "local" or "api" 

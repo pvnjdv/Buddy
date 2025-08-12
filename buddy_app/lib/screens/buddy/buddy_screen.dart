@@ -268,6 +268,7 @@ class _BuddyScreenState extends State<BuddyScreen>
         ),
         backgroundColor: Colors.white,
         elevation: 1,
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.history),

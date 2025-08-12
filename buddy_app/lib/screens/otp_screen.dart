@@ -26,13 +26,14 @@ class _OtpScreenState extends State<OtpScreen> {
       if (user == null ||
           user['name'] == null ||
           user['profile_photo'] == null) {
-        Navigator.pushReplacementNamed(
+        Navigator.pushNamedAndRemoveUntil(
           context,
           '/profile_setup',
+          (route) => false,
           arguments: mobile,
         );
       } else {
-        Navigator.pushReplacementNamed(context, '/home');
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
       }
     } else {
       setState(() => _error = 'Invalid OTP');

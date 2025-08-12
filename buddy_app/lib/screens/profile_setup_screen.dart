@@ -44,7 +44,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     setState(() => _loading = false);
     if (success) {
       // ignore: use_build_context_synchronously
-      Navigator.pushReplacementNamed(context, '/home');
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
     } else {
       setState(() => _error = 'Failed to save profile');
     }

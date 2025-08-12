@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../services/flow_service.dart';
 import '../../models/flow_models.dart';
+import '../../services/flow_service.dart';
 import 'flow_detail_screen.dart';
 import 'notes_alarms_screen.dart';
 import 'create_note_screen.dart';
@@ -52,6 +52,7 @@ class _FlowScreenState extends State<FlowScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 1,
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.note_add),
@@ -63,6 +64,68 @@ class _FlowScreenState extends State<FlowScreen> {
             ),
           ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshFlows),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              switch (value) {
+                case 'create_note':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const CreateNoteScreen(),
+                    ),
+                  );
+                  break;
+                case 'create_alarm':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const CreateAlarmScreen(),
+                    ),
+                  );
+                  break;
+                case 'view_notes_alarms':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotesAlarmsScreen(),
+                    ),
+                  );
+                  break;
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'create_note',
+                child: Row(
+                  children: [
+                    Icon(Icons.note_add, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Create Note'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'create_alarm',
+                child: Row(
+                  children: [
+                    Icon(Icons.alarm_add, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Create Alarm'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'view_notes_alarms',
+                child: Row(
+                  children: [
+                    Icon(Icons.view_list, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text('View Notes & Alarms'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: _isLoading

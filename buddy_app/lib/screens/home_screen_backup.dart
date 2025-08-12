@@ -19,60 +19,167 @@ class _HomeScreenState extends State<HomeScreen> {
     const FlowScreen(),
   ];
 
+  Future<void> _logout() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout completely?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Logout', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout == true) {
+      await AuthService.logout();
+      if (mounted) {
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    }
+  }
+
+  @override
+
+  Future<void> _suspendRefreshToken() async {
+    final shouldSuspend = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Suspend Session'),
+        content: const Text(
+          'This will suspend your refresh token. You\'ll need to login again next time you open the app.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              'Suspend',
+              style: TextStyle(color: Colors.orange),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSuspend == true) {
+      await AuthService.suspendRefreshToken();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Session suspended. You\'ll need to login next time.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  }
+
+  
+
+  Future<void> _createGroup() async {
+    // Placeholder for create group functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Create Group feature coming soon!'),
+        backgroundColor: Colors.blue,
+      ),
+    );
+  }
+
+  // Chat screen specific methods
+  void _chatSearch() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Chat search feature coming soon!')),
+    );
+  }
+
+  void _newChat() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('New chat feature coming soon!')),
+    );
+  }
+
+  // Buddy screen specific methods
+  void _buddyClear() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Clear chat feature coming soon!')),
+    );
+  }
+
+  void _switchAIMode() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Switch AI mode feature coming soon!')),
+    );
+  }
+
+  void _chatHistory() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Chat history feature coming soon!')),
+    );
+  }
+
+  // Flow screen specific methods
+  void _notesAlarms() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Notes & Alarms feature coming soon!')),
+    );
+  }
+
+  void _refreshFlows() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Refresh flows feature coming soon!')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final titles = ['Chats', 'Buddy AI', 'Flow'];
+
     return PopScope(
-      canPop: false,
+      canPop: false, // Prevent accidental back button navigation from home
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            _getScreenTitle(),
+            titles[_selectedIndex],
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           automaticallyImplyLeading: false, // Remove back arrow
-          backgroundColor: const Color(0xFF25D366),
-          foregroundColor: Colors.white,
           actions: [
             // More options menu
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (value) {
-                switch (value) {
-                  case 'refresh':
-                    _refreshAccessToken();
-                    break;
-                  case 'create_group':
-                    _createGroup();
-                    break;
-                  case 'suspend':
-                    _suspendRefreshToken();
-                    break;
-                  case 'logout':
-                    _logout();
-                    break;
-                  case 'chat_search':
-                    _chatSearch();
-                    break;
-                  case 'new_chat':
-                    _newChat();
-                    break;
-                  case 'buddy_clear':
-                    _buddyClear();
-                    break;
-                  case 'switch_ai_mode':
-                    _switchAIMode();
-                    break;
-                  case 'chat_history':
-                    _chatHistory();
-                    break;
-                  case 'notes_alarms':
-                    _notesAlarms();
-                    break;
-                  case 'refresh_flows':
-                    _refreshFlows();
-                    break;
+                if (value == 'logout') {
+                  _logout();
                 }
               },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Logout'),
+                    ],
+                  ),
+                ),
+              ],
               itemBuilder: (context) => [
                 // Chat screen specific options
                 if (_selectedIndex == 0) ...[
@@ -226,133 +333,5 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
-
-  String _getScreenTitle() {
-    switch (_selectedIndex) {
-      case 0:
-        return 'Chats';
-      case 1:
-        return 'Buddy AI';
-      case 2:
-        return 'Flows';
-      default:
-        return 'Buddy';
-    }
-  }
-
-  void _logout() async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout completely?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Logout', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldLogout == true) {
-      await AuthService.logout();
-      if (mounted) {
-        Navigator.of(
-          context,
-        ).pushNamedAndRemoveUntil('/login', (route) => false);
-      }
-    }
-  }
-
-  void _refreshAccessToken() async {
-    final success = await AuthService.refreshAccessToken();
-
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Token refreshed successfully!')),
-      );
-    } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to refresh token')));
-    }
-  }
-
-  Future<void> _createGroup() async {
-    try {
-      // Navigate to create group screen
-      final result = await Navigator.pushNamed(context, '/create_group');
-      if (result == true) {
-        // Group created successfully
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Group created successfully!')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error creating group: $e')));
-    }
-  }
-
-  Future<void> _suspendRefreshToken() async {
-    await AuthService.suspendRefreshToken();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Session suspended. You will be logged out in 30 minutes unless you refresh.',
-        ),
-      ),
-    );
-  }
-
-  void _chatSearch() {
-    // Chat search functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Chat search functionality coming soon!')),
-    );
-  }
-
-  void _newChat() {
-    // New chat functionality
-    Navigator.pushNamed(context, '/new_chat');
-  }
-
-  void _buddyClear() {
-    // Clear buddy chat functionality
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Buddy chat cleared!')));
-  }
-
-  void _switchAIMode() {
-    // Switch AI mode functionality
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('AI mode switched!')));
-  }
-
-  void _chatHistory() {
-    // Chat history functionality
-    Navigator.pushNamed(context, '/chat_history');
-  }
-
-  void _notesAlarms() {
-    // Notes and alarms functionality
-    Navigator.pushNamed(context, '/notes_alarms');
-  }
-
-  void _refreshFlows() {
-    // Refresh flows functionality
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Flows refreshed!')));
   }
 }

@@ -3,6 +3,7 @@ from sqlalchemy.future import select
 from sqlalchemy import or_
 from app.models.user import User
 from typing import List
+from datetime import datetime
 
 async def get_user_by_mobile(db: AsyncSession, mobile_number: str):
     result = await db.execute(select(User).where(User.mobile_number == mobile_number))
@@ -32,6 +33,16 @@ async def verify_otp(db: AsyncSession, mobile_number: str, otp: str):
         await db.refresh(user)
         return user
     return None
+
+async def update_user_refresh_token(db: AsyncSession, mobile_number: str, refresh_token: str | None, expires: datetime | None):
+    """Update user's refresh token and expiry"""
+    user = await get_user_by_mobile(db, mobile_number)
+    if user:
+        user.refresh_token = refresh_token
+        user.refresh_token_expires = expires
+        await db.commit()
+        await db.refresh(user)
+    return user
 
 async def update_user_details(db: AsyncSession, user_id: int, name: str, profile_photo: str | None = None):
     user = await db.get(User, user_id)

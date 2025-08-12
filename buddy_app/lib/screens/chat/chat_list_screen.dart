@@ -62,6 +62,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         backgroundColor: const Color(0xFF25D366),
         elevation: 1,
         foregroundColor: Colors.white,
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(icon: const Icon(Icons.search), onPressed: _showSearch),
           PopupMenuButton<String>(
