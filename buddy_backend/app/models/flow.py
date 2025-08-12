@@ -54,6 +54,7 @@ class ProjectFlow(Base):
     # Relationships
     checkpoints = relationship("FlowCheckpoint", back_populates="flow", cascade="all, delete-orphan")
     buddy_messages = relationship("BuddyFlowMessage", back_populates="flow", cascade="all, delete-orphan")
+    alarms = relationship("FlowAlarm", back_populates="flow", cascade="all, delete-orphan")
 
 class FlowCheckpoint(Base):
     __tablename__ = "flow_checkpoints"
@@ -122,3 +123,37 @@ class ChatMessage(Base):
     sender = relationship("User", foreign_keys=[sender_id])
     receiver = relationship("User", foreign_keys=[receiver_id])
     reply_to = relationship("ChatMessage", remote_side=[id])
+
+class AlarmType(enum.Enum):
+    reminder = "reminder"
+    deadline = "deadline"
+    meeting = "meeting"
+    task = "task"
+    custom = "custom"
+
+class AlarmRepeat(enum.Enum):
+    none = "none"
+    daily = "daily"
+    weekly = "weekly"
+    monthly = "monthly"
+    custom = "custom"
+
+class FlowAlarm(Base):
+    __tablename__ = "flow_alarms"
+    
+    id = Column(String(36), primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    scheduled_time = Column(DateTime, nullable=False)
+    is_active = Column(Boolean, default=True)
+    type = Column(Enum(AlarmType), default=AlarmType.reminder)
+    repeat = Column(Enum(AlarmRepeat), default=AlarmRepeat.none)
+    flow_id = Column(String(36), ForeignKey("project_flows.id"), nullable=True)
+    checkpoint_id = Column(String(36), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_triggered = Column(DateTime, nullable=True)
+    
+    # Relationships
+    user = relationship("User")
+    flow = relationship("ProjectFlow", back_populates="alarms")

@@ -16,6 +16,8 @@ class ApiConfig {
   static const String chats = '$baseUrl/chats';
   static const String buddy = '$baseUrl/buddy';
   static const String flows = '$baseUrl/flows';
+  static const String notes = '$baseUrl/notes';
+  static const String alarms = '$baseUrl/alarms';
   static const String contacts = '$baseUrl/contacts';
 
   // For debugging - print the current base URL

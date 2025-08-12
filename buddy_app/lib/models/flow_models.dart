@@ -683,3 +683,108 @@ enum MessageContext {
   checkpointHelp,
   flowProgress,
 }
+
+// Alarm and Reminder Models
+class FlowAlarm {
+  final String id;
+  final String title;
+  final String description;
+  final DateTime scheduledTime;
+  final bool isActive;
+  final AlarmType type;
+  final AlarmRepeat repeat;
+  final String? flowId;
+  final String? checkpointId;
+  final DateTime createdAt;
+  final DateTime? lastTriggered;
+
+  FlowAlarm({
+    required this.id,
+    required this.title,
+    this.description = '',
+    required this.scheduledTime,
+    this.isActive = true,
+    this.type = AlarmType.reminder,
+    this.repeat = AlarmRepeat.none,
+    this.flowId,
+    this.checkpointId,
+    required this.createdAt,
+    this.lastTriggered,
+  });
+
+  factory FlowAlarm.fromJson(Map<String, dynamic> json) {
+    return FlowAlarm(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      scheduledTime: DateTime.parse(
+        json['scheduled_time'] ?? DateTime.now().toIso8601String(),
+      ),
+      isActive: json['is_active'] ?? true,
+      type: AlarmType.values.firstWhere(
+        (e) => e.name == json['type'],
+        orElse: () => AlarmType.reminder,
+      ),
+      repeat: AlarmRepeat.values.firstWhere(
+        (e) => e.name == json['repeat'],
+        orElse: () => AlarmRepeat.none,
+      ),
+      flowId: json['flow_id']?.toString(),
+      checkpointId: json['checkpoint_id']?.toString(),
+      createdAt: DateTime.parse(
+        json['created_at'] ?? DateTime.now().toIso8601String(),
+      ),
+      lastTriggered: json['last_triggered'] != null
+          ? DateTime.parse(json['last_triggered'])
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'scheduled_time': scheduledTime.toIso8601String(),
+      'is_active': isActive,
+      'type': type.name,
+      'repeat': repeat.name,
+      'flow_id': flowId,
+      'checkpoint_id': checkpointId,
+      'created_at': createdAt.toIso8601String(),
+      'last_triggered': lastTriggered?.toIso8601String(),
+    };
+  }
+
+  FlowAlarm copyWith({
+    String? id,
+    String? title,
+    String? description,
+    DateTime? scheduledTime,
+    bool? isActive,
+    AlarmType? type,
+    AlarmRepeat? repeat,
+    String? flowId,
+    String? checkpointId,
+    DateTime? createdAt,
+    DateTime? lastTriggered,
+  }) {
+    return FlowAlarm(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      scheduledTime: scheduledTime ?? this.scheduledTime,
+      isActive: isActive ?? this.isActive,
+      type: type ?? this.type,
+      repeat: repeat ?? this.repeat,
+      flowId: flowId ?? this.flowId,
+      checkpointId: checkpointId ?? this.checkpointId,
+      createdAt: createdAt ?? this.createdAt,
+      lastTriggered: lastTriggered ?? this.lastTriggered,
+    );
+  }
+}
+
+enum AlarmType { reminder, deadline, meeting, task, custom }
+
+enum AlarmRepeat { none, daily, weekly, monthly, custom }

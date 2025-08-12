@@ -627,6 +627,81 @@ class FlowService {
       ),
     ];
   }
+
+  // Alarms Management
+  static const String _alarmsKey = 'user_alarms';
+
+  static Future<List<FlowAlarm>> getAlarms() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final alarmsString = prefs.getString(_alarmsKey);
+      if (alarmsString != null) {
+        final List<dynamic> alarmsJson = jsonDecode(alarmsString);
+        return alarmsJson.map((json) => FlowAlarm.fromJson(json)).toList();
+      }
+    } catch (e) {
+      print('Error reading alarms: $e');
+    }
+    return [];
+  }
+
+  static Future<void> _saveAlarmsLocally(List<FlowAlarm> alarms) async {
+    final prefs = await SharedPreferences.getInstance();
+    final alarmsJson = alarms.map((alarm) => alarm.toJson()).toList();
+    await prefs.setString(_alarmsKey, jsonEncode(alarmsJson));
+  }
+
+  static Future<FlowAlarm> createAlarm(FlowAlarm alarm) async {
+    try {
+      final existingAlarms = await getAlarms();
+      existingAlarms.add(alarm);
+      await _saveAlarmsLocally(existingAlarms);
+      return alarm;
+    } catch (e) {
+      throw Exception('Failed to create alarm: $e');
+    }
+  }
+
+  static Future<FlowAlarm> updateAlarm(FlowAlarm alarm) async {
+    try {
+      final existingAlarms = await getAlarms();
+      final index = existingAlarms.indexWhere((a) => a.id == alarm.id);
+      if (index != -1) {
+        existingAlarms[index] = alarm;
+        await _saveAlarmsLocally(existingAlarms);
+        return alarm;
+      } else {
+        throw Exception('Alarm not found');
+      }
+    } catch (e) {
+      throw Exception('Failed to update alarm: $e');
+    }
+  }
+
+  static Future<void> deleteAlarm(String alarmId) async {
+    try {
+      final existingAlarms = await getAlarms();
+      existingAlarms.removeWhere((alarm) => alarm.id == alarmId);
+      await _saveAlarmsLocally(existingAlarms);
+    } catch (e) {
+      throw Exception('Failed to delete alarm: $e');
+    }
+  }
+
+  static Future<List<FlowAlarm>> getActiveAlarms() async {
+    final alarms = await getAlarms();
+    return alarms
+        .where(
+          (alarm) =>
+              alarm.isActive && alarm.scheduledTime.isAfter(DateTime.now()),
+        )
+        .toList();
+  }
+
+  static Future<List<FlowAlarm>> getAlarmsForFlow(String flowId) async {
+    final alarms = await getAlarms();
+    return alarms.where((alarm) => alarm.flowId == flowId).toList();
+  }
 }
 
 // Enhanced Chat Service for WhatsApp-like functionality
@@ -779,5 +854,65 @@ class EnhancedChatService {
         status: MessageStatus.read,
       ),
     ];
+  }
+
+  // Notes Management
+  static const String _notesKey = 'user_notes';
+
+  static Future<List<Note>> getNotes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final notesString = prefs.getString(_notesKey);
+      if (notesString != null) {
+        final List<dynamic> notesJson = jsonDecode(notesString);
+        return notesJson.map((json) => Note.fromJson(json)).toList();
+      }
+    } catch (e) {
+      print('Error reading notes: $e');
+    }
+    return [];
+  }
+
+  static Future<void> _saveNotesLocally(List<Note> notes) async {
+    final prefs = await SharedPreferences.getInstance();
+    final notesJson = notes.map((note) => note.toJson()).toList();
+    await prefs.setString(_notesKey, jsonEncode(notesJson));
+  }
+
+  static Future<Note> createNote(Note note) async {
+    try {
+      final existingNotes = await getNotes();
+      existingNotes.add(note);
+      await _saveNotesLocally(existingNotes);
+      return note;
+    } catch (e) {
+      throw Exception('Failed to create note: $e');
+    }
+  }
+
+  static Future<Note> updateNote(Note note) async {
+    try {
+      final existingNotes = await getNotes();
+      final index = existingNotes.indexWhere((n) => n.id == note.id);
+      if (index != -1) {
+        existingNotes[index] = note;
+        await _saveNotesLocally(existingNotes);
+        return note;
+      } else {
+        throw Exception('Note not found');
+      }
+    } catch (e) {
+      throw Exception('Failed to update note: $e');
+    }
+  }
+
+  static Future<void> deleteNote(String noteId) async {
+    try {
+      final existingNotes = await getNotes();
+      existingNotes.removeWhere((note) => note.id == noteId);
+      await _saveNotesLocally(existingNotes);
+    } catch (e) {
+      throw Exception('Failed to delete note: $e');
+    }
   }
 }

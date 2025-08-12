@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../services/flow_service.dart';
 import '../../models/flow_models.dart';
 import 'flow_detail_screen.dart';
+import 'notes_alarms_screen.dart';
+import 'create_note_screen.dart';
+import 'create_alarm_screen.dart';
 
 class FlowScreen extends StatefulWidget {
   const FlowScreen({super.key});
@@ -50,6 +53,15 @@ class _FlowScreenState extends State<FlowScreen> {
         foregroundColor: Colors.black,
         elevation: 1,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.note_add),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const NotesAlarmsScreen(),
+              ),
+            ),
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshFlows),
         ],
       ),
@@ -68,6 +80,13 @@ class _FlowScreenState extends State<FlowScreen> {
                 },
               ),
             ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showQuickActions,
+        icon: const Icon(Icons.add),
+        label: const Text('Quick Actions'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+      ),
     );
   }
 
@@ -516,6 +535,171 @@ class _FlowScreenState extends State<FlowScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error deleting flow: $e')));
+    }
+  }
+
+  void _showQuickActions() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.flash_on, color: Colors.blue.shade700),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Quick Actions',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Create Note Action
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.note_add, color: Colors.orange.shade700),
+                ),
+                title: const Text(
+                  'Create Note',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: const Text('Create a quick note or checklist'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.pop(context);
+                  _createNote();
+                },
+              ),
+
+              // Set Alarm Action
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.alarm_add, color: Colors.red.shade700),
+                ),
+                title: const Text(
+                  'Set Alarm',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: const Text('Create a reminder or deadline alarm'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.pop(context);
+                  _createAlarm();
+                },
+              ),
+
+              // View All Notes & Alarms
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.view_list, color: Colors.green.shade700),
+                ),
+                title: const Text(
+                  'View All Notes & Alarms',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: const Text('Manage all your notes and alarms'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotesAlarmsScreen(),
+                    ),
+                  );
+                },
+              ),
+
+              // Talk to Buddy
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.chat, color: Colors.purple.shade700),
+                ),
+                title: const Text(
+                  'Talk to Buddy AI',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: const Text('Generate flows or get assistance'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).pushNamed('/buddy');
+                },
+              ),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _createNote() async {
+    final result = await Navigator.push<Note>(
+      context,
+      MaterialPageRoute(builder: (context) => const CreateNoteScreen()),
+    );
+
+    if (result != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Note "${result.title}" created')));
+    }
+  }
+
+  Future<void> _createAlarm() async {
+    final result = await Navigator.push<FlowAlarm>(
+      context,
+      MaterialPageRoute(builder: (context) => const CreateAlarmScreen()),
+    );
+
+    if (result != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Alarm "${result.title}" set')));
     }
   }
 

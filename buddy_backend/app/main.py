@@ -11,6 +11,7 @@ from app.api.chat import router as chat_router
 from app.api.buddy import router as buddy_router
 from app.api.notes import router as notes_router
 from app.api.flows import router as flows_router
+from app.api.alarms import router as alarms_router
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -35,3 +36,4 @@ app.include_router(chat_router)
 app.include_router(buddy_router)
 app.include_router(notes_router)
 app.include_router(flows_router)
+app.include_router(alarms_router)
