@@ -6,19 +6,36 @@ import 'screens/otp_screen.dart';
 import 'screens/buddy/buddy_screen.dart';
 import 'screens/flow/flow_screen.dart';
 import 'services/auth_service.dart';
+import 'config/theme_config.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AppTheme.loadTheme();
   runApp(const BuddyApp());
 }
 
-class BuddyApp extends StatelessWidget {
+class BuddyApp extends StatefulWidget {
   const BuddyApp({super.key});
+
+  static _BuddyAppState? of(BuildContext context) =>
+      context.findAncestorStateOfType<_BuddyAppState>();
+
+  @override
+  State<BuddyApp> createState() => _BuddyAppState();
+}
+
+class _BuddyAppState extends State<BuddyApp> {
+  void rebuildApp() {
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Project Buddy',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      title: 'Buddy',
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: AppTheme.isDarkMode ? ThemeMode.dark : ThemeMode.light,
       home: const AuthChecker(),
       routes: {
         '/login': (context) => const LoginScreen(),
@@ -68,30 +85,54 @@ class _AuthCheckerState extends State<AuthChecker> {
     return PopScope(
       canPop: false, // Prevent back button during auth check
       child: Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.supervised_user_circle,
-                size: 80,
-                color: Colors.blue[600],
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Buddy',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue,
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppTheme.primaryColor, AppTheme.accentColor],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(60),
+                ),
+                child: const Icon(
+                  Icons.smart_toy,
+                  size: 60,
+                  color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 20),
-              const CircularProgressIndicator(),
-              const SizedBox(height: 20),
-              const Text(
+              const SizedBox(height: 32),
+              Text(
+                'Buddy',
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your AI-powered companion',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: AppTheme.textSecondaryColor,
+                ),
+              ),
+              const SizedBox(height: 40),
+              CircularProgressIndicator(color: AppTheme.primaryColor),
+              const SizedBox(height: 24),
+              Text(
                 'Checking login status...',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppTheme.textSecondaryColor,
+                ),
               ),
             ],
           ),

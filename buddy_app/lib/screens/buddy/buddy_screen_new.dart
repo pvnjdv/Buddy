@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
+import 'package:flutter/services.dart';
 import '../../models/flow_models.dart';
 import '../../services/buddy_service.dart';
 import '../../config/theme_config.dart';
@@ -26,11 +26,6 @@ class _BuddyScreenState extends State<BuddyScreen>
   String _currentAIMode = 'api'; // Default to API mode
   bool _isLoadingMode = false;
 
-  // Real-time sync
-  Timer? _syncTimer;
-  bool _isOnline = true;
-  DateTime? _lastSyncTime;
-
   @override
   void initState() {
     super.initState();
@@ -40,10 +35,6 @@ class _BuddyScreenState extends State<BuddyScreen>
     );
     _loadChatHistory();
     _loadAIStatus();
-    _startRealTimeSync();
-
-    // Start subtle animation for empty state
-    _typingController.repeat(reverse: true);
   }
 
   @override
@@ -51,41 +42,7 @@ class _BuddyScreenState extends State<BuddyScreen>
     _controller.dispose();
     _scrollController.dispose();
     _typingController.dispose();
-    _syncTimer?.cancel();
     super.dispose();
-  }
-
-  void _startRealTimeSync() {
-    _syncTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      _syncData();
-    });
-  }
-
-  Future<void> _syncData() async {
-    try {
-      // Check network connectivity and sync chat history
-      final history = BuddyService.getChatHistory();
-      if (history.length != _messages.length) {
-        setState(() {
-          _messages = history
-              .map(
-                (msg) => BuddyMessage(
-                  id: msg.id,
-                  content: msg.content,
-                  role: msg.role,
-                  timestamp: msg.timestamp,
-                ),
-              )
-              .toList();
-          _lastSyncTime = DateTime.now();
-          _isOnline = true;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _isOnline = false;
-      });
-    }
   }
 
   void _loadChatHistory() {
@@ -114,7 +71,7 @@ class _BuddyScreenState extends State<BuddyScreen>
         });
       }
     } catch (e) {
-      // Silent fail for AI status loading
+      print('Failed to load AI status: $e');
     }
   }
 
@@ -240,100 +197,49 @@ class _BuddyScreenState extends State<BuddyScreen>
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        automaticallyImplyLeading: false, // Remove back button
         title: Row(
           children: [
-            // Animated AI Avatar
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              width: 40,
-              height: 40,
+            Container(
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    AppTheme.primaryColor,
-                    AppTheme.accentColor,
-                    Colors.purple.shade300,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                  colors: [AppTheme.primaryColor, AppTheme.accentColor],
                 ),
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
               ),
-              child: Icon(
-                _isTyping ? Icons.smart_toy_outlined : Icons.smart_toy,
-                color: Colors.white,
-                size: 22,
-              ),
+              child: const Icon(Icons.smart_toy, color: Colors.white, size: 20),
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Buddy AI',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimaryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Online status indicator
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _isOnline ? Colors.green : Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Buddy AI',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimaryColor,
                   ),
-                  Row(
-                    children: [
-                      Icon(
-                        _currentAIMode == 'local'
-                            ? Icons.computer
-                            : Icons.cloud,
-                        size: 14,
+                ),
+                Row(
+                  children: [
+                    Icon(
+                      _currentAIMode == 'local' ? Icons.computer : Icons.cloud,
+                      size: 12,
+                      color: AppTheme.textSecondaryColor,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _currentAIMode == 'local' ? 'Local AI' : 'Cloud AI',
+                      style: TextStyle(
+                        fontSize: 12,
                         color: AppTheme.textSecondaryColor,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _currentAIMode == 'local' ? 'Local AI' : 'Cloud AI',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondaryColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      if (_lastSyncTime != null) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          '• ${_formatSyncTime(_lastSyncTime!)}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppTheme.textSecondaryColor.withValues(
-                              alpha: 0.7,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ],
         ),
@@ -471,142 +377,50 @@ class _BuddyScreenState extends State<BuddyScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Animated gradient container with pulsing effect
-          AnimatedBuilder(
-            animation: _typingController,
-            builder: (context, child) {
-              return Container(
-                width: 140,
-                height: 140,
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    colors: [
-                      AppTheme.primaryColor.withValues(alpha: 0.8),
-                      AppTheme.accentColor.withValues(alpha: 0.6),
-                      Colors.purple.shade300.withValues(alpha: 0.4),
-                    ],
-                    stops: [0.3, 0.7, 1.0],
-                  ),
-                  borderRadius: BorderRadius.circular(70),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                      blurRadius: 20 + (_typingController.value * 10),
-                      spreadRadius: 5 + (_typingController.value * 3),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.smart_toy,
-                  size: 70,
-                  color: Colors.white,
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 32),
-          // Welcome text with gradient
-          ShaderMask(
-            shaderCallback: (bounds) => LinearGradient(
-              colors: [AppTheme.primaryColor, AppTheme.accentColor],
-            ).createShader(bounds),
-            child: const Text(
-              'Hello! I\'m Buddy',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Your intelligent AI assistant for\nproject management and creative tasks',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 16,
-              color: AppTheme.textSecondaryColor,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 40),
-          // Feature highlights
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildFeatureItem(Icons.lightbulb_outline, 'Creative Ideas'),
-              _buildFeatureItem(Icons.task_alt, 'Task Planning'),
-              _buildFeatureItem(Icons.chat_bubble_outline, 'Smart Chat'),
-            ],
-          ),
-          const SizedBox(height: 40),
-          // Animated call-to-action
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 500),
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          Container(
+            width: 120,
+            height: 120,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  AppTheme.primaryColor.withValues(alpha: 0.15),
-                  AppTheme.accentColor.withValues(alpha: 0.1),
-                ],
+                colors: [AppTheme.primaryColor, AppTheme.accentColor],
               ),
-              borderRadius: BorderRadius.circular(25),
-              border: Border.all(
-                color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                width: 1,
-              ),
+              borderRadius: BorderRadius.circular(60),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.keyboard_voice,
-                  color: AppTheme.primaryColor,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Ask me anything!',
-                  style: TextStyle(
-                    color: AppTheme.primaryColor,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
+            child: const Icon(Icons.smart_toy, size: 60, color: Colors.white),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Hello! I\'m Buddy',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimaryColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your AI assistant for project management\nand creative tasks',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, color: AppTheme.textSecondaryColor),
+          ),
+          const SizedBox(height: 32),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3)),
+            ),
+            child: Text(
+              'Ask me anything!',
+              style: TextStyle(
+                color: AppTheme.primaryColor,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildFeatureItem(IconData icon, String label) {
-    return Column(
-      children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceColor,
-            borderRadius: BorderRadius.circular(25),
-            border: Border.all(
-              color: AppTheme.primaryColor.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Icon(icon, color: AppTheme.primaryColor, size: 24),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: AppTheme.textSecondaryColor,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
     );
   }
 
@@ -666,7 +480,7 @@ class _BuddyScreenState extends State<BuddyScreen>
                     _formatTime(message.timestamp),
                     style: TextStyle(
                       color: isUser
-                          ? Colors.white.withValues(alpha: 0.7)
+                          ? Colors.white.withOpacity(0.7)
                           : AppTheme.textSecondaryColor,
                       fontSize: 12,
                     ),
@@ -744,7 +558,7 @@ class _BuddyScreenState extends State<BuddyScreen>
           width: 8,
           height: 8,
           decoration: BoxDecoration(
-            color: AppTheme.textSecondaryColor.withValues(alpha: opacity),
+            color: AppTheme.textSecondaryColor.withOpacity(opacity),
             shape: BoxShape.circle,
           ),
         );
@@ -758,13 +572,6 @@ class _BuddyScreenState extends State<BuddyScreen>
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border: Border(top: BorderSide(color: AppTheme.borderColor)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
       ),
       child: Row(
         children: [
@@ -772,109 +579,40 @@ class _BuddyScreenState extends State<BuddyScreen>
             child: Container(
               decoration: BoxDecoration(
                 color: AppTheme.backgroundColor,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: _controller.text.isNotEmpty
-                      ? AppTheme.primaryColor.withValues(alpha: 0.3)
-                      : AppTheme.borderColor,
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  if (_controller.text.isNotEmpty)
-                    BoxShadow(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                ],
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppTheme.borderColor),
               ),
               child: TextField(
                 controller: _controller,
-                style: TextStyle(
-                  color: AppTheme.textPrimaryColor,
-                  fontSize: 16,
-                ),
+                style: TextStyle(color: AppTheme.textPrimaryColor),
                 maxLines: null,
                 decoration: InputDecoration(
-                  hintText: '💭 Ask Buddy anything...',
-                  hintStyle: TextStyle(
-                    color: AppTheme.textSecondaryColor,
-                    fontSize: 16,
-                  ),
+                  hintText: 'Ask Buddy anything...',
+                  hintStyle: TextStyle(color: AppTheme.textSecondaryColor),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 14,
-                  ),
-                  prefixIcon: Padding(
-                    padding: const EdgeInsets.only(left: 4, right: 8),
-                    child: Icon(
-                      Icons.chat_bubble_outline,
-                      color: AppTheme.textSecondaryColor.withValues(alpha: 0.6),
-                      size: 20,
-                    ),
+                    horizontal: 16,
+                    vertical: 12,
                   ),
                 ),
                 onSubmitted: (_) => _sendMessage(),
-                onChanged: (text) {
-                  setState(() {}); // Rebuild to update border color
-                },
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+          const SizedBox(width: 8),
+          Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: _controller.text.isNotEmpty
-                    ? [AppTheme.primaryColor, AppTheme.accentColor]
-                    : [
-                        AppTheme.textSecondaryColor.withValues(alpha: 0.3),
-                        AppTheme.textSecondaryColor.withValues(alpha: 0.2),
-                      ],
+                colors: [AppTheme.primaryColor, AppTheme.accentColor],
               ),
               shape: BoxShape.circle,
-              boxShadow: _controller.text.isNotEmpty
-                  ? [
-                      BoxShadow(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                  : [],
             ),
             child: IconButton(
-              icon: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  _isLoading
-                      ? Icons.hourglass_empty
-                      : _controller.text.isNotEmpty
-                      ? Icons.send_rounded
-                      : Icons.mic,
-                  key: ValueKey(
-                    _isLoading
-                        ? 'loading'
-                        : _controller.text.isNotEmpty
-                        ? 'send'
-                        : 'mic',
-                  ),
-                  color: Colors.white,
-                  size: 20,
-                ),
+              icon: Icon(
+                _isLoading ? Icons.hourglass_empty : Icons.send,
+                color: Colors.white,
               ),
-              onPressed: _isLoading
-                  ? null
-                  : () {
-                      if (_controller.text.isNotEmpty) {
-                        _sendMessage();
-                      } else {
-                        // Could implement voice input here
-                        _showSnackBar('Voice input coming soon!');
-                      }
-                    },
+              onPressed: _isLoading ? null : _sendMessage,
             ),
           ),
         ],
@@ -887,20 +625,5 @@ class _BuddyScreenState extends State<BuddyScreen>
     final minute = dateTime.minute.toString().padLeft(2, '0');
     final period = dateTime.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $period';
-  }
-
-  String _formatSyncTime(DateTime syncTime) {
-    final now = DateTime.now();
-    final difference = now.difference(syncTime);
-
-    if (difference.inMinutes < 1) {
-      return 'just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else {
-      return '${difference.inDays}d ago';
-    }
   }
 }

@@ -40,18 +40,23 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
         newStatus,
       );
 
-      setState(() => _flow = updatedFlow);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            newStatus
-                ? 'Checkpoint completed! 🎉'
-                : 'Checkpoint marked as incomplete',
+      if (updatedFlow != null) {
+        setState(() => _flow = updatedFlow);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              newStatus
+                  ? 'Checkpoint completed! 🎉'
+                  : 'Checkpoint marked as incomplete',
+            ),
+            backgroundColor: newStatus ? Colors.green : Colors.orange,
           ),
-          backgroundColor: newStatus ? Colors.green : Colors.orange,
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error: Could not update checkpoint.')),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(
         context,

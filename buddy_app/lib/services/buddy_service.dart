@@ -651,19 +651,43 @@ Type 1, 2, or 3 to select your timeline.
     final isFlowRequest = isFlowCreationRequest(prompt);
 
     if (isFlowRequest) {
-      // Use the preview flow workflow for flow creation
-      final previewResult = await previewFlow(prompt);
-      if (previewResult['success'] == true) {
+      // Auto-create full flow (DB + alarms + notes) without extra prompts
+      final description = extractProjectDescription(prompt);
+      try {
+        final createdFlow = await FlowService.generateFlowFromDescription(
+          description,
+        );
+
+        final response =
+            '''✅ Flow Created Automatically!\n\n• Title: ${createdFlow.title}\n• Steps: ${createdFlow.checkpoints.length}\n• Duration: ${createdFlow.estimatedDuration}\n• Difficulty: ${createdFlow.difficulty.name.toUpperCase()}\n\n⏰ Alarms scheduled for each checkpoint\n📝 Notes added with requirements & deliverables\n\nOpen the Flows tab to view and start with "${createdFlow.checkpoints.isNotEmpty ? createdFlow.checkpoints.first.title : 'Step 1'}".''';
+
+        // Log assistant message
+        _chatHistory.add(
+          FlowBuddyMessage(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            content: response,
+            role: BuddyRole.assistant,
+            timestamp: DateTime.now(),
+            context: MessageContext.flowCreation,
+            flowId: createdFlow.id,
+          ),
+        );
+
         return {
-          'response': previewResult['response'],
-          'flow_data': previewResult['flow_data'],
-          'is_flow_preview': true,
-          'needs_confirmation': previewResult['needs_confirmation'] ?? false,
+          'success': true,
+          'response': response,
+          'is_flow_created': true,
+          'flow_data': createdFlow.toJson(),
         };
-      } else {
+      } catch (e) {
+        // Fallback to preview workflow if auto-create fails
+        final previewResult = await previewFlow(prompt);
         return {
-          'response': previewResult['response'],
-          'is_flow_preview': false,
+          'response':
+              previewResult['response'] ?? 'Unable to generate flow right now.',
+          'is_flow_preview': previewResult['success'] == true,
+          'needs_confirmation': previewResult['needs_confirmation'] ?? false,
+          'flow_data': previewResult['flow_data'],
         };
       }
     }
@@ -939,34 +963,18 @@ The checkpoint durations will be adjusted accordingly.
       final flowJson = flowData['flow'] as Map<String, dynamic>;
       final flow = ProjectFlow.fromJson(flowJson);
 
-      // Actually create the flow using FlowService
-      final createdFlow = await FlowService.createProjectFlow(
-        title: flow.title,
-        description: flow.description,
-        checkpoints: flow.checkpoints,
-        estimatedDuration: flow.estimatedDuration,
-        difficulty: flow.difficulty,
-        tags: flow.tags,
+      // Auto-generate and persist flow via backend (includes alarms & notes enrichment)
+      final createdFlow = await FlowService.generateFlowFromDescription(
+        flow.description.isNotEmpty ? flow.description : flow.title,
+        preferences: {
+          'timeline': selectedTimeline,
+          'difficulty': flow.difficulty.name,
+          'tags': flow.tags,
+        },
       );
 
       final response =
-          '''✅ **Flow Created Successfully!**
-
-🎉 **"${createdFlow.title}"** is now ready with **${createdFlow.checkpoints.length} checkpoints**!
-
-📅 **Selected Timeline:** $selectedTimeline
-⏱️ **Estimated Duration:** ${createdFlow.estimatedDuration}
-🎯 **Difficulty Level:** ${createdFlow.difficulty.name.toUpperCase()}
-
-📱 **Next Steps:**
-1. 📋 Go to the Flow tab to see your new project
-2. 🚀 Start with the first checkpoint: "${createdFlow.checkpoints.first.title}"
-3. 💬 Ask me for help at any step: "Help with [checkpoint name]"
-
-🤖 **Pro Tip:** I have specialized guidance for each checkpoint. Just mention the checkpoint name and I'll provide step-by-step assistance!
-
-Ready to start building your ${createdFlow.title.toLowerCase()}? Let's make it happen! 🚀
-''';
+          '''✅ **Flow Created Successfully!**\n\n🎉 **"${createdFlow.title}"** is now ready with **${createdFlow.checkpoints.length} checkpoints**!\n\n📅 **Selected Timeline:** $selectedTimeline\n⏱️ **Estimated Duration:** ${createdFlow.estimatedDuration}\n🎯 **Difficulty Level:** ${createdFlow.difficulty.name.toUpperCase()}\n⏰ Alarms scheduled for each checkpoint\n📝 Notes added with requirements & deliverables\n\n📱 **Next Steps:**\n1. 📋 Go to the Flow tab to see your new project\n2. 🚀 Start with the first checkpoint: "${createdFlow.checkpoints.isNotEmpty ? createdFlow.checkpoints.first.title : 'Step 1'}"\n3. 💬 Ask me for help at any step: "Help with [checkpoint name]"\n\nReady to start building your ${createdFlow.title.toLowerCase()}? Let's make it happen! 🚀''';
 
       return {
         'success': true,

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../models/flow_models.dart';
 import '../../services/flow_service.dart';
 import '../../services/auth_service.dart';
+import '../../config/theme_config.dart';
+import '../settings_screen.dart';
 import 'flow_detail_screen.dart';
 import 'notes_alarms_screen.dart';
 import 'create_note_screen.dart';
@@ -47,16 +49,22 @@ class _FlowScreenState extends State<FlowScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F9),
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('Project Flows'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 1,
+        title: Text(
+          'Project Flows',
+          style: TextStyle(
+            color: AppTheme.textPrimaryColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: AppTheme.surfaceColor,
+        foregroundColor: AppTheme.textPrimaryColor,
+        elevation: 0,
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.note_add),
+            icon: Icon(Icons.note_add, color: AppTheme.textPrimaryColor),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -64,10 +72,30 @@ class _FlowScreenState extends State<FlowScreen> {
               ),
             ),
           ),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshFlows),
+          IconButton(
+            icon: Icon(Icons.refresh, color: AppTheme.textPrimaryColor),
+            onPressed: _refreshFlows,
+          ),
           PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: AppTheme.textPrimaryColor),
+            color: AppTheme.surfaceColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: AppTheme.borderColor),
+            ),
             onSelected: (value) {
               switch (value) {
+                case 'settings':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SettingsScreen(),
+                    ),
+                  );
+                  break;
+                case 'auto_generate':
+                  _promptAutoGenerateFlow();
+                  break;
                 case 'create_note':
                   Navigator.push(
                     context,
@@ -92,7 +120,6 @@ class _FlowScreenState extends State<FlowScreen> {
                     ),
                   );
                   break;
-                case 'refresh_token':
                   _refreshAccessToken();
                   break;
                 case 'create_group':
@@ -102,19 +129,52 @@ class _FlowScreenState extends State<FlowScreen> {
                   _suspendRefreshToken();
                   break;
                 case 'logout':
-                  _logout();
+                  // Logout handled in settings
                   break;
               }
             },
-            itemBuilder: (context) => const [
-              // Flow specific options
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.settings_outlined,
+                      color: AppTheme.textPrimaryColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Settings',
+                      style: TextStyle(color: AppTheme.textPrimaryColor),
+                    ),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'auto_generate',
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_awesome, color: AppTheme.primaryColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Auto-generate Flow',
+                      style: TextStyle(color: AppTheme.textPrimaryColor),
+                    ),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'create_note',
                 child: Row(
                   children: [
-                    Icon(Icons.note_add, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Text('Create Note'),
+                    Icon(Icons.note_add, color: AppTheme.accentColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Create Note',
+                      style: TextStyle(color: AppTheme.textPrimaryColor),
+                    ),
                   ],
                 ),
               ),
@@ -122,9 +182,12 @@ class _FlowScreenState extends State<FlowScreen> {
                 value: 'create_alarm',
                 child: Row(
                   children: [
-                    Icon(Icons.alarm_add, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Text('Create Alarm'),
+                    Icon(Icons.alarm_add, color: AppTheme.warningColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Create Alarm',
+                      style: TextStyle(color: AppTheme.textPrimaryColor),
+                    ),
                   ],
                 ),
               ),
@@ -132,51 +195,12 @@ class _FlowScreenState extends State<FlowScreen> {
                 value: 'view_notes_alarms',
                 child: Row(
                   children: [
-                    Icon(Icons.view_list, color: Colors.green),
-                    SizedBox(width: 8),
-                    Text('View Notes & Alarms'),
-                  ],
-                ),
-              ),
-              // Global options
-              PopupMenuDivider(),
-              PopupMenuItem(
-                value: 'refresh_token',
-                child: Row(
-                  children: [
-                    Icon(Icons.refresh, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Text('Refresh Token'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'create_group',
-                child: Row(
-                  children: [
-                    Icon(Icons.group_add, color: Colors.green),
-                    SizedBox(width: 8),
-                    Text('Create Group'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'suspend',
-                child: Row(
-                  children: [
-                    Icon(Icons.pause_circle, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Text('Suspend Session'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('Logout'),
+                    Icon(Icons.view_list, color: AppTheme.successColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'View Notes & Alarms',
+                      style: TextStyle(color: AppTheme.textPrimaryColor),
+                    ),
                   ],
                 ),
               ),
@@ -233,6 +257,12 @@ class _FlowScreenState extends State<FlowScreen> {
             onPressed: () => Navigator.of(context).pushNamed('/buddy'),
             icon: const Icon(Icons.chat),
             label: const Text('Talk to Buddy'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _promptAutoGenerateFlow,
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('Auto-generate a Flow'),
           ),
         ],
       ),
@@ -691,6 +721,34 @@ class _FlowScreenState extends State<FlowScreen> {
               ),
               const SizedBox(height: 20),
 
+              // Auto-generate Flow Action
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.auto_awesome,
+                    color: Colors.purple.shade700,
+                  ),
+                ),
+                title: const Text(
+                  'Auto-generate Flow',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                subtitle: const Text(
+                  'Describe your project and let Buddy create a flow',
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.pop(context);
+                  _promptAutoGenerateFlow();
+                },
+              ),
+
               // Create Note Action
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -902,6 +960,69 @@ class _FlowScreenState extends State<FlowScreen> {
           context,
         ).pushNamedAndRemoveUntil('/login', (route) => false);
       }
+    }
+  }
+
+  // Prompt user for a description and auto-generate flow
+  void _promptAutoGenerateFlow() {
+    final controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Describe your project'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText:
+                'e.g., Build a Flutter app for note taking with auth and offline mode',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final text = controller.text.trim();
+              if (text.isEmpty) return;
+              Navigator.of(context).pop();
+              await _autoGenerateFlow(text);
+            },
+            child: const Text('Generate'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _autoGenerateFlow(String description) async {
+    try {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Generating flow...')));
+
+      final flow = await FlowService.generateFlowFromDescription(description);
+
+      // If backend created the flow, it will appear in list on refresh
+      await _refreshFlows();
+
+      // Navigate to detail for immediate view
+      if (!mounted) return;
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => FlowDetailScreen(flow: flow)));
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Flow "${flow.title}" created')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to generate flow: $e')));
     }
   }
 }

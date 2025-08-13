@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
+import uuid
 
 from ..core.database import get_db
-from ..models.flow import ProjectFlow, FlowCheckpoint, FlowResource, BuddyFlowMessage, FlowStatus, FlowDifficulty, CheckpointType, MessageContext
+from ..models.flow import ProjectFlow, FlowCheckpoint, FlowResource, BuddyFlowMessage, FlowStatus, FlowDifficulty, CheckpointType, MessageContext, FlowAlarm as FlowAlarmModel, AlarmType, AlarmRepeat
 from ..models.user import User
 from ..schemas.flow import (
     ProjectFlowCreate, ProjectFlowUpdate, ProjectFlowResponse,
@@ -28,7 +29,9 @@ async def get_user_flows(
     """Get all project flows for the current user"""
     result = await db.execute(
         select(ProjectFlow)
-        .options(joinedload(ProjectFlow.checkpoints))
+        .options(
+            selectinload(ProjectFlow.checkpoints).selectinload(FlowCheckpoint.resources)
+        )
         .filter(ProjectFlow.user_id == current_user.id)
     )
     flows = result.scalars().unique().all()
@@ -82,7 +85,9 @@ async def get_flow(
     """Get a specific project flow"""
     result = await db.execute(
         select(ProjectFlow)
-        .options(joinedload(ProjectFlow.checkpoints))
+        .options(
+            selectinload(ProjectFlow.checkpoints).selectinload(FlowCheckpoint.resources)
+        )
         .filter(
             ProjectFlow.id == flow_id,
             ProjectFlow.user_id == current_user.id
@@ -199,7 +204,16 @@ async def update_checkpoint_status(
     
     flow.updated_at = datetime.utcnow()
     await db.commit()
-    await db.refresh(flow)
+    
+    # Refresh with eager loading to avoid MissingGreenlet error
+    result = await db.execute(
+        select(ProjectFlow)
+        .options(
+            selectinload(ProjectFlow.checkpoints).selectinload(FlowCheckpoint.resources)
+        )
+        .filter(ProjectFlow.id == flow_id)
+    )
+    flow = result.scalar_one()
     return flow
 
 @router.post("/{flow_id}/checkpoints/{checkpoint_id}/help")
@@ -307,7 +321,26 @@ async def generate_flow_from_description(
         db.add(db_checkpoint)
     
     await db.commit()
-    await db.refresh(db_flow)
+    
+    # Auto-create sequential alarms for each checkpoint (best-effort)
+    try:
+      result = await db.execute(
+          select(FlowCheckpoint).filter(FlowCheckpoint.flow_id == db_flow.id)
+      )
+      checkpoints = result.scalars().all()
+      await _create_default_alarms_for_flow(db, current_user.id, db_flow, checkpoints)
+    except Exception:
+      pass
+    
+    # Refresh with eager loading to avoid MissingGreenlet error
+    result = await db.execute(
+        select(ProjectFlow)
+        .options(
+            selectinload(ProjectFlow.checkpoints).selectinload(FlowCheckpoint.resources)
+        )
+        .filter(ProjectFlow.id == db_flow.id)
+    )
+    db_flow = result.scalar_one()
     
     # Save generation message
     generation_message = BuddyFlowMessage(
@@ -324,6 +357,61 @@ async def generate_flow_from_description(
         "flow": db_flow,
         "message": f"Successfully generated flow '{db_flow.title}' with {len(flow_data['checkpoints'])} checkpoints!"
     }
+
+# Helper: Create default alarms sequentially for a flow
+async def _create_default_alarms_for_flow(
+    db: AsyncSession,
+    user_id: int,
+    flow: ProjectFlow,
+    checkpoints: List[FlowCheckpoint]
+):
+    cursor = datetime.utcnow()
+    for cp in sorted(checkpoints, key=lambda c: c.order):
+        duration = _parse_estimated_duration(cp.estimated_time or "1 day")
+        scheduled = cursor + duration
+        alarm = FlowAlarmModel(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            title=f"{flow.title}: {cp.title}",
+            description=f"Deadline for checkpoint '{cp.title}'",
+            scheduled_time=scheduled,
+            type=AlarmType.deadline if cp.type in {CheckpointType.milestone, CheckpointType.review, CheckpointType.testing} else AlarmType.task,
+            repeat=AlarmRepeat.none,
+            flow_id=str(flow.id),
+            checkpoint_id=str(cp.id),
+            is_active=True,
+            created_at=datetime.utcnow(),
+        )
+        db.add(alarm)
+        cursor = scheduled
+    await db.commit()
+
+# Parse durations like "2-3 days", "5 days", "1 week", "3-4 weeks", "8 hours"
+def _parse_estimated_duration(text: str) -> timedelta:
+    try:
+        s = text.strip().lower()
+        import re
+        m = re.search(r"(?:(\d+)\s*-\s*)?(\d+)\s*(day|days|week|weeks|hour|hours)", s)
+        if m:
+            start = int(m.group(1)) if m.group(1) else None
+            end = int(m.group(2))
+            unit = m.group(3)
+            value = end if start is not None else end
+            if unit in ("day", "days"):
+                return timedelta(days=value)
+            if unit in ("week", "weeks"):
+                return timedelta(days=value * 7)
+            if unit in ("hour", "hours"):
+                return timedelta(hours=value)
+        if "week" in s:
+            return timedelta(days=7)
+        if "day" in s:
+            return timedelta(days=1)
+        if "hour" in s:
+            return timedelta(hours=8)
+    except Exception:
+        pass
+    return timedelta(days=1)
 
 @router.get("/{flow_id}/messages", response_model=List[BuddyFlowMessageResponse])
 async def get_flow_messages(

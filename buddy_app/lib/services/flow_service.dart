@@ -6,6 +6,56 @@ import '../models/flow_models.dart';
 import '../config/api_config.dart';
 
 class FlowService {
+  // Update the completion status of a checkpoint in a flow (backend first, fallback to local)
+  static Future<ProjectFlow?> updateCheckpointStatus(
+    String flowId,
+    String checkpointId,
+    bool isCompleted,
+  ) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.put(
+        Uri.parse(
+          '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'is_completed': isCompleted}),
+      );
+      if (response.statusCode == 200) {
+        final flowJson = jsonDecode(response.body);
+        final flow = ProjectFlow.fromJson(flowJson);
+        await _updateFlowLocally(flow);
+        return flow;
+      } else {
+        throw Exception(
+          'Failed to update checkpoint status: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      // Fallback: update locally
+      final flows = await _getLocalFlows();
+      final flowIndex = flows.indexWhere((f) => f.id == flowId);
+      if (flowIndex != -1) {
+        final flow = flows[flowIndex];
+        final cpIndex = flow.checkpoints.indexWhere(
+          (c) => c.id == checkpointId,
+        );
+        if (cpIndex != -1) {
+          flow.checkpoints[cpIndex] = flow.checkpoints[cpIndex].copyWith(
+            isCompleted: isCompleted,
+            completedAt: isCompleted ? DateTime.now() : null,
+          );
+          await _updateFlowLocally(flow);
+          return flow;
+        }
+      }
+      return null;
+    }
+  }
+
   static const String _flowsKey = 'user_flows';
 
   // Local storage methods
@@ -51,6 +101,57 @@ class FlowService {
   }
 
   // Project Flow methods
+  // Update a project flow (backend first, fallback to local)
+  static Future<ProjectFlow> updateProjectFlow(ProjectFlow updatedFlow) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.put(
+        Uri.parse('${ApiConfig.baseUrl}/flows/${updatedFlow.id}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(updatedFlow.toJson()),
+      );
+      if (response.statusCode == 200) {
+        final flowJson = jsonDecode(response.body);
+        final flow = ProjectFlow.fromJson(flowJson);
+        await _updateFlowLocally(flow);
+        return flow;
+      } else {
+        throw Exception('Failed to update flow: ${response.statusCode}');
+      }
+    } catch (e) {
+      // Fallback to local update
+      await _updateFlowLocally(updatedFlow);
+      return updatedFlow;
+    }
+  }
+
+  // Delete a project flow (backend first, fallback to local)
+  static Future<bool> deleteProjectFlow(String flowId) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.baseUrl}/flows/$flowId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        await _deleteFlowLocally(flowId);
+        return true;
+      } else {
+        throw Exception('Failed to delete flow: ${response.statusCode}');
+      }
+    } catch (e) {
+      // Fallback to local delete
+      await _deleteFlowLocally(flowId);
+      return true;
+    }
+  }
+
   static Future<List<ProjectFlow>> getProjectFlows() async {
     try {
       final token = await AuthService.getToken();
@@ -84,171 +185,218 @@ class FlowService {
     }
   }
 
-  static Future<ProjectFlow> createProjectFlow({
-    required String title,
-    required String description,
-    required List<FlowCheckpoint> checkpoints,
-    String estimatedDuration = '1 week',
-    FlowDifficulty difficulty = FlowDifficulty.medium,
-    List<String> tags = const [],
+  // New: Generate a project flow using backend AI from a description
+  static Future<ProjectFlow> generateFlowFromDescription(
+    String description, {
+    Map<String, dynamic>? preferences,
   }) async {
     try {
       final token = await AuthService.getToken();
-      final flow = ProjectFlow(
-        id: '', // Will be set by backend
-        title: title,
-        description: description,
-        checkpoints: checkpoints,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        estimatedDuration: estimatedDuration,
-        difficulty: difficulty,
-        tags: tags,
-      );
-
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/flows/'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode(flow.toJson()),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return ProjectFlow.fromJson(jsonDecode(response.body));
-      } else {
-        throw Exception('Failed to create flow: ${response.statusCode}');
-      }
-    } catch (e) {
-      // Save flow locally when API is not available
-      final localFlow = ProjectFlow(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: title,
-        description: description,
-        checkpoints: checkpoints,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        estimatedDuration: estimatedDuration,
-        difficulty: difficulty,
-        tags: tags,
-      );
-
-      // Add to local storage
-      await _addFlowLocally(localFlow);
-
-      return localFlow;
-    }
-  }
-
-  static Future<ProjectFlow> updateProjectFlow(ProjectFlow flow) async {
-    try {
-      final token = await AuthService.getToken();
-      final response = await http.put(
-        Uri.parse('${ApiConfig.baseUrl}/flows/${flow.id}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode(flow.toJson()),
-      );
-
-      if (response.statusCode == 200) {
-        return ProjectFlow.fromJson(jsonDecode(response.body));
-      } else {
-        throw Exception('Failed to update flow: ${response.statusCode}');
-      }
-    } catch (e) {
-      // Update flow locally when API is not available
-      final updatedFlow = flow.copyWith(updatedAt: DateTime.now());
-      await _updateFlowLocally(updatedFlow);
-      return updatedFlow;
-    }
-  }
-
-  static Future<bool> deleteProjectFlow(String flowId) async {
-    try {
-      final token = await AuthService.getToken();
-      final response = await http.delete(
-        Uri.parse('${ApiConfig.baseUrl}/flows/$flowId'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 204) {
-        // Also try to delete from local storage in case it exists there too
-        await _deleteFlowLocally(flowId);
-        return true;
-      } else {
-        throw Exception('Failed to delete flow: ${response.statusCode}');
-      }
-    } catch (e) {
-      // Delete from local storage when API is not available
-      await _deleteFlowLocally(flowId);
-      return true;
-    }
-  }
-
-  static Future<ProjectFlow> updateCheckpointStatus(
-    String flowId,
-    String checkpointId,
-    bool isCompleted,
-  ) async {
-    try {
-      final token = await AuthService.getToken();
-      final response = await http.patch(
-        Uri.parse(
-          '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId',
-        ),
+        Uri.parse('${ApiConfig.baseUrl}/flows/generate'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'is_completed': isCompleted,
-          'completed_at': isCompleted ? DateTime.now().toIso8601String() : null,
+          'project_description': description,
+          'preferences': preferences ?? {},
         }),
       );
 
       if (response.statusCode == 200) {
-        return ProjectFlow.fromJson(jsonDecode(response.body));
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final flowJson = data['flow'] as Map<String, dynamic>;
+        final flow = ProjectFlow.fromJson(flowJson);
+
+        // Auto-create alarms and notes for the generated flow
+        await _autoCreateAlarmsAndNotes(flow);
+        return flow;
       } else {
-        throw Exception('Failed to update checkpoint: ${response.statusCode}');
+        throw Exception('Failed to auto-generate flow: ${response.statusCode}');
       }
     } catch (e) {
-      throw Exception('Failed to update checkpoint: $e');
+      // Fallback: create a simple local flow with basic checkpoints
+      final now = DateTime.now();
+      final fallbackFlow = ProjectFlow(
+        id: now.millisecondsSinceEpoch.toString(),
+        title: 'Auto Flow',
+        description: description,
+        checkpoints: [
+          FlowCheckpoint(
+            id: '${now.millisecondsSinceEpoch}-1',
+            title: 'Understand Requirements',
+            description: 'Clarify goals and constraints from the description.',
+            requirements: ['List objectives', 'Identify constraints'],
+            deliverables: ['Requirements summary'],
+            estimatedTime: '1 day',
+            order: 0,
+            type: CheckpointType.milestone,
+          ),
+          FlowCheckpoint(
+            id: '${now.millisecondsSinceEpoch}-2',
+            title: 'Plan Tasks',
+            description: 'Break the work into actionable checkpoints.',
+            requirements: ['Draft plan'],
+            deliverables: ['Task list with estimates'],
+            estimatedTime: '2 days',
+            order: 1,
+            type: CheckpointType.task,
+          ),
+          FlowCheckpoint(
+            id: '${now.millisecondsSinceEpoch}-3',
+            title: 'Review & Adapt',
+            description: 'Validate plan and adjust based on feedback.',
+            requirements: ['Review session'],
+            deliverables: ['Updated plan'],
+            estimatedTime: '1 day',
+            order: 2,
+            type: CheckpointType.review,
+          ),
+        ],
+        createdAt: now,
+        updatedAt: now,
+        estimatedDuration: '1 week',
+        difficulty: FlowDifficulty.medium,
+        tags: ['auto', 'generated'],
+      );
+
+      await _addFlowLocally(fallbackFlow);
+
+      // Enrich fallback with alarms & notes (local/remote best-effort)
+      await _autoCreateAlarmsAndNotes(fallbackFlow);
+      return fallbackFlow;
     }
   }
 
-  static Future<String> getCheckpointHelp(
-    String flowId,
-    String checkpointId,
-  ) async {
+  // Helper: create alarms and notes for each checkpoint sequentially
+  static Future<void> _autoCreateAlarmsAndNotes(ProjectFlow flow) async {
+    try {
+      // Prefetch existing alarms and notes to avoid duplicates
+      final existingAlarms = await _fetchExistingAlarms();
+      final existingAlarmKeys = existingAlarms
+          .map((a) => '${a.flowId ?? ''}:${a.checkpointId ?? ''}:${a.title}')
+          .toSet();
+
+      final existingNotes = await getNotes();
+      final existingNoteKeys = existingNotes
+          .map((n) => '${n.title}:${n.labels.join(',')}')
+          .toSet();
+
+      final checkpoints = [...flow.checkpoints]
+        ..sort((a, b) => a.order.compareTo(b.order));
+
+      var cursor = DateTime.now();
+      for (final cp in checkpoints) {
+        final dur = _parseEstimatedDuration(cp.estimatedTime);
+        final scheduled = cursor.add(dur);
+
+        final alarmTitle = '${flow.title}: ${cp.title}';
+        final alarmKey = '${flow.id}:${cp.id}:$alarmTitle';
+        if (!existingAlarmKeys.contains(alarmKey)) {
+          final alarm = FlowAlarm(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            title: alarmTitle,
+            description: 'Deadline for checkpoint "${cp.title}"',
+            scheduledTime: scheduled,
+            isActive: true,
+            type:
+                (cp.type == CheckpointType.milestone ||
+                    cp.type == CheckpointType.review ||
+                    cp.type == CheckpointType.testing)
+                ? AlarmType.deadline
+                : AlarmType.task,
+            repeat: AlarmRepeat.none,
+            flowId: flow.id,
+            checkpointId: cp.id,
+            createdAt: DateTime.now(),
+          );
+          await _createAlarmSmart(alarm);
+        }
+
+        final noteTitle = 'Checkpoint: ${cp.title}';
+        final noteKey = '$noteTitle:${[flow.title].join(',')}';
+        if (!existingNoteKeys.contains(noteKey)) {
+          final noteContent = StringBuffer()
+            ..writeln(cp.description)
+            ..writeln('\nRequirements:')
+            ..writeln(cp.requirements.map((r) => '- $r').join('\n'))
+            ..writeln('\nDeliverables:')
+            ..writeln(cp.deliverables.map((d) => '- $d').join('\n'))
+            ..writeln('\nDeadline: ${scheduled.toLocal()}');
+
+          final note = Note(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            title: noteTitle,
+            content: noteContent.toString(),
+            labels: [flow.title],
+            color: NoteColors.white,
+            isPinned: false,
+            isArchived: false,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+            type: NoteType.text,
+          );
+          try {
+            await createNote(note);
+          } catch (_) {}
+        }
+
+        cursor = scheduled;
+      }
+    } catch (e) {
+      // Best-effort; do not fail flow creation if enrichment fails
+    }
+  }
+
+  static Future<List<FlowAlarm>> _fetchExistingAlarms() async {
     try {
       final token = await AuthService.getToken();
-      final response = await http.post(
-        Uri.parse(
-          '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId/help',
-        ),
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/alarms/'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
       );
-
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['help'] ?? 'No help available for this checkpoint.';
-      } else {
-        throw Exception(
-          'Failed to get checkpoint help: ${response.statusCode}',
-        );
+        final List<dynamic> jsonList = jsonDecode(response.body);
+        return jsonList.map((j) => FlowAlarm.fromJson(j)).toList();
       }
-    } catch (e) {
-      return 'Unable to get help at this time. Please try again later.';
+    } catch (_) {}
+    return [];
+  }
+
+  // Parse strings like "2-3 days", "5 days", "1 week", "3-4 weeks", "8 hours"
+  static Duration _parseEstimatedDuration(String? text) {
+    if (text == null) return const Duration(days: 1);
+    final s = text.toLowerCase();
+    final reg = RegExp(
+      r'(?:(\d+)\s*-\s*)?(\d+)\s*(day|days|week|weeks|hour|hours)',
+    );
+    final m = reg.firstMatch(s);
+    if (m != null) {
+      final start = m.group(1) != null ? int.tryParse(m.group(1)!) : null;
+      final end = int.tryParse(m.group(2)!);
+      final unit = m.group(3)!;
+      final value = (start != null && end != null) ? end : (end ?? 1);
+      switch (unit) {
+        case 'day':
+        case 'days':
+          return Duration(days: value);
+        case 'week':
+        case 'weeks':
+          return Duration(days: value * 7);
+        case 'hour':
+        case 'hours':
+          return Duration(hours: value);
+      }
     }
+    // Fallbacks for generic terms
+    if (s.contains('week')) return const Duration(days: 7);
+    if (s.contains('day')) return const Duration(days: 1);
+    if (s.contains('hour')) return const Duration(hours: 8);
+    return const Duration(days: 1);
   }
 
   // Notes methods (existing functionality)
@@ -701,6 +849,41 @@ class FlowService {
   static Future<List<FlowAlarm>> getAlarmsForFlow(String flowId) async {
     final alarms = await getAlarms();
     return alarms.where((alarm) => alarm.flowId == flowId).toList();
+  }
+
+  // Try remote alarms API, fallback to local storage
+  static Future<FlowAlarm> _createAlarmSmart(FlowAlarm alarm) async {
+    try {
+      return await _createAlarmRemote(alarm);
+    } catch (_) {
+      return await createAlarm(alarm); // local
+    }
+  }
+
+  static Future<FlowAlarm> _createAlarmRemote(FlowAlarm alarm) async {
+    final token = await AuthService.getToken();
+    final response = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/alarms/'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'title': alarm.title,
+        'description': alarm.description,
+        'scheduled_time': alarm.scheduledTime.toIso8601String(),
+        'type': alarm.type.name,
+        'repeat': alarm.repeat.name,
+        'flow_id': alarm.flowId,
+        'checkpoint_id': alarm.checkpointId,
+      }),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      return FlowAlarm.fromJson(json);
+    }
+    throw Exception('Alarm API error: ${response.statusCode}');
   }
 }
 

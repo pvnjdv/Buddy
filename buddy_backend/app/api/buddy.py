@@ -1,16 +1,19 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.flow import ProjectFlow, FlowCheckpoint, BuddyFlowMessage, FlowStatus, FlowDifficulty, CheckpointType, MessageContext
+from app.models.flow import ProjectFlow, FlowCheckpoint, BuddyFlowMessage, FlowStatus, FlowDifficulty, CheckpointType, MessageContext, FlowAlarm as FlowAlarmModel, AlarmType, AlarmRepeat
 from app.models.user import User
 from app.ai.buddy_ai import BuddyAI
 from app.dependencies import get_current_user
 import json
 import re
+from datetime import datetime, timedelta
+import uuid
 
 router = APIRouter()
 
@@ -163,6 +166,16 @@ async def confirm_flow(
         
         await db.commit()
         
+        # Auto-create sequential alarms for each checkpoint (best-effort)
+        try:
+            result = await db.execute(
+                select(FlowCheckpoint).filter(FlowCheckpoint.flow_id == db_flow.id)
+            )
+            checkpoints = result.scalars().all()
+            await _create_default_alarms_for_flow(db, current_user.id, db_flow, checkpoints)
+        except Exception:
+            pass
+        
         response_text = f"""
 ✅ **Flow Created Successfully!**
 
@@ -187,6 +200,73 @@ Ready to start your project? 🚀
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating flow: {str(e)}")
+
+@router.post("/buddy/generate-flow")
+async def generate_flow(
+    request: FlowGenerationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Generate a project flow from description"""
+    try:
+        flow_data = await buddy_ai.generate_project_flow(
+            description=request.project_description
+        )
+        
+        # Create flow in database
+        db_flow = ProjectFlow(
+            user_id=current_user.id,
+            title=flow_data["title"],
+            description=request.project_description,
+            difficulty=FlowDifficulty(flow_data.get("difficulty", "medium")),
+            estimated_duration=flow_data.get("estimated_duration", "1 week"),
+            tags=flow_data.get("tags", [])
+        )
+        
+        db.add(db_flow)
+        await db.commit()
+        await db.refresh(db_flow)
+        
+        # Create checkpoints
+        for i, checkpoint_data in enumerate(flow_data["checkpoints"]):
+            db_checkpoint = FlowCheckpoint(
+                flow_id=db_flow.id,
+                title=checkpoint_data["title"],
+                description=checkpoint_data["description"],
+                order=i,
+                type=CheckpointType(checkpoint_data.get("type", "task")),
+                estimated_time=checkpoint_data.get("estimated_time", "1 day"),
+                requirements=checkpoint_data.get("requirements", []),
+                deliverables=checkpoint_data.get("deliverables", [])
+            )
+            db.add(db_checkpoint)
+        
+        await db.commit()
+
+        # Auto-create sequential alarms for each checkpoint (best-effort)
+        try:
+            result = await db.execute(
+                select(FlowCheckpoint).filter(FlowCheckpoint.flow_id == db_flow.id)
+            )
+            checkpoints = result.scalars().all()
+            await _create_default_alarms_for_flow(db, current_user.id, db_flow, checkpoints)
+        except Exception:
+            pass
+        
+        # Refresh with eager loading to avoid MissingGreenlet error
+        result = await db.execute(
+            select(ProjectFlow)
+            .options(
+                selectinload(ProjectFlow.checkpoints).selectinload(FlowCheckpoint.resources)
+            )
+            .filter(ProjectFlow.id == db_flow.id)
+        )
+        db_flow = result.scalar_one()
+        
+        return {"flow": db_flow}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating flow: {str(e)}")
 
 # Enhanced checkpoint help endpoint
 @router.post("/buddy/checkpoint-help")
@@ -355,345 +435,59 @@ Would you like me to create a preview for your project?
         
         return {"response": fallback_response}
 
-@router.post("/buddy/generate-flow")
-async def generate_flow(
-    request: FlowGenerationRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+# Helper: Create default alarms sequentially for a flow
+async def _create_default_alarms_for_flow(
+    db: AsyncSession,
+    user_id: int,
+    flow: ProjectFlow,
+    checkpoints: List[FlowCheckpoint]
 ):
-    """Generate a project flow from description"""
+    cursor = datetime.utcnow()
+    for cp in sorted(checkpoints, key=lambda c: c.order):
+        duration = _parse_estimated_duration(cp.estimated_time or "1 day")
+        scheduled = cursor + duration
+        alarm = FlowAlarmModel(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            title=f"{flow.title}: {cp.title}",
+            description=f"Deadline for checkpoint '{cp.title}'",
+            scheduled_time=scheduled,
+            type=AlarmType.deadline if cp.type in {CheckpointType.milestone, CheckpointType.review, CheckpointType.testing} else AlarmType.task,
+            repeat=AlarmRepeat.none,
+            flow_id=str(flow.id),
+            checkpoint_id=str(cp.id),
+            is_active=True,
+            created_at=datetime.utcnow(),
+        )
+        db.add(alarm)
+        cursor = scheduled
+    await db.commit()
+
+# Parse durations like "2-3 days", "5 days", "1 week", "3-4 weeks", "8 hours"
+def _parse_estimated_duration(text: str) -> timedelta:
     try:
-        flow_data = await buddy_ai.generate_project_flow(
-            description=request.project_description
-        )
-        
-        # Create flow in database
-        db_flow = ProjectFlow(
-            user_id=current_user.id,
-            title=flow_data["title"],
-            description=request.project_description,
-            difficulty=FlowDifficulty(flow_data.get("difficulty", "medium")),
-            estimated_duration=flow_data.get("estimated_duration", "1 week"),
-            tags=flow_data.get("tags", [])
-        )
-        
-        db.add(db_flow)
-        await db.commit()
-        await db.refresh(db_flow)
-        
-        # Create checkpoints
-        for i, checkpoint_data in enumerate(flow_data["checkpoints"]):
-            db_checkpoint = FlowCheckpoint(
-                flow_id=db_flow.id,
-                title=checkpoint_data["title"],
-                description=checkpoint_data["description"],
-                order=i,
-                type=CheckpointType(checkpoint_data.get("type", "task")),
-                estimated_time=checkpoint_data.get("estimated_time", "1 day"),
-                requirements=checkpoint_data.get("requirements", []),
-                deliverables=checkpoint_data.get("deliverables", [])
-            )
-            db.add(db_checkpoint)
-        
-        await db.commit()
-        await db.refresh(db_flow)
-        
-        return {"flow": db_flow}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating flow: {str(e)}")
-
-@router.post("/buddy/checkpoint-help")
-async def get_checkpoint_help(
-    flow_id: int,
-    checkpoint_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get AI help for a specific checkpoint"""
-    try:
-        # Get flow and checkpoint
-        flow_result = await db.execute(
-            select(ProjectFlow).filter(
-                ProjectFlow.id == flow_id,
-                ProjectFlow.user_id == current_user.id
-            )
-        )
-        flow = flow_result.scalar_one_or_none()
-        
-        if not flow:
-            raise HTTPException(status_code=404, detail="Flow not found")
-        
-        checkpoint_result = await db.execute(
-            select(FlowCheckpoint).filter(
-                FlowCheckpoint.id == checkpoint_id,
-                FlowCheckpoint.flow_id == flow_id
-            )
-        )
-        checkpoint = checkpoint_result.scalar_one_or_none()
-        
-        if not checkpoint:
-            raise HTTPException(status_code=404, detail="Checkpoint not found")
-        
-        # Get recent chat history for context
-        messages_result = await db.execute(
-            select(BuddyFlowMessage).filter(
-                BuddyFlowMessage.user_id == current_user.id,
-                BuddyFlowMessage.flow_id == flow_id
-            ).order_by(BuddyFlowMessage.timestamp.desc()).limit(10)
-        )
-        recent_messages = messages_result.scalars().all()
-        
-        # Generate help using AI
-        help_content = await buddy_ai.get_checkpoint_help(
-            flow=flow,
-            checkpoint=checkpoint,
-            chat_history=[msg.content for msg in reversed(recent_messages)]
-        )
-        
-        # Save the help message
-        help_message = BuddyFlowMessage(
-            user_id=current_user.id,
-            flow_id=flow_id,
-            checkpoint_id=checkpoint_id,
-            content=help_content,
-            role="assistant",
-            context=MessageContext.checkpoint_help
-        )
-        db.add(help_message)
-        await db.commit()
-        
-        return {"help": help_content}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting help: {str(e)}")
-
-@router.post("/buddy/flow-progress")
-async def update_flow_progress(
-    request: FlowProgressUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Update flow progress and get AI encouragement"""
-    try:
-        flow_result = await db.execute(
-            select(ProjectFlow).filter(
-                ProjectFlow.id == request.flow_id,
-                ProjectFlow.user_id == current_user.id
-            )
-        )
-        flow = flow_result.scalar_one_or_none()
-        
-        if not flow:
-            raise HTTPException(status_code=404, detail="Flow not found")
-        
-        # Generate progress message using AI
-        progress_message = await buddy_ai.generate_progress_message(
-            flow=flow,
-            checkpoint_index=request.checkpoint_index,
-            is_completed=request.is_completed
-        )
-        
-        # Save progress message
-        progress_msg = BuddyFlowMessage(
-            user_id=current_user.id,
-            flow_id=request.flow_id,
-            content=progress_message,
-            role="assistant",
-            context=MessageContext.flow_progress
-        )
-        db.add(progress_msg)
-        await db.commit()
-        
-        return {"message": progress_message}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating progress: {str(e)}")
-
-@router.post("/buddy/generate-timeline")
-async def generate_project_timeline(query: TimelineQuery):
-    try:
-        prompt = f"""Create a detailed project timeline for: {query.project_description}
-
-Please provide:
-1. Estimated duration (in days/weeks)
-2. Difficulty level (Easy/Medium/Hard)
-3. List of tasks with title, description, and duration
-4. Milestones and checkpoints
-
-Format your response as a structured timeline that can be broken into manageable tasks."""
-
-        response = await buddy_ai.generate_ai_response(prompt)
-        
-        # Parse AI response into structured data
-        timeline_data = _parse_timeline_response(response, query.project_description)
-        return timeline_data
-        
-    except Exception as e:
-        return _fallback_timeline_response(query.project_description)
-
-@router.post("/buddy/checkpoint-help")
-async def get_checkpoint_help(query: CheckpointHelp):
-    try:
-        prompt = f"""The user is working on task {query.task_id} and has reached checkpoint: {query.checkpoint}
-
-Please provide specific, actionable help for this checkpoint. Include:
-1. What they should focus on at this stage
-2. Common challenges and how to overcome them
-3. Resources or tools that might help
-4. Next steps after completing this checkpoint
-
-Be encouraging and practical in your advice."""
-
-        response = await buddy_ai.generate_ai_response(prompt)
-        return {"help": response}
-        
-    except Exception as e:
-        return {"help": f"Sorry, I couldn't provide help for this checkpoint: {str(e)}"}
-
-def _generate_simple_response(prompt: str) -> str:
-    """Generate simple conversational responses when AI is unavailable"""
-    prompt_lower = prompt.lower().strip()
-    
-    # Greetings
-    if any(word in prompt_lower for word in ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening']):
-        return "Hello! I'm your Buddy assistant. I can help you with project management, creating flows, and general questions. How can I assist you today?"
-    
-    # How are you
-    if any(phrase in prompt_lower for phrase in ['how are you', 'how do you do', 'how\'s it going']):
-        return "I'm doing well, thank you for asking! I'm here and ready to help you with your projects. What would you like to work on?"
-    
-    # What can you do
-    if any(phrase in prompt_lower for phrase in ['what can you do', 'what do you do', 'help me', 'what are you', 'who are you']):
-        return """I'm Buddy, your AI assistant! I can help you with:
-
-🎯 **Project Flows**: Create structured project timelines with checkpoints
-📋 **Task Management**: Break down complex projects into manageable steps  
-💬 **General Chat**: Answer questions and provide guidance
-🔧 **Project Help**: Assist with specific project challenges
-
-Try saying:
-- "Create flow for website development"
-- "Help me plan a mobile app"
-- Or just ask me anything!
-
-What would you like to work on?"""
-    
-    # Thank you
-    if any(word in prompt_lower for word in ['thank', 'thanks', 'thx']):
-        return "You're welcome! I'm always here to help. Is there anything else you'd like to work on?"
-    
-    # Goodbye
-    if any(word in prompt_lower for word in ['bye', 'goodbye', 'see you', 'later']):
-        return "Goodbye! Feel free to come back anytime you need help with your projects. Have a great day!"
-    
-    # Questions about buddy
-    if any(word in prompt_lower for word in ['buddy', 'your name']):
-        return "I'm Buddy, your AI project assistant! I specialize in helping you create and manage projects through structured flows and providing guidance along the way."
-    
-    # Weather (common question)
-    if 'weather' in prompt_lower:
-        return "I don't have access to weather information, but I can help you plan projects that might be weather-dependent! What are you working on?"
-    
-    # Time questions
-    if any(word in prompt_lower for word in ['time', 'date', 'today']):
-        return "I can help you manage project timelines and deadlines! Are you working on any projects that need scheduling?"
-    
-    # Programming questions
-    if any(word in prompt_lower for word in ['code', 'coding', 'programming', 'development', 'developer']):
-        return "I can help you plan software development projects! Try asking me to 'create flow for [your project]' to get a structured development timeline."
-    
-    # General work/project questions
-    if any(word in prompt_lower for word in ['work', 'project', 'task', 'job']):
-        return "I'd love to help you with your work or project! Can you tell me more about what you're working on? I can create structured flows to help you organize and complete your tasks."
-    
-    # Default conversational response
-    return f"""That's an interesting question! While I'm currently in basic mode, I can still help you with project planning and management.
-
-Here are some things I can do:
-🎯 **Create Project Flows**: Ask me to "create flow for [your project]"
-📋 **Project Planning**: Help break down ideas into actionable steps
-💡 **General Guidance**: Provide advice on project management
-
-What would you like to work on today?"""
-
-def _fallback_timeline_response(project_description: str):
-    """Fallback response when AI model is not available"""
-    return {
-        "timeline": [
-            {"phase": "Planning", "duration": "2 days", "description": "Research and plan the project"},
-            {"phase": "Development", "duration": "5 days", "description": "Main development work"},
-            {"phase": "Testing", "duration": "2 days", "description": "Test and debug"},
-            {"phase": "Deployment", "duration": "1 day", "description": "Deploy and finalize"}
-        ],
-        "estimated_duration": "1-2 weeks",
-        "difficulty": "Medium",
-        "tasks": [
-            {
-                "title": "Project Research",
-                "description": f"Research requirements for: {project_description}",
-                "duration": "1 day",
-                "checkpoint": "research_complete"
-            },
-            {
-                "title": "Setup Development Environment",
-                "description": "Set up tools and environment needed for development",
-                "duration": "0.5 days",
-                "checkpoint": "environment_ready"
-            },
-            {
-                "title": "Core Development",
-                "description": "Implement main features and functionality",
-                "duration": "4 days",
-                "checkpoint": "core_complete"
-            },
-            {
-                "title": "Testing & Bug Fixes",
-                "description": "Test thoroughly and fix any issues found",
-                "duration": "2 days",
-                "checkpoint": "testing_complete"
-            },
-            {
-                "title": "Final Polish",
-                "description": "Final touches and optimization",
-                "duration": "1 day",
-                "checkpoint": "project_complete"
-            }
-        ]
-    }
-
-def _parse_timeline_response(ai_response: str, project_description: str):
-    """Parse AI response into structured timeline data"""
-    try:
-        # Try to extract structured information from AI response
-        lines = ai_response.split('\n')
-        
-        # Extract duration
-        duration_match = re.search(r'(\d+)\s*(day|week|month)', ai_response.lower())
-        estimated_duration = f"{duration_match.group(1)} {duration_match.group(2)}s" if duration_match else "1-2 weeks"
-        
-        # Extract difficulty
-        difficulty = "Medium"
-        if any(word in ai_response.lower() for word in ['easy', 'simple', 'basic']):
-            difficulty = "Easy"
-        elif any(word in ai_response.lower() for word in ['hard', 'complex', 'difficult', 'advanced']):
-            difficulty = "Hard"
-        
-        # For now, return fallback with AI response included
-        fallback = _fallback_timeline_response(project_description)
-        fallback['ai_response'] = ai_response
-        fallback['estimated_duration'] = estimated_duration
-        fallback['difficulty'] = difficulty
-        
-        return fallback
-        
+        s = (text or "").strip().lower()
+        m = re.search(r"(?:(\d+)\s*-\s*)?(\d+)\s*(day|days|week|weeks|hour|hours)", s)
+        if m:
+            start = int(m.group(1)) if m.group(1) else None
+            end = int(m.group(2))
+            unit = m.group(3)
+            value = end if start is not None else end
+            if unit in ("day", "days"):
+                return timedelta(days=value)
+            if unit in ("week", "weeks"):
+                return timedelta(days=value * 7)
+            if unit in ("hour", "hours"):
+                return timedelta(hours=value)
+        if "week" in s:
+            return timedelta(days=7)
+        if "day" in s:
+            return timedelta(days=1)
+        if "hour" in s:
+            return timedelta(hours=8)
     except Exception:
-        return _fallback_timeline_response(project_description)
-
+        pass
+    return timedelta(days=1)
 
 class ModeSwitch(BaseModel):
     mode: str  # "local" or "api"
@@ -706,7 +500,7 @@ async def get_ai_status():
         return {
             "current_mode": current_mode,
             "available_modes": ["local", "api"],
-            "model_info": {
+            "models": {
                 "local_model": settings.MODEL_NAME,
                 "api_model": settings.GROQ_MODEL
             }
