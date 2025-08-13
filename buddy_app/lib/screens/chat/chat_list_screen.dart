@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../models/flow_models.dart';
 import '../../services/flow_service.dart';
+import '../../services/auth_service.dart';
 import 'enhanced_individual_chat_screen.dart';
+import 'user_profile_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -74,10 +76,26 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 case 'refresh':
                   _loadContacts();
                   break;
+                case 'profile':
+                  _showProfile();
+                  break;
+                case 'refresh_token':
+                  _refreshAccessToken();
+                  break;
+                case 'create_group':
+                  _createGroup();
+                  break;
+                case 'suspend':
+                  _suspendRefreshToken();
+                  break;
+                case 'logout':
+                  _logout();
+                  break;
               }
             },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
+            itemBuilder: (context) => [
+              // Chat specific options
+              const PopupMenuItem(
                 value: 'new_group',
                 child: Row(
                   children: [
@@ -87,13 +105,65 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ],
                 ),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'refresh',
                 child: Row(
                   children: [
                     Icon(Icons.refresh),
                     SizedBox(width: 8),
                     Text('Refresh'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'profile',
+                child: Row(
+                  children: [
+                    Icon(Icons.person, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Profile'),
+                  ],
+                ),
+              ),
+              // Global options
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'refresh_token',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Refresh Token'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'create_group',
+                child: Row(
+                  children: [
+                    Icon(Icons.group_add, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text('Create Group'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'suspend',
+                child: Row(
+                  children: [
+                    Icon(Icons.pause_circle, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Suspend Session'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Logout'),
                   ],
                 ),
               ),
@@ -378,6 +448,83 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ],
       ),
     );
+  }
+
+  void _showProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const UserProfileScreen()),
+    );
+  }
+
+  void _refreshAccessToken() async {
+    final success = await AuthService.refreshAccessToken();
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Token refreshed successfully!')),
+      );
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to refresh token')));
+    }
+  }
+
+  Future<void> _createGroup() async {
+    try {
+      final result = await Navigator.pushNamed(context, '/create_group');
+      if (result == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Group created successfully!')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error creating group: $e')));
+    }
+  }
+
+  Future<void> _suspendRefreshToken() async {
+    await AuthService.suspendRefreshToken();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Session suspended. You will be logged out in 30 minutes unless you refresh.',
+        ),
+      ),
+    );
+  }
+
+  void _logout() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout completely?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Logout', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout == true) {
+      await AuthService.logout();
+      if (mounted) {
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    }
   }
 }
 

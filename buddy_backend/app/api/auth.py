@@ -13,6 +13,29 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 @router.post("/request-otp")
 async def request_otp(payload: OTPRequest, db: AsyncSession = Depends(get_db)):
+    # Test numbers with default OTP
+    test_numbers = {
+        "9270416640": "123456",
+        "9579348057": "123456"
+    }
+    
+    if payload.mobile_number in test_numbers:
+        otp = test_numbers[payload.mobile_number]
+        await create_or_update_otp(db, payload.mobile_number, otp)
+        
+        print(f"\n🔐 TEST OTP REQUEST")
+        print(f"📱 Mobile: {payload.mobile_number}")
+        print(f"🔢 OTP: {otp} (Test Account)")
+        print("-" * 40)
+        
+        return {
+            "mobile_number": payload.mobile_number, 
+            "message": "Test OTP generated",
+            "email_sent": False,
+            "is_test_account": True
+        }
+    
+    # Regular OTP generation for other numbers
     otp = str(random.randint(100000, 999999))
     await create_or_update_otp(db, payload.mobile_number, otp)
     
@@ -30,7 +53,8 @@ async def request_otp(payload: OTPRequest, db: AsyncSession = Depends(get_db)):
     return {
         "mobile_number": payload.mobile_number, 
         "message": "OTP generated",
-        "email_sent": email_sent
+        "email_sent": email_sent,
+        "is_test_account": False
     }
 
 @router.post("/verify-otp")

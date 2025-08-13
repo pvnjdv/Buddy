@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'chat/chat_list_screen.dart';
 import 'buddy/buddy_screen.dart';
 import 'flow/flow_screen.dart';
+import '../services/auth_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

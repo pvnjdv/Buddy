@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/flow_models.dart';
 import '../../services/buddy_service.dart';
+import '../../services/auth_service.dart';
 import 'chat_history_screen.dart';
 
 class BuddyScreen extends StatefulWidget {
@@ -290,9 +291,25 @@ class _BuddyScreenState extends State<BuddyScreen>
                 case 'switch_mode':
                   _switchAIMode();
                   break;
+                case 'history':
+                  _showChatHistory();
+                  break;
+                case 'refresh_token':
+                  _refreshAccessToken();
+                  break;
+                case 'create_group':
+                  _createGroup();
+                  break;
+                case 'suspend':
+                  _suspendRefreshToken();
+                  break;
+                case 'logout':
+                  _logout();
+                  break;
               }
             },
             itemBuilder: (context) => [
+              // Buddy specific options
               const PopupMenuItem(
                 value: 'clear',
                 child: Row(
@@ -320,6 +337,58 @@ class _BuddyScreenState extends State<BuddyScreen>
                           ? 'Switching...'
                           : 'Switch to ${_currentAIMode == 'local' ? 'API' : 'Local'} mode',
                     ),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'history',
+                child: Row(
+                  children: [
+                    Icon(Icons.history, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Chat History'),
+                  ],
+                ),
+              ),
+              // Global options
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'refresh_token',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text('Refresh Token'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'create_group',
+                child: Row(
+                  children: [
+                    Icon(Icons.group_add, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text('Create Group'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'suspend',
+                child: Row(
+                  children: [
+                    Icon(Icons.pause_circle, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Suspend Session'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Logout'),
                   ],
                 ),
               ),
@@ -721,5 +790,79 @@ class _BuddyScreenState extends State<BuddyScreen>
         );
       },
     );
+  }
+
+  void _showChatHistory() {
+    Navigator.pushNamed(context, '/chat_history');
+  }
+
+  void _refreshAccessToken() async {
+    final success = await AuthService.refreshAccessToken();
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Token refreshed successfully!')),
+      );
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to refresh token')));
+    }
+  }
+
+  Future<void> _createGroup() async {
+    try {
+      final result = await Navigator.pushNamed(context, '/create_group');
+      if (result == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Group created successfully!')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error creating group: $e')));
+    }
+  }
+
+  Future<void> _suspendRefreshToken() async {
+    await AuthService.suspendRefreshToken();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Session suspended. You will be logged out in 30 minutes unless you refresh.',
+        ),
+      ),
+    );
+  }
+
+  void _logout() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout completely?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Logout', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout == true) {
+      await AuthService.logout();
+      if (mounted) {
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    }
   }
 }

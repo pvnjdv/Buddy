@@ -7,6 +7,17 @@ from app.crud.user import update_user_details, get_user_by_mobile as crud_get_us
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
+@router.get("/me", response_model=UserRead)
+async def get_current_user_profile(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Get current user's profile"""
+    user = await get_user_by_id(db, current_user.id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
 @router.post("/details", response_model=UserRead)
 async def add_details(
     details: UserDetails,
