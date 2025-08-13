@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../services/user_service.dart';
+import '../../models/flow_models.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -11,469 +12,274 @@ class UserProfileScreen extends StatefulWidget {
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
-  final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-  File? _selectedImage;
-  final ImagePicker _picker = ImagePicker();
-  bool _isLoading = false;
-  bool _isEditing = false;
-
-  // Current user data
-  UserProfile? _currentUserProfile;
-  String? _currentProfileImageUrl;
+  UserProfile? _userProfile;
+  bool _loading = true;
+  bool _updating = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
+    _loadProfile();
   }
 
-  Future<void> _loadUserProfile() async {
-    setState(() => _isLoading = true);
-
+  Future<void> _loadProfile() async {
     try {
-      // Try to get real user profile first
-      UserProfile? userProfile = await UserService.getCurrentUserProfile();
-
-      // If no real profile, use mock data for demo
-      userProfile ??= await UserService.getMockUserProfile();
-
+      final profile = await UserService.getCurrentUserProfile();
       setState(() {
-        _currentUserProfile = userProfile;
-        _nameController.text = userProfile?.name ?? '';
-        _phoneController.text = userProfile?.mobileNumber ?? '';
-        _currentProfileImageUrl = userProfile?.profilePhoto;
-        _isLoading = false;
+        _userProfile = profile;
+        _loading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error loading profile: $e')));
+      setState(() {
+        _loading = false;
+      });
+      print('Error loading profile: $e');
     }
   }
 
-  Future<void> _pickImage() async {
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 85,
-      );
+  Future<void> _updateProfilePhoto() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
 
-      if (image != null) {
-        setState(() {
-          _selectedImage = File(image.path);
-        });
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
-    }
-  }
+    if (pickedFile != null) {
+      setState(() {
+        _updating = true;
+      });
 
-  Future<void> _takePhoto() async {
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 85,
-      );
-
-      if (image != null) {
-        setState(() {
-          _selectedImage = File(image.path);
-        });
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error taking photo: $e')));
-    }
-  }
-
-  void _showImagePickerDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Profile Photo'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Choose from Gallery'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('Take Photo'),
-              onTap: () {
-                Navigator.pop(context);
-                _takePhoto();
-              },
-            ),
-            if ((_currentProfileImageUrl?.isNotEmpty ?? false) ||
-                _selectedImage != null)
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Remove Photo'),
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() {
-                    _selectedImage = null;
-                    _currentProfileImageUrl = null;
-                  });
-                },
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      // Save profile data using UserService
-      final success = await UserService.updateUserProfile(
-        name: _nameController.text.trim(),
-        profileImage: _selectedImage,
-      );
-
-      if (success) {
-        // Reload the profile to get updated data
-        await _loadUserProfile();
-
-        setState(() {
-          _isEditing = false;
-          _isLoading = false;
-          _selectedImage = null; // Clear selected image after save
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!')),
+      try {
+        await UserService.updateProfile(
+          name: _userProfile?.name,
+          profilePhoto: File(pickedFile.path),
         );
-      } else {
-        throw Exception('Failed to update profile');
+        await _loadProfile();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile photo updated successfully!'),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to update profile photo')),
+          );
+        }
+      } finally {
+        setState(() {
+          _updating = false;
+        });
       }
-    } catch (e) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error updating profile: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Profile'),
-        backgroundColor: const Color(0xFF25D366),
+        backgroundColor: const Color(0xFF4F46E5),
         foregroundColor: Colors.white,
-        elevation: 1,
-        actions: [
-          if (!_isEditing)
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () => setState(() => _isEditing = true),
-            ),
-          if (_isEditing)
-            TextButton(
-              onPressed: _isLoading ? null : _saveProfile,
-              child: const Text(
-                'Save',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-        ],
+        elevation: 0,
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF25D366)),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Form(
-                key: _formKey,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFFF8FAFC), // Light blue-gray
+              Color(0xFFE0E7FF), // Light indigo
+              Color(0xFFDDD6FE), // Light purple
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: _loading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F46E5)),
+                ),
+              )
+            : SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    const SizedBox(height: 20),
-
-                    // Profile Picture Section
-                    Center(
-                      child: Stack(
-                        children: [
-                          Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: const Color(0xFF25D366),
-                                width: 3,
-                              ),
-                            ),
-                            child: ClipOval(
-                              child: _selectedImage != null
-                                  ? Image.file(
-                                      _selectedImage!,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : (_currentProfileImageUrl?.isNotEmpty ??
-                                        false)
-                                  ? Image.network(
-                                      _currentProfileImageUrl!,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) =>
-                                              _buildDefaultAvatar(),
-                                    )
-                                  : _buildDefaultAvatar(),
-                            ),
+                    // Profile Card
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF4F46E5).withOpacity(0.1),
+                            blurRadius: 30,
+                            offset: const Offset(0, 15),
                           ),
-                          if (_isEditing)
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF25D366),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.camera_alt,
-                                    color: Colors.white,
-                                  ),
-                                  onPressed: _showImagePickerDialog,
-                                ),
-                              ),
-                            ),
                         ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 40),
-
-                    // Name Field
-                    TextFormField(
-                      controller: _nameController,
-                      enabled: _isEditing,
-                      decoration: InputDecoration(
-                        labelText: 'Name',
-                        prefixIcon: const Icon(
-                          Icons.person,
-                          color: Color(0xFF25D366),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF25D366),
-                            width: 2,
-                          ),
-                        ),
-                        disabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        border: Border.all(
+                          color: const Color(0xFF4F46E5).withOpacity(0.1),
+                          width: 1,
                         ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Please enter your name';
-                        }
-                        if (value.trim().length < 2) {
-                          return 'Name must be at least 2 characters';
-                        }
-                        return null;
-                      },
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Phone Field
-                    TextFormField(
-                      controller: _phoneController,
-                      enabled: false, // Phone number can't be changed
-                      keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        labelText: 'Phone Number',
-                        prefixIcon: const Icon(
-                          Icons.phone,
-                          color: Color(0xFF25D366),
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        disabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        suffixIcon: const Icon(
-                          Icons.lock_outline,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    const SizedBox(height: 20),
-
-                    // User Status Card
-                    if (_currentUserProfile != null)
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey[200]!),
-                        ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
+                            // Profile Photo
+                            Stack(
                               children: [
-                                Icon(
-                                  _currentUserProfile!.isOnline
-                                      ? Icons.circle
-                                      : Icons.circle_outlined,
-                                  color: _currentUserProfile!.isOnline
-                                      ? Colors.green
-                                      : Colors.grey,
-                                  size: 12,
+                                Container(
+                                  width: 120,
+                                  height: 120,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: const Color(
+                                        0xFF4F46E5,
+                                      ).withOpacity(0.2),
+                                      width: 3,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(
+                                          0xFF4F46E5,
+                                        ).withOpacity(0.2),
+                                        blurRadius: 20,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipOval(
+                                    child: _userProfile?.profilePhoto != null
+                                        ? Image.network(
+                                            _userProfile!.profilePhoto!,
+                                            width: 120,
+                                            height: 120,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    _buildDefaultAvatar(),
+                                          )
+                                        : _buildDefaultAvatar(),
+                                  ),
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _currentUserProfile!.isOnline
-                                      ? 'Online'
-                                      : 'Last seen ${_formatLastSeen(_currentUserProfile!.lastSeen)}',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
+
+                                // Camera Icon
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: GestureDetector(
+                                    onTap: _updating
+                                        ? null
+                                        : _updateProfilePhoto,
+                                    child: Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF4F46E5),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 2,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(
+                                              0xFF4F46E5,
+                                            ).withOpacity(0.3),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: _updating
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.camera_alt,
+                                              size: 18,
+                                              color: Colors.white,
+                                            ),
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 24),
+
+                            // Name
                             Text(
-                              'User ID: ${_currentUserProfile!.id}',
-                              style: TextStyle(
-                                color: Colors.grey[500],
-                                fontSize: 12,
-                                fontFamily: 'monospace',
+                              _userProfile?.name ?? 'No Name',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+
+                            // Mobile Number
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4F46E5).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '+91 ${_userProfile?.mobileNumber ?? 'Unknown'}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF4F46E5),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 32),
+
+                            // Edit Profile Button
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: () {
+                                  // Navigate to edit profile screen
+                                  Navigator.pushNamed(
+                                    context,
+                                    '/profile_setup',
+                                  );
+                                },
+                                icon: const Icon(Icons.edit),
+                                label: const Text('Edit Profile'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF4F46E5),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
-
-                    const SizedBox(height: 40),
-
-                    // Action Buttons
-                    if (_isEditing) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () {
-                                setState(() {
-                                  _isEditing = false;
-                                  _nameController.text =
-                                      _currentUserProfile?.name ?? '';
-                                  _phoneController.text =
-                                      _currentUserProfile?.mobileNumber ?? '';
-                                  _selectedImage = null;
-                                });
-                              },
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                side: const BorderSide(
-                                  color: Color(0xFF25D366),
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: const Text(
-                                'Cancel',
-                                style: TextStyle(color: Color(0xFF25D366)),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: _isLoading ? null : _saveProfile,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF25D366),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Save Changes',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ] else ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => setState(() => _isEditing = true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF25D366),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'Edit Profile',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ],
                 ),
               ),
-            ),
+      ),
     );
   }
 
@@ -482,65 +288,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       width: 120,
       height: 120,
       decoration: const BoxDecoration(
-        color: Color(0xFF25D366),
+        color: Color(0xFF4F46E5),
         shape: BoxShape.circle,
       ),
-      child: Center(
-        child: Text(
-          _getInitials(
-            _nameController.text.isNotEmpty
-                ? _nameController.text
-                : (_currentUserProfile?.name ?? 'User'),
-          ),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 36,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
+      child: Icon(Icons.person, size: 60, color: Colors.white.withOpacity(0.8)),
     );
-  }
-
-  String _getInitials(String name) {
-    if (name.trim().isEmpty) return 'U';
-
-    final parts = name
-        .trim()
-        .split(' ')
-        .where((part) => part.isNotEmpty)
-        .toList();
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    } else if (parts.isNotEmpty) {
-      return parts[0][0].toUpperCase();
-    }
-    return 'U';
-  }
-
-  String _formatLastSeen(DateTime? lastSeen) {
-    if (lastSeen == null) return 'Unknown';
-
-    final now = DateTime.now();
-    final difference = now.difference(lastSeen);
-
-    if (difference.inMinutes < 1) {
-      return 'just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      return '${lastSeen.day}/${lastSeen.month}/${lastSeen.year}';
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _phoneController.dispose();
-    super.dispose();
   }
 }

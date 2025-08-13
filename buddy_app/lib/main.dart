@@ -23,8 +23,7 @@ class BuddyApp extends StatelessWidget {
       routes: {
         '/login': (context) => const LoginScreen(),
         '/otp': (context) => const OtpScreen(),
-        '/profile_setup': (context) =>
-            const ProfileSetupScreen(mobile: ''), // Update as needed
+        '/profile_setup': (context) => const ProfileSetupScreen(),
         '/home': (context) => const HomeScreen(),
         '/buddy': (context) => const BuddyScreen(),
         '/flows': (context) => const FlowScreen(),

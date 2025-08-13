@@ -55,19 +55,62 @@ class _ChatListScreenState extends State<ChatListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8FAFC), // Light blue-gray background
       appBar: AppBar(
         title: const Text(
           'Chats',
-          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black),
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+            fontSize: 20,
+          ),
         ),
-        backgroundColor: const Color(0xFF25D366),
-        elevation: 1,
+        backgroundColor: const Color(0xFF4F46E5), // Indigo
+        elevation: 0,
         foregroundColor: Colors.white,
         automaticallyImplyLeading: false,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color(0xFF4F46E5), // Indigo
+                Color(0xFF7C3AED), // Purple
+                Color(0xFF2563EB), // Blue
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(icon: const Icon(Icons.search), onPressed: _showSearch),
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.search, color: Colors.white, size: 20),
+            ),
+            onPressed: _showSearch,
+          ),
           PopupMenuButton<String>(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+            ),
+            color: const Color(0xFF1E293B), // Slate
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: const Color(0xFF4F46E5).withOpacity(0.3),
+                width: 1,
+              ),
+            ),
             onSelected: (value) {
               switch (value) {
                 case 'new_group':
@@ -99,9 +142,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 value: 'new_group',
                 child: Row(
                   children: [
-                    Icon(Icons.group_add),
-                    SizedBox(width: 8),
-                    Text('New group'),
+                    Icon(Icons.group_add, color: Color(0xFF10B981)), // Emerald
+                    SizedBox(width: 12),
+                    Text(
+                      'New group',
+                      style: TextStyle(color: Colors.white, fontSize: 15),
+                    ),
                   ],
                 ),
               ),
@@ -109,9 +155,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 value: 'refresh',
                 child: Row(
                   children: [
-                    Icon(Icons.refresh),
-                    SizedBox(width: 8),
-                    Text('Refresh'),
+                    Icon(Icons.refresh, color: Color(0xFF3B82F6)), // Blue
+                    SizedBox(width: 12),
+                    Text(
+                      'Refresh',
+                      style: TextStyle(color: Colors.white, fontSize: 15),
+                    ),
                   ],
                 ),
               ),
@@ -119,9 +168,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 value: 'profile',
                 child: Row(
                   children: [
-                    Icon(Icons.person, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Text('Profile'),
+                    Icon(Icons.person, color: Color(0xFF8B5CF6)), // Purple
+                    SizedBox(width: 12),
+                    Text(
+                      'Profile',
+                      style: TextStyle(color: Colors.white, fontSize: 15),
+                    ),
                   ],
                 ),
               ),
@@ -131,9 +183,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 value: 'refresh_token',
                 child: Row(
                   children: [
-                    Icon(Icons.refresh, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Text('Refresh Token'),
+                    Icon(Icons.refresh, color: Color(0xFF06B6D4)), // Cyan
+                    SizedBox(width: 12),
+                    Text(
+                      'Refresh Token',
+                      style: TextStyle(color: Colors.white, fontSize: 15),
+                    ),
                   ],
                 ),
               ),
@@ -141,9 +196,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 value: 'create_group',
                 child: Row(
                   children: [
-                    Icon(Icons.group_add, color: Colors.green),
-                    SizedBox(width: 8),
-                    Text('Create Group'),
+                    Icon(Icons.group_add, color: Color(0xFF84CC16)), // Lime
+                    SizedBox(width: 12),
+                    Text(
+                      'Create Group',
+                      style: TextStyle(color: Colors.white, fontSize: 15),
+                    ),
                   ],
                 ),
               ),
@@ -151,9 +209,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 value: 'suspend',
                 child: Row(
                   children: [
-                    Icon(Icons.pause_circle, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Text('Suspend Session'),
+                    Icon(Icons.pause_circle, color: Color(0xFFF59E0B)), // Amber
+                    SizedBox(width: 12),
+                    Text(
+                      'Suspend Session',
+                      style: TextStyle(color: Colors.white, fontSize: 15),
+                    ),
                   ],
                 ),
               ),
@@ -161,9 +222,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 value: 'logout',
                 child: Row(
                   children: [
-                    Icon(Icons.logout, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('Logout'),
+                    Icon(Icons.logout, color: Color(0xFFEF4444)), // Red
+                    SizedBox(width: 12),
+                    Text(
+                      'Logout',
+                      style: TextStyle(color: Colors.white, fontSize: 15),
+                    ),
                   ],
                 ),
               ),
@@ -174,7 +238,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF25D366)),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF667EEA)),
               ),
             )
           : _filteredContacts.isEmpty
@@ -182,20 +246,27 @@ class _ChatListScreenState extends State<ChatListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: 80,
-                    color: Colors.grey[400],
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2D3748).withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                    child: Icon(
+                      Icons.chat_bubble_outline,
+                      size: 64,
+                      color: Colors.grey[400],
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   Text(
                     _searchQuery.isNotEmpty
                         ? 'No contacts found'
                         : 'No chats yet',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -203,14 +274,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     _searchQuery.isNotEmpty
                         ? 'Try a different search term'
                         : 'Start a conversation with someone',
-                    style: TextStyle(color: Colors.grey[500]),
+                    style: TextStyle(color: Colors.grey[400], fontSize: 14),
                   ),
                 ],
               ),
             )
           : RefreshIndicator(
               onRefresh: _loadContacts,
-              color: const Color(0xFF25D366),
+              color: const Color(0xFF667EEA),
+              backgroundColor: const Color(0xFF2D3748),
               child: ListView.builder(
                 itemCount: _filteredContacts.length,
                 itemBuilder: (context, index) {
@@ -219,10 +291,28 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 },
               ),
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showNewChatDialog,
-        backgroundColor: const Color(0xFF25D366),
-        child: const Icon(Icons.chat, color: Colors.white),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF667EEA).withOpacity(0.4),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: _showNewChatDialog,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: const Icon(Icons.chat, color: Colors.white),
+        ),
       ),
     );
   }
@@ -230,130 +320,158 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Widget _buildContactTile(ChatContact contact) {
     final hasUnread = contact.unreadCount > 0;
 
-    return InkWell(
-      onTap: () => _openChat(contact),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            // Profile Picture
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 25,
-                  backgroundColor: const Color(0xFF25D366),
-                  backgroundImage: contact.profileImageUrl != null
-                      ? NetworkImage(contact.profileImageUrl!)
-                      : null,
-                  child: contact.profileImageUrl == null
-                      ? Text(
-                          _getInitials(contact.name),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      : null,
-                ),
-                if (contact.isOnline)
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF4CAF50),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A202C),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF2D3748).withOpacity(0.5),
+          width: 0.5,
+        ),
+      ),
+      child: InkWell(
+        onTap: () => _openChat(contact),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Row(
+            children: [
+              // Profile Picture
+              Stack(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(25),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
                     ),
+                    child: CircleAvatar(
+                      radius: 25,
+                      backgroundColor: Colors.transparent,
+                      backgroundImage: contact.profileImageUrl != null
+                          ? NetworkImage(contact.profileImageUrl!)
+                          : null,
+                      child: contact.profileImageUrl == null
+                          ? Text(
+                              _getInitials(contact.name),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            )
+                          : null,
+                    ),
                   ),
-              ],
-            ),
-            const SizedBox(width: 16),
-
-            // Contact Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          contact.name,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: hasUnread
-                                ? FontWeight.w600
-                                : FontWeight.w500,
-                            color: Colors.black87,
+                  if (contact.isOnline)
+                    Positioned(
+                      bottom: 2,
+                      right: 2,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4CAF50),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFF1A202C),
+                            width: 2,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (contact.lastMessageTime != null)
-                        Text(
-                          _formatTime(contact.lastMessageTime!),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: hasUnread
-                                ? const Color(0xFF25D366)
-                                : Colors.grey[600],
-                            fontWeight: hasUnread
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          contact.lastMessage ?? 'No messages yet',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: hasUnread
-                                ? Colors.black87
-                                : Colors.grey[600],
-                            fontWeight: hasUnread
-                                ? FontWeight.w500
-                                : FontWeight.normal,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (hasUnread)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF25D366),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            contact.unreadCount.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                    ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(width: 16),
+
+              // Contact Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            contact.name,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: hasUnread
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              color: Colors.white,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (contact.lastMessageTime != null)
+                          Text(
+                            _formatTime(contact.lastMessageTime!),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: hasUnread
+                                  ? const Color(0xFF667EEA)
+                                  : Colors.grey[400],
+                              fontWeight: hasUnread
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            contact.lastMessage ?? 'No messages yet',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: hasUnread
+                                  ? Colors.grey[300]
+                                  : Colors.grey[500],
+                              fontWeight: hasUnread
+                                  ? FontWeight.w500
+                                  : FontWeight.normal,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (hasUnread)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              contact.unreadCount.toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

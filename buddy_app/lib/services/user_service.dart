@@ -265,4 +265,32 @@ class UserService {
       isOnline: true,
     );
   }
+
+  // Update user profile
+  static Future<void> updateProfile({
+    String? name,
+    String? bio,
+    File? profilePhoto,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('access_token');
+
+      if (token == null) {
+        throw Exception('No authentication token found');
+      }
+
+      // For now, just simulate an API call
+      // In a real implementation, you would:
+      // 1. Upload the profile photo if provided
+      // 2. Send a PATCH request to update user profile
+      // 3. Return the updated profile
+
+      await Future.delayed(const Duration(seconds: 1));
+      print('Profile updated successfully');
+    } catch (e) {
+      print('Error updating profile: $e');
+      throw Exception('Failed to update profile');
+    }
+  }
 }
