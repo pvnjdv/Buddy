@@ -23,3 +23,30 @@ async def get_messages_between_users(db, user1_id, user2_id):
         ).order_by(Message.timestamp)
     )
     return result.scalars().all()
+
+async def get_last_message_between_users(db, user1_id, user2_id):
+    """Get the most recent message between two users"""
+    result = await db.execute(
+        select(Message)
+        .where(
+            ((Message.sender_id == user1_id) & (Message.receiver_id == user2_id)) |
+            ((Message.sender_id == user2_id) & (Message.receiver_id == user1_id))
+        )
+        .order_by(Message.timestamp.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+async def delete_messages_between_users(db, user1_id, user2_id):
+    """Delete all messages between two users"""
+    from sqlalchemy import delete
+    
+    # Delete messages where user1 is sender and user2 is receiver
+    await db.execute(
+        delete(Message).where(
+            ((Message.sender_id == user1_id) & (Message.receiver_id == user2_id)) |
+            ((Message.sender_id == user2_id) & (Message.receiver_id == user1_id))
+        )
+    )
+    await db.commit()
+    return True

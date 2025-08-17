@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'auth_service.dart';
 import '../models/flow_models.dart';
 import '../config/api_config.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/status.dart' as ws_status;
 
 class FlowService {
   // Update the completion status of a checkpoint in a flow (backend first, fallback to local)
@@ -889,6 +891,43 @@ class FlowService {
 
 // Enhanced Chat Service for WhatsApp-like functionality
 class EnhancedChatService {
+  static WebSocketChannel? _channel;
+  static Stream<dynamic>? _socketStream;
+
+  static void connectSocket(String token) {
+    try {
+      final wsUrl = ApiConfig.baseUrl.replaceFirst('http', 'ws');
+      final uri = Uri.parse('$wsUrl/chats/ws?token=$token');
+      _channel = WebSocketChannel.connect(uri);
+      _socketStream = _channel!.stream.asBroadcastStream();
+    } catch (e) {
+      print('WS connect error: $e');
+    }
+  }
+
+  static Stream<dynamic>? get socketStream => _socketStream;
+
+  static void disconnectSocket() {
+    try {
+      _channel?.sink.close(ws_status.goingAway);
+    } catch (_) {}
+    _channel = null;
+    _socketStream = null;
+  }
+
+  static void sendSocketMessage({
+    required String receiverId,
+    required String content,
+  }) {
+    if (_channel == null) return;
+    _channel!.sink.add(
+      jsonEncode({
+        'receiver_id': int.tryParse(receiverId) ?? receiverId,
+        'content': content,
+      }),
+    );
+  }
+
   static Future<List<ChatContact>> getContacts() async {
     try {
       final token = await AuthService.getToken();
@@ -896,7 +935,7 @@ class EnhancedChatService {
         Uri.parse('${ApiConfig.baseUrl}/chats/contacts'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
+          if (token != null) 'Authorization': 'Bearer $token',
         },
       );
 
@@ -911,6 +950,45 @@ class EnhancedChatService {
     }
   }
 
+  static Future<bool> clearChat(String contactId) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.baseUrl}/chats/$contactId/clear'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<List<ChatContact>> getAllUsers() async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/users'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((item) => ChatContact.fromJson(item)).toList();
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
   static Future<List<ChatMessage>> getMessages(String contactId) async {
     try {
       final token = await AuthService.getToken();
@@ -918,7 +996,7 @@ class EnhancedChatService {
         Uri.parse('${ApiConfig.baseUrl}/chats/$contactId/messages'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
+          if (token != null) 'Authorization': 'Bearer $token',
         },
       );
 
@@ -940,22 +1018,17 @@ class EnhancedChatService {
   ) async {
     try {
       final token = await AuthService.getToken();
-      final message = ChatMessage(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        senderId: 'current_user', // Replace with actual user ID
-        receiverId: contactId,
-        content: content,
-        type: type,
-        timestamp: DateTime.now(),
-      );
-
+      final body = {
+        'receiver_id': int.tryParse(contactId) ?? contactId,
+        'content': content,
+      };
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/chats/send'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
+          if (token != null) 'Authorization': 'Bearer $token',
         },
-        body: jsonEncode(message.toJson()),
+        body: jsonEncode(body),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -964,7 +1037,7 @@ class EnhancedChatService {
         throw Exception('Failed to send message: ${response.statusCode}');
       }
     } catch (e) {
-      // Return the message with current timestamp for offline mode
+      // Return local echo as fallback
       return ChatMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         senderId: 'current_user',
@@ -974,6 +1047,74 @@ class EnhancedChatService {
         timestamp: DateTime.now(),
       );
     }
+  }
+
+  // Resolve a contact by phone number using backend
+  static Future<ChatContact?> resolveContactByPhone(String phone) async {
+    try {
+      final encoded = Uri.encodeComponent(phone);
+      final token = await AuthService.getToken();
+      final resp = await http.get(
+        Uri.parse('${ApiConfig.userByMobile}/$encoded'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+      if (resp.statusCode == 200) {
+        final user = jsonDecode(resp.body) as Map<String, dynamic>;
+        final rawName = user['name'];
+        final nameStr = rawName == null ? '' : rawName.toString();
+        // Map to ChatContact expected shape
+        return ChatContact.fromJson({
+          'id': user['id'],
+          'name': nameStr.isNotEmpty ? nameStr : user['mobile_number'],
+          'phone_number': user['mobile_number'],
+          'email': null,
+          'profile_image_url': user['profile_photo'],
+          'last_message': null,
+          'last_message_time': null,
+          'unread_count': 0,
+          'is_online': false,
+        });
+      }
+    } catch (e) {
+      print('resolveContactByPhone error: $e');
+    }
+    return null;
+  }
+
+  // Resolve a contact by backend user ID
+  static Future<ChatContact?> resolveContactById(String userId) async {
+    try {
+      final token = await AuthService.getToken();
+      final resp = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/users/$userId'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+      if (resp.statusCode == 200) {
+        final user = jsonDecode(resp.body) as Map<String, dynamic>;
+        final rawName = user['name'];
+        final nameStr = rawName == null ? '' : rawName.toString();
+        return ChatContact.fromJson({
+          'id': user['id'],
+          'name': nameStr.isNotEmpty ? nameStr : user['mobile_number'],
+          'phone_number': user['mobile_number'],
+          'email': null,
+          'profile_image_url': user['profile_photo'],
+          'last_message': null,
+          'last_message_time': null,
+          'unread_count': 0,
+          'is_online': false,
+        });
+      }
+    } catch (e) {
+      print('resolveContactById error: $e');
+    }
+    return null;
   }
 
   // Mock data
@@ -1097,5 +1238,41 @@ class EnhancedChatService {
     } catch (e) {
       throw Exception('Failed to delete note: $e');
     }
+  }
+}
+
+class StatusService {
+  static Future<List<StatusItem>> getStatuses() async {
+    // Mock data for status strip
+    final now = DateTime.now();
+    return [
+      StatusItem(
+        id: 'me',
+        userId: 'current_user',
+        userName: 'My Status',
+        mediaUrl: 'https://picsum.photos/seed/me/600/900',
+        type: StatusType.image,
+        timestamp: now.subtract(const Duration(minutes: 5)),
+        seen: false,
+      ),
+      StatusItem(
+        id: '1',
+        userId: '1',
+        userName: 'Alice',
+        mediaUrl: 'https://picsum.photos/seed/alice/600/900',
+        type: StatusType.image,
+        timestamp: now.subtract(const Duration(hours: 2)),
+        seen: false,
+      ),
+      StatusItem(
+        id: '2',
+        userId: '2',
+        userName: 'Bob',
+        mediaUrl: 'https://picsum.photos/seed/bob/600/900',
+        type: StatusType.image,
+        timestamp: now.subtract(const Duration(hours: 4)),
+        seen: true,
+      ),
+    ];
   }
 }

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'chat/user_profile_screen.dart';
+import 'appearance_settings_screen.dart';
+import 'contacts_screen.dart';
 import '../config/theme_config.dart';
 import '../services/auth_service.dart';
+import '../services/user_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -36,11 +41,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionHeader('Appearance'),
+            _buildSectionHeader('Account'),
             const SizedBox(height: 12),
-            _buildThemeCard(),
-            const SizedBox(height: 16),
-            _buildColorCard(),
+            _buildAccountCard(),
             const SizedBox(height: 32),
 
             _buildSectionHeader('Notifications'),
@@ -48,9 +51,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildNotificationCard(),
             const SizedBox(height: 32),
 
-            _buildSectionHeader('Account'),
+            _buildSectionHeader('Appearance'),
             const SizedBox(height: 12),
-            _buildAccountCard(),
+            Card(
+              color: AppTheme.surfaceColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: _buildSettingsTile(
+                icon: Icons.palette_outlined,
+                title: 'Appearance',
+                subtitle: 'Theme mode and colors',
+                onTap: _openAppearanceSettings,
+              ),
+            ),
             const SizedBox(height: 32),
 
             _buildSectionHeader('App'),
@@ -159,204 +173,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildThemeCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.palette_outlined, color: AppTheme.primaryColor),
-                const SizedBox(width: 12),
-                Text(
-                  'Theme Mode',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimaryColor,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildThemeOption(
-                    'Light',
-                    Icons.light_mode,
-                    !AppTheme.isDarkMode,
-                    () => _changeTheme(false),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildThemeOption(
-                    'Dark',
-                    Icons.dark_mode,
-                    AppTheme.isDarkMode,
-                    () => _changeTheme(true),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildThemeOption(
-    String title,
-    IconData icon,
-    bool isSelected,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppTheme.primaryColor.withOpacity(0.1)
-              : Colors.transparent,
-          border: Border.all(
-            color: isSelected ? AppTheme.primaryColor : AppTheme.borderColor,
-            width: 2,
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: isSelected
-                  ? AppTheme.primaryColor
-                  : AppTheme.textSecondaryColor,
-              size: 32,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: TextStyle(
-                color: isSelected
-                    ? AppTheme.primaryColor
-                    : AppTheme.textSecondaryColor,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildColorCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.color_lens_outlined, color: AppTheme.primaryColor),
-                const SizedBox(width: 12),
-                Text(
-                  'Color Scheme',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimaryColor,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            Text(
-              'Primary Color',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.textSecondaryColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: AppTheme.primaryColors.map((color) {
-                final isSelected = color == AppTheme.primaryColor;
-                return GestureDetector(
-                  onTap: () => _changePrimaryColor(color),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: isSelected
-                          ? Border.all(
-                              color: AppTheme.textPrimaryColor,
-                              width: 3,
-                            )
-                          : null,
-                    ),
-                    child: isSelected
-                        ? const Icon(Icons.check, color: Colors.white, size: 20)
-                        : null,
-                  ),
-                );
-              }).toList(),
-            ),
-
-            const SizedBox(height: 20),
-
-            Text(
-              'Accent Color',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.textSecondaryColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: AppTheme.accentColors.map((color) {
-                final isSelected = color == AppTheme.accentColor;
-                return GestureDetector(
-                  onTap: () => _changeAccentColor(color),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: isSelected
-                          ? Border.all(
-                              color: AppTheme.textPrimaryColor,
-                              width: 3,
-                            )
-                          : null,
-                    ),
-                    child: isSelected
-                        ? const Icon(Icons.check, color: Colors.white, size: 20)
-                        : null,
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildAccountCard() {
     return Card(
       color: AppTheme.surfaceColor,
@@ -367,7 +183,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.person_outline,
             title: 'Profile',
             subtitle: 'Manage your profile information',
-            onTap: _showProfile,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const UserProfileScreen()),
+              );
+            },
+          ),
+          _buildDivider(),
+          _buildSettingsTile(
+            icon: Icons.contacts_outlined,
+            title: 'Contacts',
+            subtitle: 'Find friends and manage contacts',
+            onTap: () async {
+              final user = await UserService.getCurrentUserProfile();
+              if (mounted && user != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ContactsScreen(currentUserId: user.id),
+                  ),
+                );
+              }
+            },
           ),
           _buildDivider(),
           _buildSettingsTile(
@@ -390,33 +228,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildAppCard() {
     return Card(
+      color: AppTheme.surfaceColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
         children: [
           _buildSettingsTile(
             icon: Icons.info_outline,
             title: 'About',
             subtitle: 'App version and information',
-            onTap: () {
-              _showAboutDialog();
-            },
+            onTap: _showAboutDialog,
           ),
           _buildDivider(),
           _buildSettingsTile(
             icon: Icons.help_outline,
             title: 'Help & Support',
             subtitle: 'Get help and contact support',
-            onTap: () {
-              // Navigate to help screen
-            },
+            onTap: _openSupportEmail,
           ),
           _buildDivider(),
           _buildSettingsTile(
             icon: Icons.star_outline,
             title: 'Rate App',
             subtitle: 'Rate us on the app store',
-            onTap: () {
-              // Open app store for rating
-            },
+            onTap: _openRateLink,
           ),
         ],
       ),
@@ -565,55 +399,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _changeTheme(bool isDark) async {
-    await AppTheme.setTheme(isDark);
-    setState(() {});
-    // Trigger app-wide theme change
-    if (mounted) {
-      // Find the root BuddyApp and trigger rebuild
-      final appState = context.findAncestorStateOfType<State<StatefulWidget>>();
-      if (appState != null) {
-        appState.setState(() {});
-      }
-      Navigator.of(context).pop(true); // Return true to indicate theme changed
-    }
-  }
-
-  void _changePrimaryColor(Color color) async {
-    await AppTheme.setPrimaryColor(color);
-    setState(() {});
-    // Trigger app-wide theme change
-    if (mounted) {
-      // Find the root BuddyApp and trigger rebuild
-      final appState = context.findAncestorStateOfType<State<StatefulWidget>>();
-      if (appState != null) {
-        appState.setState(() {});
-      }
-      Navigator.of(context).pop(true); // Return true to indicate theme changed
-    }
-  }
-
-  void _changeAccentColor(Color color) async {
-    await AppTheme.setAccentColor(color);
-    setState(() {});
-    // Trigger app-wide theme change
-    if (mounted) {
-      // Find the root BuddyApp and trigger rebuild
-      final appState = context.findAncestorStateOfType<State<StatefulWidget>>();
-      if (appState != null) {
-        appState.setState(() {});
-      }
-    }
-  }
-
   void _showAboutDialog() {
     showAboutDialog(
       context: context,
       applicationName: 'Buddy',
       applicationVersion: '1.0.0',
       applicationLegalese: '© 2025 Buddy App. All rights reserved.',
-      children: [
-        const Padding(
+      children: const [
+        Padding(
           padding: EdgeInsets.only(top: 16),
           child: Text(
             'Your AI-powered project management companion.',
@@ -624,31 +417,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showProfile() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.person_outline, color: AppTheme.primaryColor),
-            const SizedBox(width: 8),
-            Text('Profile', style: TextStyle(color: AppTheme.textPrimaryColor)),
-          ],
-        ),
-        content: Text(
-          'Profile management feature is coming soon! You\'ll be able to update your name, avatar, and other personal information.',
-          style: TextStyle(color: AppTheme.textSecondaryColor),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('OK', style: TextStyle(color: AppTheme.primaryColor)),
-          ),
-        ],
+  Future<void> _openSupportEmail() async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: 'support@buddy.app',
+      query: Uri.encodeQueryComponent(
+        'subject=Buddy Support&body=Describe your issue...',
       ),
     );
+    if (!await launchUrl(uri)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Could not open email app'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openRateLink() async {
+    final uri = Uri.parse(
+      'https://play.google.com/store/apps/details?id=com.buddy.app',
+    );
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Could not open store link'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
   }
 
   void _showPrivacySettings() {
@@ -739,6 +541,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _openAppearanceSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AppearanceSettingsScreen()),
     );
   }
 }

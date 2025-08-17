@@ -2,8 +2,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.core.database import engine
-from app.models.user import User
+from app.core.database import engine, Base
+from app.models import user as user_models  # noqa: F401 register models
+from app.models import message as message_models  # noqa: F401 register models
 from app.api.auth import router as auth_router
 from app.api.user import router as user_router
 from app.api.task import router as task_router
@@ -27,7 +28,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     async with engine.begin() as conn:
-        await conn.run_sync(User.metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
 
 app.include_router(auth_router)
 app.include_router(user_router)

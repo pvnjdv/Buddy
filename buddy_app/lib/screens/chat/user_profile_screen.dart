@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../services/user_service.dart';
 import '../../models/flow_models.dart';
+import '../../config/theme_config.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -47,18 +48,22 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       });
 
       try {
-        await UserService.updateProfile(
+        final success = await UserService.updateUserProfile(
           name: _userProfile?.name,
-          profilePhoto: File(pickedFile.path),
+          profileImage: File(pickedFile.path),
         );
-        await _loadProfile();
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profile photo updated successfully!'),
-            ),
-          );
+        if (success) {
+          await _loadProfile();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Profile photo updated successfully!'),
+              ),
+            );
+          }
+        } else {
+          throw Exception('Update failed');
         }
       } catch (e) {
         if (mounted) {
@@ -78,9 +83,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
-        backgroundColor: const Color(0xFF4F46E5),
-        foregroundColor: Colors.white,
+        title: Text(
+          'Profile',
+          style: TextStyle(
+            color: AppTheme.textPrimaryColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: AppTheme.surfaceColor,
+        foregroundColor: AppTheme.textPrimaryColor,
         elevation: 0,
       ),
       body: Container(

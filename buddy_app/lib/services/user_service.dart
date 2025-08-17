@@ -88,7 +88,8 @@ class UserService {
   static Future<UserProfile?> fetchUserProfileFromApi() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final accessToken = prefs.getString('access_token');
+      // FIX: use the same JWT key used across the app
+      final accessToken = prefs.getString('jwt');
 
       if (accessToken == null) {
         throw Exception('No access token found');
@@ -126,7 +127,8 @@ class UserService {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final accessToken = prefs.getString('access_token');
+      // FIX: use JWT key
+      final accessToken = prefs.getString('jwt');
 
       if (accessToken == null) {
         throw Exception('No access token found');
@@ -173,7 +175,8 @@ class UserService {
   static Future<bool> deleteProfileImage() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final accessToken = prefs.getString('access_token');
+      // FIX: use JWT key
+      final accessToken = prefs.getString('jwt');
 
       if (accessToken == null) {
         throw Exception('No access token found');
@@ -266,7 +269,7 @@ class UserService {
     );
   }
 
-  // Update user profile
+  // Update user profile (simulated, not used now)
   static Future<void> updateProfile({
     String? name,
     String? bio,
@@ -274,18 +277,11 @@ class UserService {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('access_token');
-
+      // FIX: use JWT key to keep consistency if ever used
+      final token = prefs.getString('jwt');
       if (token == null) {
         throw Exception('No authentication token found');
       }
-
-      // For now, just simulate an API call
-      // In a real implementation, you would:
-      // 1. Upload the profile photo if provided
-      // 2. Send a PATCH request to update user profile
-      // 3. Return the updated profile
-
       await Future.delayed(const Duration(seconds: 1));
       print('Profile updated successfully');
     } catch (e) {

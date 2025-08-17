@@ -788,3 +788,26 @@ class FlowAlarm {
 enum AlarmType { reminder, deadline, meeting, task, custom }
 
 enum AlarmRepeat { none, daily, weekly, monthly, custom }
+
+// Status (Stories) models
+enum StatusType { image, video }
+
+class StatusItem {
+  final String id;
+  final String userId;
+  final String userName;
+  final String mediaUrl; // network image/video url
+  final StatusType type;
+  final DateTime timestamp;
+  bool seen;
+
+  StatusItem({
+    required this.id,
+    required this.userId,
+    required this.userName,
+    required this.mediaUrl,
+    this.type = StatusType.image,
+    required this.timestamp,
+    this.seen = false,
+  });
+}

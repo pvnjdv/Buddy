@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/flow_models.dart';
 import '../../services/flow_service.dart';
 import '../../widgets/chat/message_bubble.dart';
@@ -27,15 +29,48 @@ class _EnhancedIndividualChatScreenState
   bool _loading = true;
   bool _isTyping = false;
   final ScrollController _scrollController = ScrollController();
+  Stream<dynamic>? _socketSub;
 
   @override
   void initState() {
     super.initState();
+    _initSocket();
     _loadMessages();
+  }
+
+  Future<void> _initSocket() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt');
+    if (token != null) {
+      EnhancedChatService.connectSocket(token);
+      _socketSub = EnhancedChatService.socketStream;
+      _socketSub?.listen((event) {
+        try {
+          final data = event is String ? jsonDecode(event) : event;
+          if (data is Map && data['type'] == 'message') {
+            final msg = data['data'] as Map<String, dynamic>;
+            if (msg['sender_id'].toString() == widget.contactId ||
+                msg['receiver_id'].toString() == widget.contactId) {
+              setState(() {
+                _messages.add(
+                  ChatMessage.fromJson({
+                    ...msg,
+                    'type': 'text',
+                    'status': 'delivered',
+                  }),
+                );
+              });
+              _scrollToBottom();
+            }
+          }
+        } catch (_) {}
+      });
+    }
   }
 
   @override
   void dispose() {
+    // Do not disconnect globally here; let app lifecycle manage WS
     _scrollController.dispose();
     super.dispose();
   }
@@ -63,7 +98,7 @@ class _EnhancedIndividualChatScreenState
   Future<void> _sendMessage(String content) async {
     if (content.trim().isEmpty) return;
 
-    final message = ChatMessage(
+    final optimistic = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       senderId: widget.currentUserId,
       receiverId: widget.contactId,
@@ -72,11 +107,12 @@ class _EnhancedIndividualChatScreenState
     );
 
     setState(() {
-      _messages.add(message);
+      _messages.add(optimistic);
     });
 
     _scrollToBottom();
 
+    // Send via REST POST (which also handles WebSocket broadcasting on backend)
     try {
       await EnhancedChatService.sendMessage(
         widget.contactId,
@@ -84,10 +120,15 @@ class _EnhancedIndividualChatScreenState
         MessageType.text,
       );
     } catch (e) {
-      // Handle error - maybe show retry option
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to send message: $e')));
+      // Remove optimistic message on failure
+      setState(() {
+        _messages.removeWhere((msg) => msg.id == optimistic.id);
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Failed to send message')));
+      }
     }
   }
 
@@ -296,10 +337,8 @@ class _EnhancedIndividualChatScreenState
             onSelected: (value) {
               switch (value) {
                 case 'view_contact':
-                  // TODO: Navigate to contact info
                   break;
                 case 'search':
-                  // TODO: Implement search in chat
                   break;
                 case 'clear_chat':
                   _clearChat();
@@ -343,14 +382,13 @@ class _EnhancedIndividualChatScreenState
       ),
       body: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFFE5DDD5), // WhatsApp chat background color
-          image: DecorationImage(
-            image: AssetImage(
-              'assets/images/chat_bg.png',
-            ), // Optional: Add WhatsApp-like background pattern
-            fit: BoxFit.cover,
-            opacity: 0.1,
-          ),
+          color: Color(0xFFE5DDD5),
+          // Removed background image asset to avoid missing asset errors
+          // image: DecorationImage(
+          //   image: AssetImage('assets/images/chat_bg.png'),
+          //   fit: BoxFit.cover,
+          //   opacity: 0.1,
+          // ),
         ),
         child: Column(
           children: [
@@ -396,7 +434,6 @@ class _EnhancedIndividualChatScreenState
                         final message = _messages[index];
                         final isCurrentUser =
                             message.senderId == widget.currentUserId;
-
                         return MessageBubble(
                           message: message,
                           isCurrentUser: isCurrentUser,
@@ -417,20 +454,40 @@ class _EnhancedIndividualChatScreenState
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear Chat'),
-        content: const Text('Are you sure you want to clear all messages?'),
+        content: const Text(
+          'Are you sure you want to clear all messages? This cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              setState(() {
-                _messages.clear();
-              });
+            onPressed: () async {
               Navigator.pop(context);
+
+              final success = await EnhancedChatService.clearChat(
+                widget.contactId,
+              );
+
+              if (success) {
+                setState(() {
+                  _messages.clear();
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Chat cleared successfully')),
+                  );
+                }
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Failed to clear chat')),
+                  );
+                }
+              }
             },
-            child: const Text('Clear'),
+            child: const Text('Clear', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

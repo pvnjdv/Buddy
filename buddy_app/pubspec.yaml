@@ -39,6 +39,8 @@ dependencies:
   uuid: ^4.0.0
   permission_handler: ^11.0.1
   flutter_contacts: ^1.1.7+1
+  web_socket_channel: ^2.4.5
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:

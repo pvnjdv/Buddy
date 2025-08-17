@@ -54,8 +54,8 @@ async def update_user_details(db: AsyncSession, user_id: int, name: str, profile
     return user
 
 async def get_all_users(db: AsyncSession) -> List[User]:
-    """Get all users for contact list"""
-    result = await db.execute(select(User).where(User.name.isnot(None)))
+    """Get all users for contact list (include users even if name is null)"""
+    result = await db.execute(select(User))
     return result.scalars().all()
 
 async def search_users(db: AsyncSession, query: str) -> List[User]:
