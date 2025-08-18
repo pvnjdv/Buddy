@@ -72,22 +72,35 @@ class BuddyService {
   static List<FlowBuddyMessage> _chatHistory = [];
   static AIPersona? _activePersona;
   static List<AIPersona> _savedPersonas = [];
+  static bool _isProcessingRequest = false; // Add request throttling
 
   // Get authorization token
   static Future<String?> _getAuthToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(
-      'jwt',
-    ); // Changed from 'access_token' to 'jwt' to match auth service
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt');
+      print(
+        'Auth token retrieved: ${token != null ? "${token.substring(0, 10)}..." : "null"}',
+      );
+      return token;
+    } catch (e) {
+      print('Error retrieving auth token: $e');
+      return null;
+    }
   }
 
   // Get auth headers
   static Future<Map<String, String>> _getAuthHeaders() async {
     final token = await _getAuthToken();
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ${token ?? ''}',
-    };
+    print('Retrieved auth token: ${token?.substring(0, 10)}...');
+
+    final headers = {'Content-Type': 'application/json'};
+
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    return headers;
   }
 
   // Load all personas from backend
@@ -255,6 +268,30 @@ class BuddyService {
     }
   }
 
+  // Test method to debug connectivity
+  static Future<Map<String, dynamic>> testConnection() async {
+    try {
+      print('Testing basic HTTP connection...');
+      final response = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/docs'))
+          .timeout(const Duration(seconds: 10));
+
+      print('Test connection status: ${response.statusCode}');
+      return {
+        'success': response.statusCode == 200,
+        'status_code': response.statusCode,
+        'url': '${ApiConfig.baseUrl}/docs',
+      };
+    } catch (e) {
+      print('Test connection failed: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+        'url': '${ApiConfig.baseUrl}/docs',
+      };
+    }
+  }
+
   // Chat history methods
   static List<FlowBuddyMessage> getChatHistory() {
     return List.from(_chatHistory);
@@ -300,93 +337,111 @@ class BuddyService {
     return message.trim();
   }
 
-  // Main chat method with persona support
+  // Main chat method with persona support - Simplified like old code
   static Future<Map<String, dynamic>> askBuddy(String prompt) async {
+    // Prevent multiple simultaneous requests
+    if (_isProcessingRequest) {
+      print('Request blocked: Another request is already in progress');
+      return {
+        'success': false,
+        'response': 'Please wait for the previous message to complete.',
+        'error': 'request_throttled',
+      };
+    }
+
+    _isProcessingRequest = true;
+
+    // Add user message to chat history first
+    final userMessage = FlowBuddyMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      content: prompt,
+      role: BuddyRole.user,
+      timestamp: DateTime.now(),
+    );
+    _chatHistory.add(userMessage);
+
     try {
-      final headers = await _getAuthHeaders();
+      print('=== SIMPLE ASKBUDDY STARTED ===');
+      print('Prompt: "$prompt"');
+
+      final url = Uri.parse('${ApiConfig.baseUrl}/buddy/ask');
+      print('Request URL: $url');
+
+      // Get token directly like old code
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('jwt');
+      print('Token found: ${token != null}');
+
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+
       final requestBody = {
         'prompt': prompt,
         'chat_history': _chatHistory
-            .map((msg) => {'role': msg.role, 'content': msg.content})
+            .map((msg) => {'role': msg.role.name, 'content': msg.content})
             .toList(),
       };
 
-      // Add active persona if available
-      if (_activePersona != null) {
-        requestBody['persona_id'] = _activePersona!.id;
-      }
-
-      print('Sending request to: ${ApiConfig.baseUrl}/buddy/ask');
-      print('Request body: ${jsonEncode(requestBody)}');
+      print('Sending simplified request...');
+      print('Headers: $headers');
 
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/buddy/ask'),
+        url,
         headers: headers,
         body: jsonEncode(requestBody),
       );
 
-      print('Response status: ${response.statusCode}');
+      print('Response received: ${response.statusCode}');
       print('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final buddyResponse = data['response'] as String?;
+        final aiResponse = data['response'] ?? 'No response';
 
-        print('Parsed response data: $data');
-        print('Buddy response: $buddyResponse');
-
-        // Add messages to chat history
-        _chatHistory.add(
-          FlowBuddyMessage(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            content: prompt,
-            role: BuddyRole.user,
-            timestamp: DateTime.now(),
-          ),
+        // Add AI response to history
+        final assistantMessage = FlowBuddyMessage(
+          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+          content: aiResponse,
+          role: BuddyRole.assistant,
+          timestamp: DateTime.now(),
         );
+        _chatHistory.add(assistantMessage);
 
-        _chatHistory.add(
-          FlowBuddyMessage(
-            id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
-            content: buddyResponse ?? 'No response received',
-            role: BuddyRole.assistant,
-            timestamp: DateTime.now(),
-          ),
-        );
+        print('=== SUCCESS - RETURNING RESPONSE ===');
+        print('AI Response: $aiResponse');
 
-        // Update active persona info if provided
-        if (data['active_persona'] != null) {
-          final personaData = data['active_persona'];
-          print('Active persona: ${personaData['name']}');
-        }
-
-        return {
-          'success': true,
-          'message': buddyResponse ?? 'No response received',
-          'active_persona': data['active_persona'],
-          'flow_detected': data['flow_detected'] ?? false,
-          'suggestion': data['suggestion'],
-        };
-      } else if (response.statusCode == 401) {
-        return {
-          'success': false,
-          'message': 'Authentication required. Please log in again.',
-          'error': 'unauthorized',
-        };
+        return {'success': true, 'response': aiResponse, 'message': aiResponse};
       } else {
-        return {
-          'success': false,
-          'message': 'Sorry, I\'m having trouble connecting. Please try again.',
-          'error': 'server_error',
-        };
+        print('Server error: ${response.statusCode} - ${response.body}');
+        throw Exception('Server returned ${response.statusCode}');
       }
-    } catch (e) {
-      print('Error asking Buddy: $e');
+    } catch (e, stackTrace) {
+      print('=== ERROR IN ASKBUDDY ===');
+      print('Error: $e');
+      print('Stack trace: $stackTrace');
+
+      final fallbackResponse = _generateFallbackResponse(prompt);
+
+      // Add fallback message to chat history
+      final assistantMessage = FlowBuddyMessage(
+        id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+        content: fallbackResponse,
+        role: BuddyRole.assistant,
+        timestamp: DateTime.now(),
+      );
+      _chatHistory.add(assistantMessage);
+
       return {
         'success': false,
-        'message': _generateFallbackResponse(prompt),
+        'response': fallbackResponse,
+        'message': fallbackResponse,
         'error': 'network_error',
+        'details': e.toString(),
       };
+    } finally {
+      _isProcessingRequest = false;
     }
   }
 

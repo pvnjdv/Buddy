@@ -190,11 +190,24 @@ class _BuddyScreenState extends State<BuddyScreen>
     _scrollToBottom();
 
     try {
+      print('=== BUDDY SCREEN: Sending message ===');
+      print('User message: "$userMessage"');
+
       final result = await BuddyService.askBuddy(userMessage);
+
+      print('=== BUDDY SCREEN: Received result ===');
+      print('Full result: $result');
+      print('Result success: ${result['success']}');
+      print('Result message: ${result['message']}');
+      print('Result response: ${result['response']}');
+
       final response =
-          result['message'] ??
-          result['response'] ??
+          result['response'] ?? // Try 'response' first (like old code)
+          result['message'] ?? // Then 'message' as fallback
           'Sorry, I couldn\'t process that.';
+
+      print('=== BUDDY SCREEN: Final response ===');
+      print('Response to display: "$response"');
 
       if (mounted) {
         final aiMsg = BuddyMessage(
@@ -203,6 +216,9 @@ class _BuddyScreenState extends State<BuddyScreen>
           role: BuddyRole.assistant,
           timestamp: DateTime.now(),
         );
+
+        print('=== BUDDY SCREEN: Adding message to UI ===');
+        print('AI message content: "${aiMsg.content}"');
 
         setState(() {
           _messages.add(aiMsg);
