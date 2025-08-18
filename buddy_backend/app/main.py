@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from app.models import user as user_models  # noqa: F401 register models
 from app.models import message as message_models  # noqa: F401 register models
+from app.models import persona as persona_models  # noqa: F401 register models
 from app.api.auth import router as auth_router
 from app.api.user import router as user_router
 from app.api.task import router as task_router
@@ -13,6 +14,7 @@ from app.api.buddy import router as buddy_router
 from app.api.notes import router as notes_router
 from app.api.flows import router as flows_router
 from app.api.alarms import router as alarms_router
+from app.api.personas import router as personas_router
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -38,3 +40,4 @@ app.include_router(buddy_router)
 app.include_router(notes_router)
 app.include_router(flows_router)
 app.include_router(alarms_router)
+app.include_router(personas_router)

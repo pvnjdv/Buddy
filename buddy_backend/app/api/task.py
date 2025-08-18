@@ -1,13 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from app.dependencies import get_db, get_current_user
-from app.schemas.task import TaskCreate, TaskRead
-from app.crud.task import create_task, get_tasks, get_task, update_task_status, delete_task
+from app.schemas.task import TaskCreate, TaskRead, TaskUpdate
+from app.crud.task import (
+    create_task,
+    get_tasks,
+    get_task,
+    update_task,
+    update_task_status,
+    delete_task,
+    search_tasks,
+)
+from pydantic import BaseModel
 import json
 
-router = APIRouter(prefix="/tasks", tags=["Tasks"])
+router = APIRouter(prefix="/tasks", tags=["Tasks"]) 
 
 class TimelineTaskCreate(BaseModel):
     user_id: str
@@ -45,7 +53,7 @@ Checkpoints:
             db, 
             title=project_title,
             description=project_description,
-            assigned_to=int(request.user_id)
+            assigned_to=int(request.user_id),
         )
         
         return new_task
@@ -59,15 +67,34 @@ async def create_task_endpoint(
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    new_task = await create_task(db, task.title, task.description, assigned_to=current_user.id)
+    new_task = await create_task(
+        db,
+        title=task.title,
+        description=task.description,
+        assigned_to=current_user.id,
+        priority=task.priority or "normal",
+        status=task.status or "todo",
+        due_date=task.due_date,
+        labels=task.labels or [],
+        flow_id=task.flow_id,
+        checkpoint_id=task.checkpoint_id,
+    )
     return new_task
 
-@router.get("/", response_model=list[TaskRead])
+@router.get("/", response_model=List[TaskRead])
 async def list_tasks(
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    return await get_tasks(db)
+    return await get_tasks(db, assigned_to=current_user.id)
+
+@router.get("/search", response_model=List[TaskRead])
+async def search_tasks_endpoint(
+    q: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    return await search_tasks(db, q, assigned_to=current_user.id)
 
 @router.get("/{task_id}", response_model=TaskRead)
 async def get_task_endpoint(
@@ -76,6 +103,18 @@ async def get_task_endpoint(
     current_user = Depends(get_current_user)
 ):
     task = await get_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+@router.put("/{task_id}", response_model=TaskRead)
+async def update_task_endpoint(
+    task_id: int,
+    patch: TaskUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    task = await update_task(db, task_id, **patch.model_dump(exclude_unset=True))
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task

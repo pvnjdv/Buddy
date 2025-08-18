@@ -6,6 +6,7 @@ import '../../services/flow_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 import '../../services/contacts_service.dart';
+import '../../services/status_service.dart';
 import '../../config/theme_config.dart';
 import '../../widgets/new_chat_bottom_sheet.dart';
 import '../contacts_screen.dart';
@@ -134,9 +135,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Future<void> _loadStatuses() async {
-    final statuses = await StatusService.getStatuses();
-    if (!mounted) return;
-    setState(() => _statuses = statuses);
+    try {
+      final items = await StatusService.getStatuses();
+      if (!mounted) return;
+      setState(() => _statuses = items);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _statuses = []);
+    }
   }
 
   List<ChatContact> get _filteredContacts {
@@ -152,8 +158,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final statusBarHeight =
-        90.0; // tightened to avoid overflow on small screens
+    final statusBarHeight = 96.0;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
@@ -165,20 +170,55 @@ class _ChatListScreenState extends State<ChatListScreen> {
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 10,
+                  vertical: 6,
                 ),
                 scrollDirection: Axis.horizontal,
                 itemBuilder: (context, index) {
                   final isYou = index == 0;
-                  final status = index < _statuses.length
-                      ? _statuses[index]
+                  if (isYou) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppTheme.primaryColor,
+                              width: 2,
+                            ),
+                          ),
+                          child: CircleAvatar(
+                            backgroundColor: Colors.grey[300],
+                            child: Icon(Icons.add, color: Colors.grey[800]),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const SizedBox(
+                          width: 56,
+                          child: Text(
+                            'My Status',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 11, height: 1.1),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  final statusIndex = index - 1;
+                  final status = statusIndex < _statuses.length
+                      ? _statuses[statusIndex]
                       : null;
-                  final ringColor = (status?.seen ?? isYou)
+                  final ringColor = (status?.seen ?? false)
                       ? Colors.grey
                       : const Color(0xFF25D366);
-                  final name =
-                      status?.userName ?? (isYou ? 'My Status' : 'Status');
+                  final name = status?.userName ?? 'Status';
                   final image = status?.mediaUrl;
+
                   return GestureDetector(
                     onTap: () {
                       if (status != null && image != null) {
@@ -201,16 +241,16 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           alignment: Alignment.center,
                           children: [
                             Container(
-                              width: 64,
-                              height: 64,
+                              width: 56,
+                              height: 56,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: ringColor, width: 3),
+                                border: Border.all(color: ringColor, width: 2),
                               ),
                             ),
                             Container(
-                              width: 58,
-                              height: 58,
+                              width: 50,
+                              height: 50,
                               decoration: const BoxDecoration(
                                 color: Colors.white,
                                 shape: BoxShape.circle,
@@ -227,7 +267,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                     : CircleAvatar(
                                         backgroundColor: Colors.grey[300],
                                         child: Icon(
-                                          isYou ? Icons.add : Icons.person,
+                                          Icons.person,
                                           color: Colors.grey[700],
                                         ),
                                       ),
@@ -237,7 +277,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         ),
                         const SizedBox(height: 6),
                         SizedBox(
-                          width: 64,
+                          width: 56,
                           child: Text(
                             name,
                             maxLines: 1,
@@ -245,6 +285,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
+                              height: 1.1,
                               color: Colors.grey[700],
                             ),
                           ),
@@ -254,7 +295,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   );
                 },
                 separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemCount: _statuses.isEmpty ? 6 : _statuses.length,
+                itemCount: 1 + (_statuses.isEmpty ? 6 : _statuses.length),
               ),
             ),
             // Search bar

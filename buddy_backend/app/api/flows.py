@@ -6,6 +6,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import json
 import uuid
+from pydantic import BaseModel
 
 from ..core.database import get_db
 from ..models.flow import ProjectFlow, FlowCheckpoint, FlowResource, BuddyFlowMessage, FlowStatus, FlowDifficulty, CheckpointType, MessageContext, FlowAlarm as FlowAlarmModel, AlarmType, AlarmRepeat
@@ -149,15 +150,19 @@ async def delete_flow(
     await db.commit()
     return {"message": "Flow deleted successfully"}
 
+class CheckpointStatusUpdate(BaseModel):
+    is_completed: bool
+
 @router.patch("/{flow_id}/checkpoints/{checkpoint_id}", response_model=ProjectFlowResponse)
+@router.put("/{flow_id}/checkpoints/{checkpoint_id}", response_model=ProjectFlowResponse)
 async def update_checkpoint_status(
     flow_id: int,
     checkpoint_id: int,
-    is_completed: bool,
+    payload: CheckpointStatusUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update checkpoint completion status"""
+    """Update checkpoint completion status (accepts JSON body)."""
     result = await db.execute(
         select(ProjectFlow).filter(
             ProjectFlow.id == flow_id,
@@ -180,10 +185,10 @@ async def update_checkpoint_status(
     if not checkpoint:
         raise HTTPException(status_code=404, detail="Checkpoint not found")
     
+    is_completed = payload.is_completed
     checkpoint.is_completed = is_completed
     if is_completed:
         checkpoint.completed_at = datetime.utcnow()
-        # Update flow's current checkpoint index if this was the current one
         if checkpoint.order == flow.current_checkpoint_index:
             flow.current_checkpoint_index = min(
                 flow.current_checkpoint_index + 1,
@@ -191,11 +196,9 @@ async def update_checkpoint_status(
             )
     else:
         checkpoint.completed_at = None
-        # If uncompleting a checkpoint, ensure current index is not beyond it
         if checkpoint.order < flow.current_checkpoint_index:
             flow.current_checkpoint_index = checkpoint.order
     
-    # Check if flow is completed
     completed_checkpoints = sum(1 for cp in flow.checkpoints if cp.is_completed)
     if completed_checkpoints == len(flow.checkpoints):
         flow.status = FlowStatus.completed
@@ -205,7 +208,6 @@ async def update_checkpoint_status(
     flow.updated_at = datetime.utcnow()
     await db.commit()
     
-    # Refresh with eager loading to avoid MissingGreenlet error
     result = await db.execute(
         select(ProjectFlow)
         .options(
@@ -377,8 +379,8 @@ async def _create_default_alarms_for_flow(
             scheduled_time=scheduled,
             type=AlarmType.deadline if cp.type in {CheckpointType.milestone, CheckpointType.review, CheckpointType.testing} else AlarmType.task,
             repeat=AlarmRepeat.none,
-            flow_id=str(flow.id),
-            checkpoint_id=str(cp.id),
+            flow_id=flow.id,
+            checkpoint_id=cp.id,
             is_active=True,
             created_at=datetime.utcnow(),
         )

@@ -1184,3 +1184,134 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
         except Exception as e:
             print(f"Error generating AI response: {e}")
             return "I apologize, but I'm having trouble generating a response right now. Please try again later."
+    
+    async def generate_persona_response(
+        self, 
+        prompt: str, 
+        persona=None, 
+        chat_history: List[Dict[str, str]] = None
+    ) -> str:
+        """Generate AI response with persona context"""
+        try:
+            # If no persona is provided, use default Buddy behavior
+            if not persona:
+                return await self.generate_ai_response(prompt, chat_history)
+            
+            # Create persona-specific system prompt
+            persona_system_prompt = self._build_persona_system_prompt(persona)
+            
+            # Build conversation with persona context
+            conversation_history = chat_history or []
+            
+            # Add persona context to the beginning if this is the first interaction
+            if not conversation_history or len(conversation_history) == 0:
+                enhanced_prompt = f"{persona_system_prompt}\n\nUser: {prompt}"
+            else:
+                # For ongoing conversations, just add the current prompt
+                enhanced_prompt = prompt
+            
+            # Generate response using the AI client
+            response = await self.ai_client.generate_response(enhanced_prompt, conversation_history)
+            
+            # Post-process response to ensure persona consistency
+            return self._enhance_persona_response(response, persona)
+            
+        except Exception as e:
+            print(f"Error generating persona response: {e}")
+            # Fallback to regular response
+            return await self.generate_ai_response(prompt, chat_history)
+    
+    def _build_persona_system_prompt(self, persona) -> str:
+        """Build system prompt based on persona"""
+        if not persona:
+            return ""
+        
+        # Use custom system prompt if available
+        if persona.system_prompt:
+            return persona.system_prompt
+        
+        # Build system prompt from persona attributes
+        base_prompt = f"You are {persona.name}."
+        
+        if persona.description:
+            base_prompt += f" {persona.description}"
+        
+        # Add personality traits
+        if persona.personality_traits:
+            try:
+                import json
+                traits = json.loads(persona.personality_traits)
+                if traits:
+                    traits_str = ", ".join(traits)
+                    base_prompt += f" Your key personality traits are: {traits_str}."
+            except (json.JSONDecodeError, AttributeError):
+                # If JSON parsing fails, use as string
+                if isinstance(persona.personality_traits, str):
+                    base_prompt += f" Your personality: {persona.personality_traits}."
+        
+        # Add expertise areas
+        if persona.expertise_areas:
+            try:
+                import json
+                expertise = json.loads(persona.expertise_areas)
+                if expertise:
+                    expertise_str = ", ".join(expertise)
+                    base_prompt += f" Your areas of expertise include: {expertise_str}."
+            except (json.JSONDecodeError, AttributeError):
+                if isinstance(persona.expertise_areas, str):
+                    base_prompt += f" Your expertise: {persona.expertise_areas}."
+        
+        # Add response style guidance
+        response_style = persona.response_style or "conversational"
+        style_guidance = {
+            "formal": "Use a professional and formal tone in your responses.",
+            "casual": "Use a friendly and casual tone, like talking to a good friend.",
+            "technical": "Focus on technical accuracy and provide detailed explanations.",
+            "educational": "Explain concepts clearly and use teaching techniques to help understanding.",
+            "creative": "Be imaginative and inspiring in your responses, encouraging creativity.",
+            "conversational": "Maintain a friendly, helpful, and engaging conversational tone."
+        }
+        
+        base_prompt += f" {style_guidance.get(response_style, style_guidance['conversational'])}"
+        
+        # Add consistency reminder
+        base_prompt += f"\n\nImportant: Always respond as {persona.name} and stay consistent with your described personality and expertise throughout the conversation."
+        
+        return base_prompt
+    
+    def _enhance_persona_response(self, response: str, persona) -> str:
+        """Post-process response to ensure persona consistency"""
+        if not persona or not response:
+            return response
+        
+        # Remove any system prompts that might have leaked through
+        if response.startswith(("You are", "I am", "As ")):
+            lines = response.split('\n')
+            # Find the first line that seems like actual response content
+            for i, line in enumerate(lines):
+                if line.strip() and not any(line.startswith(prefix) for prefix in ["You are", "I am", "As a", "My role"]):
+                    response = '\n'.join(lines[i:])
+                    break
+        
+        return response.strip()
+    
+    def get_persona_greeting(self, persona) -> str:
+        """Generate a persona-specific greeting message"""
+        if not persona:
+            return "Hi! I'm Buddy, your AI assistant. How can I help you today?"
+        
+        greetings = {
+            "teacher": f"Hello! I'm {persona.name}, ready to help you learn and understand new concepts step by step. What would you like to explore today?",
+            "developer": f"Hey there! I'm {persona.name}, your coding companion. Whether you need help with programming, debugging, or technical solutions, I'm here to assist!",
+            "writer": f"Greetings! I'm {persona.name}, here to help you craft compelling content, improve your writing, and express your ideas clearly. What can we create together?",
+        }
+        
+        # Try to match persona name/description to get appropriate greeting
+        name_lower = persona.name.lower()
+        for key, greeting in greetings.items():
+            if key in name_lower:
+                return greeting
+        
+        # Default personalized greeting
+        description_snippet = persona.description[:100] + "..." if persona.description and len(persona.description) > 100 else persona.description or ""
+        return f"Hello! I'm {persona.name}. {description_snippet} How can I assist you today?"

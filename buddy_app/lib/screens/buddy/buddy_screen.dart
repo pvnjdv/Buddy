@@ -31,6 +31,10 @@ class _BuddyScreenState extends State<BuddyScreen>
   bool _isOnline = true;
   DateTime? _lastSyncTime;
 
+  // Custom AI Persona (UI state)
+  AIPersona? _activePersona;
+  List<AIPersona> _savedPersonas = [];
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +44,7 @@ class _BuddyScreenState extends State<BuddyScreen>
     );
     _loadChatHistory();
     _loadAIStatus();
+    _initPersona();
     _startRealTimeSync();
 
     // Start subtle animation for empty state
@@ -108,9 +113,9 @@ class _BuddyScreenState extends State<BuddyScreen>
   Future<void> _loadAIStatus() async {
     try {
       final status = await BuddyService.getAIStatus();
-      if (status != null && mounted) {
+      if (mounted) {
         setState(() {
-          _currentAIMode = status['current_mode'] ?? 'api';
+          _currentAIMode = status['mode'] ?? 'api';
         });
       }
     } catch (e) {
@@ -186,7 +191,10 @@ class _BuddyScreenState extends State<BuddyScreen>
 
     try {
       final result = await BuddyService.askBuddy(userMessage);
-      final response = result['response'] ?? 'Sorry, I couldn\'t process that.';
+      final response =
+          result['message'] ??
+          result['response'] ??
+          'Sorry, I couldn\'t process that.';
 
       if (mounted) {
         final aiMsg = BuddyMessage(
@@ -233,6 +241,14 @@ class _BuddyScreenState extends State<BuddyScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: AppTheme.primaryColor),
     );
+  }
+
+  Future<void> _initPersona() async {
+    await BuddyService.loadSavedPersonas();
+    _activePersona = BuddyService.getActivePersona();
+    _savedPersonas = BuddyService.getSavedPersonas();
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
@@ -298,6 +314,45 @@ class _BuddyScreenState extends State<BuddyScreen>
                           shape: BoxShape.circle,
                         ),
                       ),
+                      if (_activePersona != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withValues(
+                              alpha: 0.08,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppTheme.primaryColor.withValues(
+                                alpha: 0.3,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.tune,
+                                size: 12,
+                                color: AppTheme.primaryColor,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _activePersona!.name,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   Row(
@@ -354,6 +409,15 @@ class _BuddyScreenState extends State<BuddyScreen>
             ),
             onSelected: (value) {
               switch (value) {
+                case 'create_persona':
+                  _showCreatePersonaDialog();
+                  break;
+                case 'manage_personas':
+                  _showManagePersonasDialog();
+                  break;
+                case 'clear_persona':
+                  _clearActivePersona();
+                  break;
                 case 'settings':
                   Navigator.push(
                     context,
@@ -371,9 +435,111 @@ class _BuddyScreenState extends State<BuddyScreen>
                 case 'history':
                   _showChatHistory();
                   break;
+                default:
+                  // Handle persona selection
+                  if (value.startsWith('persona_')) {
+                    final personaId = value.substring(8); // Remove "persona_"
+                    _selectPersona(personaId);
+                  }
               }
             },
             itemBuilder: (context) => [
+              // Show saved personas first
+              ..._savedPersonas.map(
+                (persona) => PopupMenuItem(
+                  value: 'persona_${persona.id}',
+                  child: Row(
+                    children: [
+                      Icon(
+                        _activePersona?.id == persona.id
+                            ? Icons.check_circle
+                            : Icons.person_outline,
+                        color: _activePersona?.id == persona.id
+                            ? AppTheme.primaryColor
+                            : AppTheme.textPrimaryColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              persona.name,
+                              style: TextStyle(
+                                color: _activePersona?.id == persona.id
+                                    ? AppTheme.primaryColor
+                                    : AppTheme.textPrimaryColor,
+                                fontWeight: _activePersona?.id == persona.id
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                            if (persona.description.isNotEmpty)
+                              Text(
+                                persona.description.length > 30
+                                    ? '${persona.description.substring(0, 30)}...'
+                                    : persona.description,
+                                style: TextStyle(
+                                  color: AppTheme.textSecondaryColor,
+                                  fontSize: 12,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_savedPersonas.isNotEmpty) const PopupMenuDivider(),
+
+              // Persona management
+              PopupMenuItem(
+                value: 'create_persona',
+                child: Row(
+                  children: [
+                    Icon(Icons.add, color: AppTheme.primaryColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Create New AI',
+                      style: TextStyle(color: AppTheme.primaryColor),
+                    ),
+                  ],
+                ),
+              ),
+              if (_savedPersonas.isNotEmpty)
+                PopupMenuItem(
+                  value: 'manage_personas',
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings, color: AppTheme.textPrimaryColor),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Manage AIs',
+                        style: TextStyle(color: AppTheme.textPrimaryColor),
+                      ),
+                    ],
+                  ),
+                ),
+              if (_activePersona != null)
+                PopupMenuItem(
+                  value: 'clear_persona',
+                  child: Row(
+                    children: [
+                      Icon(Icons.clear, color: Colors.orange),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Clear Active AI',
+                        style: TextStyle(color: Colors.orange),
+                      ),
+                    ],
+                  ),
+                ),
+
+              const PopupMenuDivider(),
+
+              // Original menu items
               PopupMenuItem(
                 value: 'settings',
                 child: Row(
@@ -878,6 +1044,337 @@ class _BuddyScreenState extends State<BuddyScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // Persona management methods
+  Future<void> _selectPersona(String personaId) async {
+    await BuddyService.setActivePersona(personaId);
+    _activePersona = BuddyService.getActivePersona();
+    setState(() {});
+    _showSnackBar('AI switched to ${_activePersona?.name}');
+  }
+
+  Future<void> _clearActivePersona() async {
+    final personaName = _activePersona?.name;
+    await BuddyService.setActivePersona(null);
+    _activePersona = null;
+    setState(() {});
+    _showSnackBar('Cleared active AI: $personaName');
+  }
+
+  Future<void> _showCreatePersonaDialog() async {
+    final nameCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: AppTheme.borderColor),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.smart_toy, color: AppTheme.primaryColor),
+            const SizedBox(width: 8),
+            Text(
+              'Create Custom AI',
+              style: TextStyle(color: AppTheme.textPrimaryColor),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: InputDecoration(
+                  labelText: 'AI Name',
+                  hintText: 'e.g., Teacher, Developer, Writer',
+                  labelStyle: TextStyle(color: AppTheme.textSecondaryColor),
+                  prefixIcon: Icon(Icons.person, color: AppTheme.primaryColor),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: descCtrl,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: 'AI Description & Behavior',
+                  hintText:
+                      'Describe how this AI should behave, its expertise, tone, etc.',
+                  labelStyle: TextStyle(color: AppTheme.textSecondaryColor),
+                  prefixIcon: Icon(
+                    Icons.description,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.lightbulb_outline,
+                      color: AppTheme.primaryColor,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Tip: Be specific! e.g., "Primary school teacher who explains complex topics in simple words"',
+                        style: TextStyle(
+                          color: AppTheme.primaryColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: AppTheme.textSecondaryColor),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter AI name')),
+                );
+                return;
+              }
+
+              await BuddyService.createPersona(name, descCtrl.text.trim());
+              _savedPersonas = BuddyService.getSavedPersonas();
+
+              // Auto-select the new persona
+              if (_savedPersonas.isNotEmpty) {
+                await BuddyService.setActivePersona(_savedPersonas.last.id);
+                _activePersona = BuddyService.getActivePersona();
+              }
+
+              setState(() {});
+              Navigator.of(ctx).pop();
+              _showSnackBar('AI "${name}" created and activated!');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+            ),
+            child: const Text(
+              'Create & Use',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showManagePersonasDialog() async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: AppTheme.borderColor),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.manage_accounts, color: AppTheme.primaryColor),
+              const SizedBox(width: 8),
+              Text(
+                'Manage Custom AIs',
+                style: TextStyle(color: AppTheme.textPrimaryColor),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 400,
+            child: _savedPersonas.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.smart_toy_outlined,
+                          size: 64,
+                          color: AppTheme.textSecondaryColor,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No Custom AIs yet',
+                          style: TextStyle(color: AppTheme.textSecondaryColor),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            _showCreatePersonaDialog();
+                          },
+                          icon: Icon(Icons.add, color: AppTheme.primaryColor),
+                          label: Text(
+                            'Create First AI',
+                            style: TextStyle(color: AppTheme.primaryColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _savedPersonas.length,
+                    itemBuilder: (context, index) {
+                      final persona = _savedPersonas[index];
+                      final isActive = _activePersona?.id == persona.id;
+
+                      return Card(
+                        color: isActive
+                            ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                            : AppTheme.backgroundColor,
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: isActive
+                                ? AppTheme.primaryColor
+                                : AppTheme.accentColor,
+                            child: Icon(
+                              isActive ? Icons.check : Icons.smart_toy,
+                              color: Colors.white,
+                            ),
+                          ),
+                          title: Text(
+                            persona.name,
+                            style: TextStyle(
+                              color: AppTheme.textPrimaryColor,
+                              fontWeight: isActive
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                          subtitle: persona.description.isNotEmpty
+                              ? Text(
+                                  persona.description,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: AppTheme.textSecondaryColor,
+                                  ),
+                                )
+                              : null,
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (!isActive)
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.play_circle_outline,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                  onPressed: () async {
+                                    await BuddyService.setActivePersona(
+                                      persona.id,
+                                    );
+                                    _activePersona =
+                                        BuddyService.getActivePersona();
+                                    setState(() {});
+                                    setDialogState(() {});
+                                    _showSnackBar(
+                                      'Switched to ${persona.name}',
+                                    );
+                                  },
+                                ),
+                              IconButton(
+                                icon: Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red,
+                                ),
+                                onPressed: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: Text('Delete ${persona.name}?'),
+                                      content: Text(
+                                        'This action cannot be undone.',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(ctx).pop(false),
+                                          child: Text('Cancel'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(ctx).pop(true),
+                                          child: Text(
+                                            'Delete',
+                                            style: TextStyle(color: Colors.red),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+
+                                  if (confirm == true) {
+                                    await BuddyService.deletePersona(
+                                      persona.id,
+                                    );
+                                    _savedPersonas =
+                                        BuddyService.getSavedPersonas();
+                                    _activePersona =
+                                        BuddyService.getActivePersona();
+                                    setState(() {});
+                                    setDialogState(() {});
+                                    _showSnackBar('${persona.name} deleted');
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _showCreatePersonaDialog();
+              },
+              icon: Icon(Icons.add, color: AppTheme.primaryColor),
+              label: Text(
+                'Add New AI',
+                style: TextStyle(color: AppTheme.primaryColor),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(
+                'Close',
+                style: TextStyle(color: AppTheme.textSecondaryColor),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

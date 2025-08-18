@@ -10,7 +10,7 @@ from app.models.user import User
 from app.dependencies import get_current_user
 import uuid
 
-router = APIRouter(prefix="/alarms", tags=["alarms"])
+router = APIRouter(prefix="/alarms", tags=["alarms"]) 
 
 class AlarmCreate(BaseModel):
     title: str
@@ -18,8 +18,8 @@ class AlarmCreate(BaseModel):
     scheduled_time: datetime
     type: str = "reminder"  # reminder, deadline, meeting, task, custom
     repeat: str = "none"  # none, daily, weekly, monthly, custom
-    flow_id: Optional[str] = None
-    checkpoint_id: Optional[str] = None
+    flow_id: Optional[int] = None
+    checkpoint_id: Optional[int] = None
 
 class AlarmUpdate(BaseModel):
     title: Optional[str] = None
@@ -37,8 +37,8 @@ class AlarmResponse(BaseModel):
     is_active: bool
     type: str
     repeat: str
-    flow_id: Optional[str]
-    checkpoint_id: Optional[str]
+    flow_id: Optional[int]
+    checkpoint_id: Optional[int]
     created_at: datetime
     last_triggered: Optional[datetime]
 
@@ -66,8 +66,8 @@ async def get_user_alarms(
                 is_active=alarm.is_active,
                 type=alarm.type.value if alarm.type else "reminder",
                 repeat=alarm.repeat.value if alarm.repeat else "none",
-                flow_id=str(alarm.flow_id) if alarm.flow_id else None,
-                checkpoint_id=str(alarm.checkpoint_id) if alarm.checkpoint_id else None,
+                flow_id=alarm.flow_id,
+                checkpoint_id=alarm.checkpoint_id,
                 created_at=alarm.created_at,
                 last_triggered=alarm.last_triggered
             )
@@ -121,8 +121,8 @@ async def create_alarm(
             is_active=alarm.is_active,
             type=alarm.type.value,
             repeat=alarm.repeat.value,
-            flow_id=str(alarm.flow_id) if alarm.flow_id else None,
-            checkpoint_id=str(alarm.checkpoint_id) if alarm.checkpoint_id else None,
+            flow_id=alarm.flow_id,
+            checkpoint_id=alarm.checkpoint_id,
             created_at=alarm.created_at,
             last_triggered=alarm.last_triggered
         )
@@ -159,8 +159,8 @@ async def get_alarm(
             is_active=alarm.is_active,
             type=alarm.type.value,
             repeat=alarm.repeat.value,
-            flow_id=str(alarm.flow_id) if alarm.flow_id else None,
-            checkpoint_id=str(alarm.checkpoint_id) if alarm.checkpoint_id else None,
+            flow_id=alarm.flow_id,
+            checkpoint_id=alarm.checkpoint_id,
             created_at=alarm.created_at,
             last_triggered=alarm.last_triggered
         )
@@ -222,8 +222,8 @@ async def update_alarm(
             is_active=alarm.is_active,
             type=alarm.type.value,
             repeat=alarm.repeat.value,
-            flow_id=str(alarm.flow_id) if alarm.flow_id else None,
-            checkpoint_id=str(alarm.checkpoint_id) if alarm.checkpoint_id else None,
+            flow_id=alarm.flow_id,
+            checkpoint_id=alarm.checkpoint_id,
             created_at=alarm.created_at,
             last_triggered=alarm.last_triggered
         )
@@ -292,8 +292,8 @@ async def get_upcoming_alarms(
                 is_active=alarm.is_active,
                 type=alarm.type.value,
                 repeat=alarm.repeat.value,
-                flow_id=str(alarm.flow_id) if alarm.flow_id else None,
-                checkpoint_id=str(alarm.checkpoint_id) if alarm.checkpoint_id else None,
+                flow_id=alarm.flow_id,
+                checkpoint_id=alarm.checkpoint_id,
                 created_at=alarm.created_at,
                 last_triggered=alarm.last_triggered
             )

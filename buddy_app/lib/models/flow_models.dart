@@ -789,6 +789,106 @@ enum AlarmType { reminder, deadline, meeting, task, custom }
 
 enum AlarmRepeat { none, daily, weekly, monthly, custom }
 
+// Task models for Flow automation
+enum TaskPriority { low, normal, high, urgent }
+
+enum TaskStatus { todo, inProgress, done, blocked }
+
+class FlowTask {
+  final String id;
+  final String title;
+  final String description;
+  final DateTime? dueDate;
+  final TaskPriority priority;
+  final TaskStatus status;
+  final String? flowId;
+  final String? checkpointId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final List<String> labels;
+
+  FlowTask({
+    required this.id,
+    required this.title,
+    this.description = '',
+    this.dueDate,
+    this.priority = TaskPriority.normal,
+    this.status = TaskStatus.todo,
+    this.flowId,
+    this.checkpointId,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    this.labels = const [],
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
+
+  factory FlowTask.fromJson(Map<String, dynamic> json) {
+    return FlowTask(
+      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      dueDate: json['due_date'] != null ? DateTime.tryParse(json['due_date'].toString()) : null,
+      priority: TaskPriority.values.firstWhere(
+        (e) => e.name == (json['priority']?.toString() ?? 'normal'),
+        orElse: () => TaskPriority.normal,
+      ),
+      status: TaskStatus.values.firstWhere(
+        (e) => e.name == (json['status']?.toString() ?? 'todo'),
+        orElse: () => TaskStatus.todo,
+      ),
+      flowId: json['flow_id']?.toString(),
+      checkpointId: json['checkpoint_id']?.toString(),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? '') ?? DateTime.now(),
+      labels: (json['labels'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'due_date': dueDate?.toIso8601String(),
+      'priority': priority.name,
+      'status': status.name,
+      'flow_id': flowId,
+      'checkpoint_id': checkpointId,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+      'labels': labels,
+    };
+  }
+
+  FlowTask copyWith({
+    String? id,
+    String? title,
+    String? description,
+    DateTime? dueDate,
+    TaskPriority? priority,
+    TaskStatus? status,
+    String? flowId,
+    String? checkpointId,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    List<String>? labels,
+  }) {
+    return FlowTask(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      dueDate: dueDate ?? this.dueDate,
+      priority: priority ?? this.priority,
+      status: status ?? this.status,
+      flowId: flowId ?? this.flowId,
+      checkpointId: checkpointId ?? this.checkpointId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      labels: labels ?? this.labels,
+    );
+  }
+}
+
 // Status (Stories) models
 enum StatusType { image, video }
 

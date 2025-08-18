@@ -1,6 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Enum, Float
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Enum, Float, JSON
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSON
 from app.core.database import Base
 from datetime import datetime
 import enum
@@ -149,8 +148,8 @@ class FlowAlarm(Base):
     is_active = Column(Boolean, default=True)
     type = Column(Enum(AlarmType), default=AlarmType.reminder)
     repeat = Column(Enum(AlarmRepeat), default=AlarmRepeat.none)
-    flow_id = Column(String(36), ForeignKey("project_flows.id"), nullable=True)
-    checkpoint_id = Column(String(36), nullable=True)
+    flow_id = Column(Integer, ForeignKey("project_flows.id"), nullable=True)
+    checkpoint_id = Column(Integer, ForeignKey("flow_checkpoints.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_triggered = Column(DateTime, nullable=True)
     

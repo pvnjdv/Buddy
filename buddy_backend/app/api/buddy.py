@@ -8,8 +8,10 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.flow import ProjectFlow, FlowCheckpoint, BuddyFlowMessage, FlowStatus, FlowDifficulty, CheckpointType, MessageContext, FlowAlarm as FlowAlarmModel, AlarmType, AlarmRepeat
 from app.models.user import User
+from app.models.persona import AIPersona  # Added for persona support
 from app.ai.buddy_ai import BuddyAI
 from app.dependencies import get_current_user
+from app.crud.persona import persona_crud  # Added for persona operations
 import json
 import re
 from datetime import datetime, timedelta
@@ -21,6 +23,7 @@ class BuddyQuery(BaseModel):
     prompt: str
     chat_history: Optional[List[Dict[str, Any]]] = []
     is_flow_request: Optional[bool] = False
+    persona_id: Optional[str] = None  # Added for persona support
 
 class TimelineQuery(BaseModel):
     project_description: str
@@ -334,20 +337,59 @@ async def ask_buddy(
     current_user: User = Depends(get_current_user)
 ):
     try:
+        # Get the persona if persona_id is provided
+        active_persona = None
+        if query.persona_id:
+            active_persona = await persona_crud.get_persona_by_id(db, query.persona_id, str(current_user.id))
+            if not active_persona:
+                return {
+                    "error": "Persona not found",
+                    "response": "The requested AI persona was not found. Using default Buddy instead."
+                }
+        else:
+            # If no persona_id specified, check for user's active persona
+            active_persona = await persona_crud.get_active_persona(db, str(current_user.id))
+
         # Check for flow confirmation responses first
         prompt_lower = query.prompt.lower()
         
         # Handle flow confirmation responses
         if any(phrase in prompt_lower for phrase in ['yes, create it', 'add this flow', 'create the flow', 'yes create']):
+            response_text = "Great! Please use the flow preview system by asking me to 'create flow for [your project]' to get started with the interactive flow creation process."
+            if active_persona:
+                persona_response = await buddy_ai.generate_persona_response(
+                    prompt=response_text,
+                    persona=active_persona,
+                    chat_history=query.chat_history
+                )
+                response_text = persona_response
+            
             return {
-                "response": "Great! Please use the flow preview system by asking me to 'create flow for [your project]' to get started with the interactive flow creation process.",
-                "suggestion": "Try: 'Create flow for website development' or 'Flow: mobile app project'"
+                "response": response_text,
+                "suggestion": "Try: 'Create flow for website development' or 'Flow: mobile app project'",
+                "active_persona": {
+                    "id": active_persona.id,
+                    "name": active_persona.name
+                } if active_persona else None
             }
         
         if prompt_lower.startswith('modify:'):
+            response_text = "I'd love to help you modify a flow! Please use the flow preview system first by asking me to 'create flow for [your project]', then I can help you customize it."
+            if active_persona:
+                persona_response = await buddy_ai.generate_persona_response(
+                    prompt=response_text,
+                    persona=active_persona,
+                    chat_history=query.chat_history
+                )
+                response_text = persona_response
+            
             return {
-                "response": "I'd love to help you modify a flow! Please use the flow preview system first by asking me to 'create flow for [your project]', then I can help you customize it.",
-                "suggestion": "Try: 'Create flow for [your project]' first"
+                "response": response_text,
+                "suggestion": "Try: 'Create flow for [your project]' first",
+                "active_persona": {
+                    "id": active_persona.id,
+                    "name": active_persona.name
+                } if active_persona else None
             }
         
         # Check if this is a flow creation request
@@ -355,8 +397,7 @@ async def ask_buddy(
         
         if flow_analysis["is_flow_request"]:
             # Direct user to preview system for better experience
-            return {
-                "response": f"""
+            base_response = f"""
 🎯 I detected you want to create a flow for: **{flow_analysis['project_description']}**
 
 💡 **New Interactive Flow Creation Available!**
@@ -374,19 +415,44 @@ This way you can:
 ✅ Get personalized checkpoint guidance
 
 Would you like me to create a preview for your project?
-""",
+"""
+            
+            # Apply persona if available
+            if active_persona:
+                persona_response = await buddy_ai.generate_persona_response(
+                    prompt=f"The user wants to create a project flow for: {flow_analysis['project_description']}. Guide them to use the flow preview system.",
+                    persona=active_persona,
+                    chat_history=query.chat_history
+                )
+                response_text = persona_response
+            else:
+                response_text = base_response
+            
+            return {
+                "response": response_text,
                 "flow_detected": True,
                 "project_description": flow_analysis['project_description'],
-                "suggestion": f"Preview flow for {flow_analysis['project_description']}"
+                "suggestion": f"Preview flow for {flow_analysis['project_description']}",
+                "active_persona": {
+                    "id": active_persona.id,
+                    "name": active_persona.name
+                } if active_persona else None
             }
         
-        # Regular AI conversation - use Groq API directly
-        response = await buddy_ai.generate_ai_response(
-            prompt=query.prompt,
-            chat_history=query.chat_history
-        )
+        # Regular AI conversation - use persona if available
+        if active_persona:
+            response = await buddy_ai.generate_persona_response(
+                prompt=query.prompt,
+                persona=active_persona,
+                chat_history=query.chat_history
+            )
+        else:
+            response = await buddy_ai.generate_ai_response(
+                prompt=query.prompt,
+                chat_history=query.chat_history
+            )
         
-        # Save conversation to database
+        # Save conversation to database with persona context
         user_message = BuddyFlowMessage(
             user_id=current_user.id,
             content=query.prompt,
@@ -405,7 +471,14 @@ Would you like me to create a preview for your project?
         
         await db.commit()
         
-        return {"response": response}
+        return {
+            "response": response,
+            "active_persona": {
+                "id": active_persona.id,
+                "name": active_persona.name,
+                "description": active_persona.description
+            } if active_persona else None
+        }
         
     except Exception as e:
         # Fallback response
@@ -433,7 +506,10 @@ Would you like me to create a preview for your project?
         except:
             pass  # If database operations fail, just return the response
         
-        return {"response": fallback_response}
+        return {
+            "response": fallback_response,
+            "error": str(e)
+        }
 
 # Helper: Create default alarms sequentially for a flow
 async def _create_default_alarms_for_flow(
@@ -454,8 +530,8 @@ async def _create_default_alarms_for_flow(
             scheduled_time=scheduled,
             type=AlarmType.deadline if cp.type in {CheckpointType.milestone, CheckpointType.review, CheckpointType.testing} else AlarmType.task,
             repeat=AlarmRepeat.none,
-            flow_id=str(flow.id),
-            checkpoint_id=str(cp.id),
+            flow_id=flow.id,
+            checkpoint_id=cp.id,
             is_active=True,
             created_at=datetime.utcnow(),
         )

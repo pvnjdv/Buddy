@@ -1239,40 +1239,419 @@ class EnhancedChatService {
       throw Exception('Failed to delete note: $e');
     }
   }
-}
 
-class StatusService {
-  static Future<List<StatusItem>> getStatuses() async {
-    // Mock data for status strip
+  // Tasks Management
+  static const String _tasksKey = 'user_tasks';
+
+  static Future<List<FlowTask>> getTasks() async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/tasks/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = jsonDecode(response.body);
+        return jsonList.map((j) => FlowTask.fromJson(j)).toList();
+      }
+    } catch (_) {}
+
+    // Fallback to local
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString(_tasksKey);
+      if (jsonStr != null) {
+        final List<dynamic> list = jsonDecode(jsonStr);
+        return list.map((j) => FlowTask.fromJson(j)).toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  static Future<void> _saveTasksLocally(List<FlowTask> tasks) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _tasksKey,
+      jsonEncode(tasks.map((t) => t.toJson()).toList()),
+    );
+  }
+
+  static Future<FlowTask> createTask(FlowTask task) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/tasks/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(task.toJson()),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return FlowTask.fromJson(jsonDecode(response.body));
+      }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (_) {
+      // Local fallback
+      final existing = await getTasks();
+      final local = task.copyWith(
+        id: task.id.isEmpty
+            ? DateTime.now().millisecondsSinceEpoch.toString()
+            : task.id,
+      );
+      existing.add(local);
+      await _saveTasksLocally(existing);
+      return local;
+    }
+  }
+
+  static Future<FlowTask> updateTask(FlowTask task) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.put(
+        Uri.parse('${ApiConfig.baseUrl}/tasks/${task.id}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(task.toJson()),
+      );
+      if (response.statusCode == 200) {
+        return FlowTask.fromJson(jsonDecode(response.body));
+      }
+      throw Exception('HTTP ${response.statusCode}');
+    } catch (_) {
+      // Local fallback
+      final existing = await getTasks();
+      final idx = existing.indexWhere((t) => t.id == task.id);
+      if (idx != -1) {
+        existing[idx] = task.copyWith(updatedAt: DateTime.now());
+      } else {
+        existing.add(task);
+      }
+      await _saveTasksLocally(existing);
+      return task;
+    }
+  }
+
+  static Future<bool> deleteTask(String taskId) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.baseUrl}/tasks/$taskId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        return true;
+      }
+    } catch (_) {}
+
+    // Local fallback
+    final existing = await getTasks();
+    existing.removeWhere((t) => t.id == taskId);
+    await _saveTasksLocally(existing);
+    return true;
+  }
+
+  static Future<List<FlowTask>> searchTasks(String query) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/tasks/search?q=${Uri.encodeComponent(query)}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = jsonDecode(response.body);
+        return jsonList.map((j) => FlowTask.fromJson(j)).toList();
+      }
+    } catch (_) {}
+
+    // Local filter
+    final tasks = await getTasks();
+    final q = query.toLowerCase();
+    return tasks
+        .where((t) =>
+            t.title.toLowerCase().contains(q) ||
+            t.description.toLowerCase().contains(q))
+        .toList();
+  }
+
+  // Helper to create a task from quick command e.g. "task: Buy milk tomorrow 9am #shopping !high"
+  static Future<FlowTask> quickCreateTask(String command, {String? flowId, String? checkpointId}) async {
+    final parsed = _parseTaskCommand(command);
+    final task = FlowTask(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: parsed['title'] ?? 'New Task',
+      description: parsed['description'] ?? '',
+      dueDate: parsed['dueDate'],
+      priority: parsed['priority'] ?? TaskPriority.normal,
+      status: TaskStatus.todo,
+      flowId: flowId,
+      checkpointId: checkpointId,
+      labels: parsed['labels'] ?? <String>[],
+    );
+    return await createTask(task);
+  }
+
+  static Map<String, dynamic> _parseTaskCommand(String cmd) {
+    final map = <String, dynamic>{};
+    var text = cmd.trim();
+    if (text.toLowerCase().startsWith('task:')) {
+      text = text.substring(5).trim();
+    } else if (text.toLowerCase().startsWith('create task')) {
+      text = text.substring('create task'.length).trim();
+    } else if (text.toLowerCase().startsWith('add task')) {
+      text = text.substring('add task'.length).trim();
+    }
+
+    // Extract labels like #work #personal
+    final labelRegex = RegExp(r'(#[\w-]+)');
+    final labels = labelRegex
+        .allMatches(text)
+        .map((m) => m.group(0)!.substring(1))
+        .toList();
+    text = text.replaceAll(labelRegex, '').trim();
+
+    // Extract priority like !high !urgent
+    TaskPriority priority = TaskPriority.normal;
+    final prioRegex = RegExp(r'!(low|normal|high|urgent)', caseSensitive: false);
+    final prioMatch = prioRegex.firstMatch(text);
+    if (prioMatch != null) {
+      final p = prioMatch.group(1)!.toLowerCase();
+      priority = TaskPriority.values.firstWhere(
+        (e) => e.name == p,
+        orElse: () => TaskPriority.normal,
+      );
+      text = text.replaceAll(prioRegex, '').trim();
+    }
+
+    // Extract simple due dates like "tomorrow 9am", "today 18:00", "in 2 days"
+    DateTime? dueDate;
     final now = DateTime.now();
-    return [
-      StatusItem(
-        id: 'me',
-        userId: 'current_user',
-        userName: 'My Status',
-        mediaUrl: 'https://picsum.photos/seed/me/600/900',
-        type: StatusType.image,
-        timestamp: now.subtract(const Duration(minutes: 5)),
-        seen: false,
-      ),
-      StatusItem(
-        id: '1',
-        userId: '1',
-        userName: 'Alice',
-        mediaUrl: 'https://picsum.photos/seed/alice/600/900',
-        type: StatusType.image,
-        timestamp: now.subtract(const Duration(hours: 2)),
-        seen: false,
-      ),
-      StatusItem(
-        id: '2',
-        userId: '2',
-        userName: 'Bob',
-        mediaUrl: 'https://picsum.photos/seed/bob/600/900',
-        type: StatusType.image,
-        timestamp: now.subtract(const Duration(hours: 4)),
-        seen: true,
-      ),
+    final lower = text.toLowerCase();
+    if (lower.contains('tomorrow')) {
+      var d = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+      final hm = _extractTimeHM(lower);
+      if (hm != null) {
+        d = DateTime(d.year, d.month, d.day, hm[0], hm[1]);
+      }
+      dueDate = d;
+      text = text.replaceAll('tomorrow', '').trim();
+    } else if (lower.contains('today')) {
+      final hm = _extractTimeHM(lower);
+      final h = hm != null ? hm[0] : now.hour;
+      final m = hm != null ? hm[1] : now.minute;
+      dueDate = DateTime(now.year, now.month, now.day, h, m);
+      text = text.replaceAll('today', '').trim();
+    } else {
+      final inRegex = RegExp(r'in (\d+) (minute|minutes|hour|hours|day|days|week|weeks)');
+      final m = inRegex.firstMatch(lower);
+      if (m != null) {
+        final n = int.parse(m.group(1)!);
+        final unit = m.group(2)!;
+        Duration d;
+        switch (unit) {
+          case 'minute':
+          case 'minutes':
+            d = Duration(minutes: n);
+            break;
+          case 'hour':
+          case 'hours':
+            d = Duration(hours: n);
+            break;
+          case 'day':
+          case 'days':
+            d = Duration(days: n);
+            break;
+          default:
+            d = Duration(days: 7 * n);
+        }
+        dueDate = now.add(d);
+        text = text.replaceAll(inRegex, '').trim();
+      }
+    }
+
+    // Remaining text: try split first sentence as title, rest as description
+    String title = text.trim();
+    String description = '';
+    final dot = title.indexOf('. ');
+    if (dot > 0) {
+      description = title.substring(dot + 2).trim();
+      title = title.substring(0, dot).trim();
+    }
+
+    map['title'] = title.isEmpty ? 'New Task' : title;
+    map['description'] = description;
+    map['labels'] = labels;
+    map['priority'] = priority;
+    map['dueDate'] = dueDate;
+    return map;
+  }
+
+  static List<int>? _extractTimeHM(String s) {
+    // 9am, 9:30am, 18:00
+    final ampm = RegExp(r'(\d{1,2})(?::(\d{2}))?\s*(am|pm)');
+    final m1 = ampm.firstMatch(s);
+    if (m1 != null) {
+      var h = int.parse(m1.group(1)!);
+      final min = int.tryParse(m1.group(2) ?? '0') ?? 0;
+      final ap = m1.group(3)!.toLowerCase();
+      if (ap == 'pm' && h < 12) h += 12;
+      if (ap == 'am' && h == 12) h = 0;
+      return [h, min];
+    }
+    final hhmm = RegExp(r'\b(\d{1,2}):(\d{2})\b');
+    final m2 = hhmm.firstMatch(s);
+    if (m2 != null) {
+      return [int.parse(m2.group(1)!), int.parse(m2.group(2)!)];
+    }
+    return null;
+  }
+
+  // Quick create Note from command like "note: Buy groceries #shopping"
+  static Future<Note> quickCreateNote(String command, {List<String> defaultLabels = const []}) async {
+    var text = command.trim();
+    if (text.toLowerCase().startsWith('note:')) {
+      text = text.substring(5).trim();
+    } else if (text.toLowerCase().startsWith('create note')) {
+      text = text.substring('create note'.length).trim();
+    } else if (text.toLowerCase().startsWith('add note')) {
+      text = text.substring('add note'.length).trim();
+    }
+
+    final labelRegex = RegExp(r'(#[\w-]+)');
+    final labels = [
+      ...defaultLabels,
+      ...labelRegex.allMatches(text).map((m) => m.group(0)!.substring(1)),
     ];
+    text = text.replaceAll(labelRegex, '').trim();
+
+    // Title is up to first period or 60 chars
+    String title = text.trim();
+    String content = '';
+    final dot = title.indexOf('. ');
+    if (dot > 0) {
+      content = title.substring(dot + 2).trim();
+      title = title.substring(0, dot).trim();
+    }
+    if (title.length > 60) {
+      content = title.substring(60).trim();
+      title = title.substring(0, 60).trim();
+    }
+
+    final note = Note(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title.isEmpty ? 'New Note' : title,
+      content: content,
+      labels: labels,
+      color: NoteColors.white,
+      isPinned: false,
+      isArchived: false,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      type: NoteType.text,
+    );
+    return await FlowService.createNote(note);
+  }
+
+  // Quick create Alarm from command like "remind me to submit report tomorrow 9am" or "alarm: Meeting at 18:00 #work"
+  static Future<FlowAlarm> quickCreateAlarm(String command, {String? flowId, String? checkpointId}) async {
+    var text = command.trim();
+    if (text.toLowerCase().startsWith('alarm:')) {
+      text = text.substring(6).trim();
+    } else if (text.toLowerCase().startsWith('remind me to')) {
+      text = text.substring('remind me to'.length).trim();
+    } else if (text.toLowerCase().startsWith('set a reminder to')) {
+      text = text.substring('set a reminder to'.length).trim();
+    } else if (text.toLowerCase().startsWith('reminder:')) {
+      text = text.substring('reminder:'.length).trim();
+    }
+
+    // Extract labels
+    final labelRegex = RegExp(r'(#[\w-]+)');
+    final labels = labelRegex
+        .allMatches(text)
+        .map((m) => m.group(0)!.substring(1))
+        .toList();
+    text = text.replaceAll(labelRegex, '').trim();
+
+    // Try to extract due date/time
+    DateTime scheduled = DateTime.now().add(const Duration(hours: 1));
+    final now = DateTime.now();
+    final lower = text.toLowerCase();
+    bool matchedDate = false;
+
+    if (lower.contains('tomorrow')) {
+      var d = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+      final hm = _extractTimeHM(lower);
+      if (hm != null) {
+        d = DateTime(d.year, d.month, d.day, hm[0], hm[1]);
+      }
+      scheduled = d;
+      text = text.replaceAll('tomorrow', '').trim();
+      matchedDate = true;
+    } else if (lower.contains('today')) {
+      final hm = _extractTimeHM(lower);
+      scheduled = DateTime(now.year, now.month, now.day, hm?.first ?? now.hour, hm?.last ?? now.minute);
+      text = text.replaceAll('today', '').trim();
+      matchedDate = true;
+    }
+
+    if (!matchedDate) {
+      final inRegex = RegExp(r'in (\d+) (minute|minutes|hour|hours|day|days|week|weeks)');
+      final m = inRegex.firstMatch(lower);
+      if (m != null) {
+        final n = int.parse(m.group(1)!);
+        final unit = m.group(2)!;
+        Duration d;
+        switch (unit) {
+          case 'minute':
+          case 'minutes':
+            d = Duration(minutes: n);
+            break;
+          case 'hour':
+          case 'hours':
+            d = Duration(hours: n);
+            break;
+          case 'day':
+          case 'days':
+            d = Duration(days: n);
+            break;
+          default:
+            d = Duration(days: 7 * n);
+        }
+        scheduled = now.add(d);
+        text = text.replaceAll(inRegex, '').trim();
+        matchedDate = true;
+      }
+    }
+
+    // Default title = remaining text
+    final title = text.isEmpty ? 'Reminder' : text[0].toUpperCase() + text.substring(1);
+
+    final alarm = FlowAlarm(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title,
+      description: labels.isEmpty ? '' : 'Labels: ${labels.join(', ')}',
+      scheduledTime: scheduled,
+      isActive: true,
+      type: AlarmType.reminder,
+      repeat: AlarmRepeat.none,
+      flowId: flowId,
+      checkpointId: checkpointId,
+      createdAt: DateTime.now(),
+    );
+
+    return await FlowService.createAlarm(alarm);
   }
 }
