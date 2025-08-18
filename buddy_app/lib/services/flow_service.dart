@@ -6,6 +6,10 @@ import '../models/flow_models.dart';
 import '../config/api_config.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:flutter_native_timezone/flutter_native_timezone.dart';
 
 class FlowService {
   // Update the completion status of a checkpoint in a flow (backend first, fallback to local)
@@ -778,63 +782,94 @@ class FlowService {
     ];
   }
 
-  // Alarms Management
-  static const String _alarmsKey = 'user_alarms';
+  // Alarms Management (centralized backend + local notifications)
+  // NOTE: Removed old local-only alarms storage and duplicate helpers.
+  // getAlarms/createAlarm/updateAlarm/deleteAlarm are defined below once.
 
   static Future<List<FlowAlarm>> getAlarms() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final alarmsString = prefs.getString(_alarmsKey);
-      if (alarmsString != null) {
-        final List<dynamic> alarmsJson = jsonDecode(alarmsString);
-        return alarmsJson.map((json) => FlowAlarm.fromJson(json)).toList();
+      final token = await AuthService.getToken();
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/alarms/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = jsonDecode(response.body);
+        return jsonList.map((j) => FlowAlarm.fromJson(j)).toList();
       }
-    } catch (e) {
-      print('Error reading alarms: $e');
+      throw Exception('Failed to fetch alarms');
+    } catch (_) {
+      // fallback to local storage if needed later
+      return [];
     }
-    return [];
-  }
-
-  static Future<void> _saveAlarmsLocally(List<FlowAlarm> alarms) async {
-    final prefs = await SharedPreferences.getInstance();
-    final alarmsJson = alarms.map((alarm) => alarm.toJson()).toList();
-    await prefs.setString(_alarmsKey, jsonEncode(alarmsJson));
   }
 
   static Future<FlowAlarm> createAlarm(FlowAlarm alarm) async {
     try {
-      final existingAlarms = await getAlarms();
-      existingAlarms.add(alarm);
-      await _saveAlarmsLocally(existingAlarms);
+      final token = await AuthService.getToken();
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/alarms/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(alarm.toJson()),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final created = FlowAlarm.fromJson(jsonDecode(response.body));
+        await _scheduleLocalNotification(created);
+        return created;
+      }
+      throw Exception('Failed to create alarm');
+    } catch (_) {
+      await _scheduleLocalNotification(alarm);
       return alarm;
-    } catch (e) {
-      throw Exception('Failed to create alarm: $e');
     }
   }
 
   static Future<FlowAlarm> updateAlarm(FlowAlarm alarm) async {
     try {
-      final existingAlarms = await getAlarms();
-      final index = existingAlarms.indexWhere((a) => a.id == alarm.id);
-      if (index != -1) {
-        existingAlarms[index] = alarm;
-        await _saveAlarmsLocally(existingAlarms);
-        return alarm;
-      } else {
-        throw Exception('Alarm not found');
+      final token = await AuthService.getToken();
+      final response = await http.put(
+        Uri.parse('${ApiConfig.baseUrl}/alarms/${alarm.id}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(alarm.toJson()),
+      );
+      if (response.statusCode == 200) {
+        final updated = FlowAlarm.fromJson(jsonDecode(response.body));
+        await cancelLocalNotification(updated.id.hashCode);
+        await _scheduleLocalNotification(updated);
+        return updated;
       }
-    } catch (e) {
-      throw Exception('Failed to update alarm: $e');
+      throw Exception('Failed to update alarm');
+    } catch (_) {
+      await cancelLocalNotification(alarm.id.hashCode);
+      await _scheduleLocalNotification(alarm);
+      return alarm;
     }
   }
 
-  static Future<void> deleteAlarm(String alarmId) async {
+  static Future<bool> deleteAlarm(String alarmId) async {
     try {
-      final existingAlarms = await getAlarms();
-      existingAlarms.removeWhere((alarm) => alarm.id == alarmId);
-      await _saveAlarmsLocally(existingAlarms);
-    } catch (e) {
-      throw Exception('Failed to delete alarm: $e');
+      final token = await AuthService.getToken();
+      final response = await http.delete(
+        Uri.parse('${ApiConfig.baseUrl}/alarms/$alarmId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      await cancelLocalNotification(alarmId.hashCode);
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (_) {
+      await cancelLocalNotification(alarmId.hashCode);
+      return true;
     }
   }
 
@@ -853,39 +888,91 @@ class FlowService {
     return alarms.where((alarm) => alarm.flowId == flowId).toList();
   }
 
-  // Try remote alarms API, fallback to local storage
-  static Future<FlowAlarm> _createAlarmSmart(FlowAlarm alarm) async {
+  // Local notifications instance (singleton)
+  static final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
+  static bool _notificationsInitialized = false;
+
+  static Future<void> ensureNotificationsInitialized() async {
+    if (_notificationsInitialized) return;
+    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const init = InitializationSettings(android: android);
+    await _notifications.initialize(init);
+
+    // Request notification permission on Android 13+
+    final androidImpl = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    await androidImpl?.requestNotificationsPermission();
+
+    // Initialize timezone
     try {
-      return await _createAlarmRemote(alarm);
+      final String timeZoneName =
+          await FlutterNativeTimezone.getLocalTimezone();
+      tzdata.initializeTimeZones();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
     } catch (_) {
-      return await createAlarm(alarm); // local
+      tzdata.initializeTimeZones();
+      tz.setLocalLocation(tz.getLocation('UTC'));
+    }
+
+    _notificationsInitialized = true;
+  }
+
+  static Future<void> cancelLocalNotification(int id) async {
+    try {
+      await ensureNotificationsInitialized();
+      await _notifications.cancel(id);
+    } catch (_) {}
+  }
+
+  static Future<void> _scheduleLocalNotification(FlowAlarm alarm) async {
+    try {
+      await ensureNotificationsInitialized();
+      final androidDetails = AndroidNotificationDetails(
+        'buddy_alarms',
+        'Buddy Alarms',
+        channelDescription: 'Reminders and flow deadlines',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+      );
+      final details = NotificationDetails(android: androidDetails);
+      final id = alarm.id.hashCode;
+      final scheduled = tz.TZDateTime.from(alarm.scheduledTime, tz.local);
+      await _notifications.zonedSchedule(
+        id,
+        alarm.title,
+        alarm.description,
+        scheduled,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: _repeatToComponents(alarm.repeat),
+      );
+    } catch (_) {}
+  }
+
+  static DateTimeComponents? _repeatToComponents(AlarmRepeat repeat) {
+    switch (repeat) {
+      case AlarmRepeat.daily:
+        return DateTimeComponents.time;
+      case AlarmRepeat.weekly:
+        return DateTimeComponents.dayOfWeekAndTime;
+      case AlarmRepeat.monthly:
+        return DateTimeComponents.dayOfMonthAndTime;
+      case AlarmRepeat.custom:
+        return null;
+      case AlarmRepeat.none:
+        return null;
     }
   }
 
-  static Future<FlowAlarm> _createAlarmRemote(FlowAlarm alarm) async {
-    final token = await AuthService.getToken();
-    final response = await http.post(
-      Uri.parse('${ApiConfig.baseUrl}/alarms/'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'title': alarm.title,
-        'description': alarm.description,
-        'scheduled_time': alarm.scheduledTime.toIso8601String(),
-        'type': alarm.type.name,
-        'repeat': alarm.repeat.name,
-        'flow_id': alarm.flowId,
-        'checkpoint_id': alarm.checkpointId,
-      }),
-    );
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return FlowAlarm.fromJson(json);
-    }
-    throw Exception('Alarm API error: ${response.statusCode}');
+  // Smart creator used by flow enrichment
+  static Future<FlowAlarm> _createAlarmSmart(FlowAlarm alarm) async {
+    return await createAlarm(alarm);
   }
 }
 
@@ -1180,66 +1267,6 @@ class EnhancedChatService {
     ];
   }
 
-  // Notes Management
-  static const String _notesKey = 'user_notes';
-
-  static Future<List<Note>> getNotes() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final notesString = prefs.getString(_notesKey);
-      if (notesString != null) {
-        final List<dynamic> notesJson = jsonDecode(notesString);
-        return notesJson.map((json) => Note.fromJson(json)).toList();
-      }
-    } catch (e) {
-      print('Error reading notes: $e');
-    }
-    return [];
-  }
-
-  static Future<void> _saveNotesLocally(List<Note> notes) async {
-    final prefs = await SharedPreferences.getInstance();
-    final notesJson = notes.map((note) => note.toJson()).toList();
-    await prefs.setString(_notesKey, jsonEncode(notesJson));
-  }
-
-  static Future<Note> createNote(Note note) async {
-    try {
-      final existingNotes = await getNotes();
-      existingNotes.add(note);
-      await _saveNotesLocally(existingNotes);
-      return note;
-    } catch (e) {
-      throw Exception('Failed to create note: $e');
-    }
-  }
-
-  static Future<Note> updateNote(Note note) async {
-    try {
-      final existingNotes = await getNotes();
-      final index = existingNotes.indexWhere((n) => n.id == note.id);
-      if (index != -1) {
-        existingNotes[index] = note;
-        await _saveNotesLocally(existingNotes);
-        return note;
-      } else {
-        throw Exception('Note not found');
-      }
-    } catch (e) {
-      throw Exception('Failed to update note: $e');
-    }
-  }
-
-  static Future<void> deleteNote(String noteId) async {
-    try {
-      final existingNotes = await getNotes();
-      existingNotes.removeWhere((note) => note.id == noteId);
-      await _saveNotesLocally(existingNotes);
-    } catch (e) {
-      throw Exception('Failed to delete note: $e');
-    }
-  }
-
   // Tasks Management
   static const String _tasksKey = 'user_tasks';
 
@@ -1364,7 +1391,9 @@ class EnhancedChatService {
     try {
       final token = await AuthService.getToken();
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/tasks/search?q=${Uri.encodeComponent(query)}'),
+        Uri.parse(
+          '${ApiConfig.baseUrl}/tasks/search?q=${Uri.encodeComponent(query)}',
+        ),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -1380,14 +1409,20 @@ class EnhancedChatService {
     final tasks = await getTasks();
     final q = query.toLowerCase();
     return tasks
-        .where((t) =>
-            t.title.toLowerCase().contains(q) ||
-            t.description.toLowerCase().contains(q))
+        .where(
+          (t) =>
+              t.title.toLowerCase().contains(q) ||
+              t.description.toLowerCase().contains(q),
+        )
         .toList();
   }
 
   // Helper to create a task from quick command e.g. "task: Buy milk tomorrow 9am #shopping !high"
-  static Future<FlowTask> quickCreateTask(String command, {String? flowId, String? checkpointId}) async {
+  static Future<FlowTask> quickCreateTask(
+    String command, {
+    String? flowId,
+    String? checkpointId,
+  }) async {
     final parsed = _parseTaskCommand(command);
     final task = FlowTask(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -1424,7 +1459,10 @@ class EnhancedChatService {
 
     // Extract priority like !high !urgent
     TaskPriority priority = TaskPriority.normal;
-    final prioRegex = RegExp(r'!(low|normal|high|urgent)', caseSensitive: false);
+    final prioRegex = RegExp(
+      r'!(low|normal|high|urgent)',
+      caseSensitive: false,
+    );
     final prioMatch = prioRegex.firstMatch(text);
     if (prioMatch != null) {
       final p = prioMatch.group(1)!.toLowerCase();
@@ -1440,7 +1478,11 @@ class EnhancedChatService {
     final now = DateTime.now();
     final lower = text.toLowerCase();
     if (lower.contains('tomorrow')) {
-      var d = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+      var d = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).add(const Duration(days: 1));
       final hm = _extractTimeHM(lower);
       if (hm != null) {
         d = DateTime(d.year, d.month, d.day, hm[0], hm[1]);
@@ -1454,7 +1496,9 @@ class EnhancedChatService {
       dueDate = DateTime(now.year, now.month, now.day, h, m);
       text = text.replaceAll('today', '').trim();
     } else {
-      final inRegex = RegExp(r'in (\d+) (minute|minutes|hour|hours|day|days|week|weeks)');
+      final inRegex = RegExp(
+        r'in (\d+) (minute|minutes|hour|hours|day|days|week|weeks)',
+      );
       final m = inRegex.firstMatch(lower);
       if (m != null) {
         final n = int.parse(m.group(1)!);
@@ -1519,7 +1563,10 @@ class EnhancedChatService {
   }
 
   // Quick create Note from command like "note: Buy groceries #shopping"
-  static Future<Note> quickCreateNote(String command, {List<String> defaultLabels = const []}) async {
+  static Future<Note> quickCreateNote(
+    String command, {
+    List<String> defaultLabels = const [],
+  }) async {
     var text = command.trim();
     if (text.toLowerCase().startsWith('note:')) {
       text = text.substring(5).trim();
@@ -1565,7 +1612,11 @@ class EnhancedChatService {
   }
 
   // Quick create Alarm from command like "remind me to submit report tomorrow 9am" or "alarm: Meeting at 18:00 #work"
-  static Future<FlowAlarm> quickCreateAlarm(String command, {String? flowId, String? checkpointId}) async {
+  static Future<FlowAlarm> quickCreateAlarm(
+    String command, {
+    String? flowId,
+    String? checkpointId,
+  }) async {
     var text = command.trim();
     if (text.toLowerCase().startsWith('alarm:')) {
       text = text.substring(6).trim();
@@ -1592,7 +1643,11 @@ class EnhancedChatService {
     bool matchedDate = false;
 
     if (lower.contains('tomorrow')) {
-      var d = DateTime(now.year, now.month, now.day).add(const Duration(days: 1));
+      var d = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).add(const Duration(days: 1));
       final hm = _extractTimeHM(lower);
       if (hm != null) {
         d = DateTime(d.year, d.month, d.day, hm[0], hm[1]);
@@ -1602,13 +1657,21 @@ class EnhancedChatService {
       matchedDate = true;
     } else if (lower.contains('today')) {
       final hm = _extractTimeHM(lower);
-      scheduled = DateTime(now.year, now.month, now.day, hm?.first ?? now.hour, hm?.last ?? now.minute);
+      scheduled = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        hm?.first ?? now.hour,
+        hm?.last ?? now.minute,
+      );
       text = text.replaceAll('today', '').trim();
       matchedDate = true;
     }
 
     if (!matchedDate) {
-      final inRegex = RegExp(r'in (\d+) (minute|minutes|hour|hours|day|days|week|weeks)');
+      final inRegex = RegExp(
+        r'in (\d+) (minute|minutes|hour|hours|day|days|week|weeks)',
+      );
       final m = inRegex.firstMatch(lower);
       if (m != null) {
         final n = int.parse(m.group(1)!);
@@ -1637,7 +1700,9 @@ class EnhancedChatService {
     }
 
     // Default title = remaining text
-    final title = text.isEmpty ? 'Reminder' : text[0].toUpperCase() + text.substring(1);
+    final title = text.isEmpty
+        ? 'Reminder'
+        : text[0].toUpperCase() + text.substring(1);
 
     final alarm = FlowAlarm(
       id: DateTime.now().millisecondsSinceEpoch.toString(),

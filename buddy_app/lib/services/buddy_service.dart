@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/flow_models.dart';
 import '../config/api_config.dart';
+import 'agent/buddy_orchestrator.dart';
 
 class AIPersona {
   final String id;
@@ -363,6 +364,35 @@ class BuddyService {
     try {
       print('=== SIMPLE ASKBUDDY STARTED ===');
       print('Prompt: "$prompt"');
+
+      // 1) Try on-device orchestrator skills first
+      try {
+        final orchestrator = BuddyOrchestrator();
+        final agentResult = await orchestrator.handle(prompt);
+        if (agentResult.handled) {
+          final msg = agentResult.message.isNotEmpty
+              ? agentResult.message
+              : 'Done.';
+          final assistantMessage = FlowBuddyMessage(
+            id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+            content: msg,
+            role: BuddyRole.assistant,
+            timestamp: DateTime.now(),
+          );
+          _chatHistory.add(assistantMessage);
+
+          return {
+            'success': true,
+            'response': msg,
+            'message': msg,
+            'is_flow_created': agentResult.extra?['is_flow_created'] ?? false,
+            'flow': agentResult.flow?.toJson(),
+            'extra': agentResult.extra,
+          };
+        }
+      } catch (e) {
+        print('Orchestrator error (ignored, fallback to backend): $e');
+      }
 
       final url = Uri.parse('${ApiConfig.baseUrl}/buddy/ask');
       print('Request URL: $url');

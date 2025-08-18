@@ -12,14 +12,36 @@ class FlowDetailScreen extends StatefulWidget {
   State<FlowDetailScreen> createState() => _FlowDetailScreenState();
 }
 
-class _FlowDetailScreenState extends State<FlowDetailScreen> {
+class _FlowDetailScreenState extends State<FlowDetailScreen>
+    with SingleTickerProviderStateMixin {
   late ProjectFlow _flow;
   bool _isLoading = false;
+
+  // New: tabs and related data
+  late TabController _tabController;
+  List<Note> _flowNotes = [];
+  List<FlowAlarm> _flowAlarms = [];
+  bool _loadingExtras = true;
 
   @override
   void initState() {
     super.initState();
     _flow = widget.flow;
+    _tabController = TabController(length: 3, vsync: this);
+    _loadExtras();
+  }
+
+  Future<void> _loadExtras() async {
+    setState(() => _loadingExtras = true);
+    try {
+      final allNotes = await FlowService.getNotes();
+      // Heuristic: notes labeled with flow title belong to this flow
+      _flowNotes = allNotes
+          .where((n) => n.labels.contains(_flow.title))
+          .toList();
+      _flowAlarms = await FlowService.getAlarmsForFlow(_flow.id);
+    } catch (_) {}
+    if (mounted) setState(() => _loadingExtras = false);
   }
 
   Future<void> _toggleCheckpoint(FlowCheckpoint checkpoint) async {
@@ -140,6 +162,14 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 1,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.timeline), text: 'Timelines'),
+            Tab(icon: Icon(Icons.note_alt), text: 'Notes'),
+            Tab(icon: Icon(Icons.alarm), text: 'Alarms & Meetings'),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.chat),
@@ -148,127 +178,220 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Flow Info Card
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _flow.description,
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                    const SizedBox(height: 16),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildTimelineTab(progressPercentage),
+          _buildNotesTab(),
+          _buildAlarmsTab(),
+        ],
+      ),
+    );
+  }
 
-                    // Progress Bar
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Overall Progress',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
+  Widget _buildTimelineTab(double progressPercentage) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Flow Info Card
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_flow.description, style: const TextStyle(fontSize: 16)),
+                  const SizedBox(height: 16),
+
+                  // Progress Bar
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Overall Progress',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
                             ),
-                            Text(
-                              '${progressPercentage.toInt()}%',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: LinearProgressIndicator(
-                            value: progressPercentage / 100,
-                            backgroundColor: Colors.grey[200],
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              _getProgressColor(progressPercentage),
-                            ),
-                            minHeight: 8,
                           ),
+                          Text(
+                            '${progressPercentage.toInt()}%',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          value: progressPercentage / 100,
+                          backgroundColor: Colors.grey[200],
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            _getProgressColor(progressPercentage),
+                          ),
+                          minHeight: 8,
                         ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Metadata
-                    Row(
-                      children: [
-                        _buildInfoChip(Icons.schedule, _flow.estimatedDuration),
-                        const SizedBox(width: 8),
-                        _buildDifficultyChip(_flow.difficulty),
-                        const SizedBox(width: 8),
-                        _buildStatusChip(_flow.status),
-                      ],
-                    ),
-
-                    if (_flow.tags.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 6,
-                        children: _flow.tags
-                            .map((tag) => _buildTag(tag))
-                            .toList(),
                       ),
                     ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Metadata
+                  Row(
+                    children: [
+                      _buildInfoChip(Icons.schedule, _flow.estimatedDuration),
+                      const SizedBox(width: 8),
+                      _buildDifficultyChip(_flow.difficulty),
+                      const SizedBox(width: 8),
+                      _buildStatusChip(_flow.status),
+                    ],
+                  ),
+
+                  if (_flow.tags.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 6,
+                      children: _flow.tags
+                          .map((tag) => _buildTag(tag))
+                          .toList(),
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
+          ),
 
-            const SizedBox(height: 24),
+          const SizedBox(height: 24),
 
-            // Checkpoints Section
-            Row(
-              children: [
-                const Icon(Icons.task_alt, color: Colors.blue),
-                const SizedBox(width: 8),
-                Text(
-                  'Checkpoints (${_flow.completedCheckpoints.length}/${_flow.checkpoints.length})',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+          // Checkpoints Section
+          Row(
+            children: [
+              const Icon(Icons.task_alt, color: Colors.blue),
+              const SizedBox(width: 8),
+              Text(
+                'Checkpoints (${_flow.completedCheckpoints.length}/${_flow.checkpoints.length})',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
 
-            const SizedBox(height: 16),
+          const SizedBox(height: 16),
 
-            // Checkpoints List
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _flow.checkpoints.length,
-              itemBuilder: (context, index) {
-                final checkpoint = _flow.checkpoints[index];
-                final isCurrentCheckpoint =
-                    index == _flow.currentCheckpointIndex;
+          // Checkpoints List
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _flow.checkpoints.length,
+            itemBuilder: (context, index) {
+              final checkpoint = _flow.checkpoints[index];
+              final isCurrentCheckpoint = index == _flow.currentCheckpointIndex;
+              return _buildCheckpointCard(checkpoint, isCurrentCheckpoint);
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
-                return _buildCheckpointCard(checkpoint, isCurrentCheckpoint);
-              },
-            ),
-          ],
+  Widget _buildNotesTab() {
+    if (_loadingExtras) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_flowNotes.isEmpty) {
+      return Center(
+        child: Text(
+          'No notes for this flow yet',
+          style: TextStyle(color: Colors.grey[600]),
         ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadExtras,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _flowNotes.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (_, i) {
+          final n = _flowNotes[i];
+          return Card(
+            child: ListTile(
+              title: Text(n.title.isEmpty ? 'Untitled' : n.title),
+              subtitle: n.type == NoteType.text
+                  ? Text(
+                      n.content,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : Text('${n.checklist.length} checklist items'),
+              trailing: n.isPinned
+                  ? const Icon(Icons.push_pin, size: 18)
+                  : null,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAlarmsTab() {
+    if (_loadingExtras) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_flowAlarms.isEmpty) {
+      return Center(
+        child: Text(
+          'No alarms or meetings for this flow yet',
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadExtras,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _flowAlarms.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (_, i) {
+          final a = _flowAlarms[i];
+          return Card(
+            child: ListTile(
+              leading: Icon(
+                a.type == AlarmType.meeting
+                    ? Icons.people_alt
+                    : (a.type == AlarmType.deadline
+                          ? Icons.event_available
+                          : Icons.alarm),
+                color: Colors.blue,
+              ),
+              title: Text(a.title),
+              subtitle: Text(
+                '${a.scheduledTime.toLocal()}\n${a.description}'.trim(),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              isThreeLine: true,
+              trailing: a.isActive
+                  ? const Icon(Icons.check_circle, color: Colors.green)
+                  : const Icon(Icons.remove_circle, color: Colors.redAccent),
+            ),
+          );
+        },
       ),
     );
   }
