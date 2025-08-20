@@ -319,13 +319,32 @@ class BuddyMessage {
   final String content;
   final BuddyRole role;
   final DateTime timestamp;
+  final bool isTyping;
 
   BuddyMessage({
     required this.id,
     required this.content,
     required this.role,
     required this.timestamp,
+    this.isTyping = false,
   });
+
+  // Helper method to create a copy with updated typing status
+  BuddyMessage copyWith({
+    String? id,
+    String? content,
+    BuddyRole? role,
+    DateTime? timestamp,
+    bool? isTyping,
+  }) {
+    return BuddyMessage(
+      id: id ?? this.id,
+      content: content ?? this.content,
+      role: role ?? this.role,
+      timestamp: timestamp ?? this.timestamp,
+      isTyping: isTyping ?? this.isTyping,
+    );
+  }
 
   factory BuddyMessage.fromJson(Map<String, dynamic> json) {
     return BuddyMessage(

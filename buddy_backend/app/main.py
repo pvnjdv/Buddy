@@ -15,6 +15,9 @@ from app.api.notes import router as notes_router
 from app.api.flows import router as flows_router
 from app.api.alarms import router as alarms_router
 from app.api.personas import router as personas_router
+from app.api.github import router as github_router
+from app.api.system import router as system_router
+from app.api.knowledge import router as knowledge_router
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -41,3 +44,6 @@ app.include_router(notes_router)
 app.include_router(flows_router)
 app.include_router(alarms_router)
 app.include_router(personas_router)
+app.include_router(github_router, prefix="/api/github", tags=["github"])
+app.include_router(system_router, prefix="/api/system", tags=["system"])
+app.include_router(knowledge_router, prefix="/api/knowledge", tags=["knowledge"])

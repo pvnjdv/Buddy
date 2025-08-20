@@ -12,10 +12,17 @@ from app.models.persona import AIPersona  # Added for persona support
 from app.ai.buddy_ai import BuddyAI
 from app.dependencies import get_current_user
 from app.crud.persona import persona_crud  # Added for persona operations
+from app.services.ai_thinking_service import AIThinkingService
+from app.services.github_service import GitHubService
+from app.services.system_service import SystemService
 import json
 import re
 from datetime import datetime, timedelta
 import uuid
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -24,6 +31,15 @@ class BuddyQuery(BaseModel):
     chat_history: Optional[List[Dict[str, Any]]] = []
     is_flow_request: Optional[bool] = False
     persona_id: Optional[str] = None  # Added for persona support
+
+class BuddyRequest(BaseModel):
+    message: str
+
+class BuddyResponse(BaseModel):
+    response: str
+    success: bool = True
+    thinking_summary: Optional[str] = None
+    intent_analysis: Optional[str] = None
 
 class TimelineQuery(BaseModel):
     project_description: str
@@ -45,6 +61,11 @@ class FlowProgressUpdate(BaseModel):
 
 # Initialize enhanced Buddy AI with unified AI client
 buddy_ai = BuddyAI()
+
+# Initialize enhanced services
+ai_thinking_service = AIThinkingService()
+github_service = GitHubService()
+system_service = SystemService()
 
 class FlowPreviewRequest(BaseModel):
     prompt: str
@@ -330,186 +351,249 @@ Make your response practical and encouraging.
         raise HTTPException(status_code=500, detail=f"Error getting checkpoint help: {str(e)}")
 
 # Original ask endpoint - enhanced for flow integration
-@router.post("/buddy/ask")
+@router.post("/buddy/ask", response_model=BuddyResponse)
 async def ask_buddy(
-    query: BuddyQuery,
-    db: AsyncSession = Depends(get_db),
+    request: BuddyQuery,
     current_user: User = Depends(get_current_user)
-):
+) -> BuddyResponse:
+    """Enhanced Buddy AI endpoint with intelligent routing and thinking capabilities"""
     try:
-        # Get the persona if persona_id is provided
-        active_persona = None
-        if query.persona_id:
-            active_persona = await persona_crud.get_persona_by_id(db, query.persona_id, str(current_user.id))
-            if not active_persona:
-                return {
-                    "error": "Persona not found",
-                    "response": "The requested AI persona was not found. Using default Buddy instead."
-                }
-        else:
-            # If no persona_id specified, check for user's active persona
-            active_persona = await persona_crud.get_active_persona(db, str(current_user.id))
-
-        # Check for flow confirmation responses first
-        prompt_lower = query.prompt.lower()
+        # Early detection for simple requests that don't need AI thinking overhead
+        prompt_lower = request.prompt.lower()
         
-        # Handle flow confirmation responses
-        if any(phrase in prompt_lower for phrase in ['yes, create it', 'add this flow', 'create the flow', 'yes create']):
-            response_text = "Great! Please use the flow preview system by asking me to 'create flow for [your project]' to get started with the interactive flow creation process."
-            if active_persona:
-                persona_response = await buddy_ai.generate_persona_response(
-                    prompt=response_text,
-                    persona=active_persona,
-                    chat_history=query.chat_history
-                )
-                response_text = persona_response
+        # Simple code generation requests - bypass thinking service for natural responses
+        code_keywords = ['generate code', 'write code', 'create code', 'code for', 'build app', 'make program']
+        is_simple_code_request = any(keyword in prompt_lower for keyword in code_keywords)
+        
+        # Simple greetings - bypass thinking service (only for very short greetings)
+        greeting_keywords = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening']
+        is_simple_greeting = any(request.prompt.strip().lower() == keyword for keyword in greeting_keywords) or (
+            any(keyword in prompt_lower for keyword in greeting_keywords) and len(request.prompt.split()) <= 2
+        )
+        
+        if is_simple_code_request or is_simple_greeting:
+            # Direct routing without AI thinking overhead for natural ChatGPT-like responses
+            logger.info(f"Direct routing (no thinking overhead) for user {current_user.id if current_user else 'anonymous'}")
             
-            return {
-                "response": response_text,
-                "suggestion": "Try: 'Create flow for website development' or 'Flow: mobile app project'",
-                "active_persona": {
-                    "id": active_persona.id,
-                    "name": active_persona.name
-                } if active_persona else None
-            }
-        
-        if prompt_lower.startswith('modify:'):
-            response_text = "I'd love to help you modify a flow! Please use the flow preview system first by asking me to 'create flow for [your project]', then I can help you customize it."
-            if active_persona:
-                persona_response = await buddy_ai.generate_persona_response(
-                    prompt=response_text,
-                    persona=active_persona,
-                    chat_history=query.chat_history
-                )
-                response_text = persona_response
+            user_id = str(current_user.id) if current_user else None
+            buddy_response = await buddy_ai.generate_ai_response(request.prompt, user_id)
             
-            return {
-                "response": response_text,
-                "suggestion": "Try: 'Create flow for [your project]' first",
-                "active_persona": {
-                    "id": active_persona.id,
-                    "name": active_persona.name
-                } if active_persona else None
-            }
-        
-        # Check if this is a flow creation request
-        flow_analysis = await buddy_ai.analyze_flow_request(query.prompt)
-        
-        if flow_analysis["is_flow_request"]:
-            # Direct user to preview system for better experience
-            base_response = f"""
-🎯 I detected you want to create a flow for: **{flow_analysis['project_description']}**
-
-💡 **New Interactive Flow Creation Available!**
-
-I can create a detailed project timeline with checkpoints, but let me show you a preview first so you can review and customize it.
-
-**Use this command for the best experience:**
-`/preview-flow {query.prompt}`
-
-Or simply ask: "Preview flow for {flow_analysis['project_description']}"
-
-This way you can:
-✅ See the complete timeline before creating
-✅ Request modifications if needed  
-✅ Get personalized checkpoint guidance
-
-Would you like me to create a preview for your project?
-"""
-            
-            # Apply persona if available
-            if active_persona:
-                persona_response = await buddy_ai.generate_persona_response(
-                    prompt=f"The user wants to create a project flow for: {flow_analysis['project_description']}. Guide them to use the flow preview system.",
-                    persona=active_persona,
-                    chat_history=query.chat_history
-                )
-                response_text = persona_response
+            # Format response naturally
+            if isinstance(buddy_response, dict):
+                if buddy_response.get("type") == "code_solution":
+                    content = buddy_response.get("content", {})
+                    if content.get("complete_code"):
+                        response = f"Here's your calculator code:\n\n```{content.get('primary_language', 'python')}\n{content.get('complete_code')}\n```\n\n{content.get('explanation', '')}"
+                    elif content.get("direct_code"):
+                        response = content.get("direct_code")
+                    else:
+                        response = content.get('solution_overview', 'Code generated successfully!')
+                elif buddy_response.get("type") == "simple_response":
+                    response = buddy_response.get("content", "Hi! How can I help you?")
+                elif buddy_response.get("type") == "enhanced_response":
+                    content = buddy_response.get("content", {})
+                    response = content.get("direct_answer", "I'd be happy to help!")
+                else:
+                    response = str(buddy_response.get("content", buddy_response))
             else:
-                response_text = base_response
+                response = str(buddy_response)
             
-            return {
-                "response": response_text,
-                "flow_detected": True,
-                "project_description": flow_analysis['project_description'],
-                "suggestion": f"Preview flow for {flow_analysis['project_description']}",
-                "active_persona": {
-                    "id": active_persona.id,
-                    "name": active_persona.name
-                } if active_persona else None
-            }
-        
-        # Regular AI conversation - use persona if available
-        if active_persona:
-            response = await buddy_ai.generate_persona_response(
-                prompt=query.prompt,
-                persona=active_persona,
-                chat_history=query.chat_history
+            return BuddyResponse(
+                response=response,
+                success=True,
+                thinking_summary="Direct natural response",
+                intent_analysis="simple_request"
             )
+        
+        # For complex requests, use AI Thinking Service for intent analysis
+        thinking_result = ai_thinking_service.analyze_intent(request.prompt)
+        
+        response = None
+        
+        # Route to appropriate service based on intent analysis
+        if thinking_result.get("primary_intent") == "github_operations":
+            logger.info(f"Routing to GitHub service for user {current_user.id if current_user else 'anonymous'}")
+            
+            # Extract GitHub operation details from thinking result
+            github_intent = thinking_result.get("github_intent", {})
+            operation = github_intent.get("operation", "unknown")
+            
+            if operation == "clone":
+                repo_url = github_intent.get("repository_url", "")
+                local_path = github_intent.get("local_path", "./cloned_repo")
+                result = await github_service.clone_repository(repo_url, local_path)
+                response = f"GitHub Clone: {result.get('message', 'Operation completed')}"
+                
+            elif operation == "status":
+                repo_path = github_intent.get("repository_path", ".")
+                result = await github_service.get_status(repo_path)
+                response = f"Git Status: {result.get('status', 'No changes')}"
+                
+            elif operation == "commit":
+                repo_path = github_intent.get("repository_path", ".")
+                message = github_intent.get("commit_message", "Auto commit")
+                result = await github_service.commit_changes(repo_path, message)
+                response = f"Git Commit: {result.get('message', 'Committed successfully')}"
+                
+            elif operation == "push":
+                repo_path = github_intent.get("repository_path", ".")
+                result = await github_service.push_changes(repo_path)
+                response = f"Git Push: {result.get('message', 'Pushed successfully')}"
+                
+            elif operation == "pull":
+                repo_path = github_intent.get("repository_path", ".")
+                result = await github_service.pull_changes(repo_path)
+                response = f"Git Pull: {result.get('message', 'Pulled successfully')}"
+                
+            else:
+                response = "I can help you with GitHub operations like clone, commit, push, pull, and status. What would you like to do?"
+                
+        elif thinking_result.get("primary_intent") == "system_control":
+            logger.info(f"Routing to System service for user {current_user.id if current_user else 'anonymous'}")
+            
+            # Extract system operation details
+            system_intent = thinking_result.get("system_intent", {})
+            operation = system_intent.get("operation", "unknown")
+            
+            if operation == "processes":
+                processes = await system_service.get_running_processes()
+                process_count = len(processes)
+                response = f"System Info: Found {process_count} running processes. Top processes: {', '.join([p['name'] for p in processes[:5]])}"
+                
+            elif operation == "system_info":
+                sys_info = await system_service.get_system_info()
+                cpu_percent = sys_info.get('cpu_percent', 'N/A')
+                memory_percent = sys_info.get('memory_percent', 'N/A')
+                response = f"System Status: CPU: {cpu_percent}%, Memory: {memory_percent}%, Platform: {sys_info.get('platform', 'Unknown')}"
+                
+            elif operation == "kill_process":
+                process_name = system_intent.get("process_name", "")
+                if process_name:
+                    result = await system_service.kill_process(process_name)
+                    response = f"Process Control: {result.get('message', 'Operation completed')}"
+                else:
+                    response = "Please specify which process you'd like to terminate."
+                    
+            elif operation == "execute_command":
+                command = system_intent.get("command", "")
+                if command:
+                    result = await system_service.execute_command(command)
+                    output = result.get('output', 'No output')[:200]  # Limit output
+                    response = f"Command Execution: {output}"
+                else:
+                    response = "Please specify the command you'd like to execute."
+                    
+            else:
+                response = "I can help you with system operations like viewing processes, system info, killing processes, and executing commands. What would you like to do?"
+                
+        elif thinking_result.get("primary_intent") in ["flow_generation", "notes", "alarms", "meetings"]:
+            # Enhanced flow generation with thinking integration
+            logger.info(f"Routing to enhanced Buddy AI for flow generation for user {current_user.id if current_user else 'anonymous'}")
+            
+            # Generate response strategy
+            strategy = ai_thinking_service.generate_response_strategy(thinking_result)
+            
+            # Use strategy to enhance the buddy AI response
+            enhanced_message = f"{request.prompt}\n\nContext: {strategy.get('approach', '')}\nFocus: {', '.join(strategy.get('focus_areas', []))}"
+            
+            # Use new dynamic AI system with user context
+            user_id = str(current_user.id) if current_user else None
+            buddy_response = await buddy_ai.generate_ai_response(enhanced_message, user_id)
+            
+            # Extract response text from dynamic AI response
+            if isinstance(buddy_response, dict):
+                if buddy_response.get("type") == "simple_response":
+                    # For simple greetings, return the natural text directly
+                    response = buddy_response.get("content", "Hi! How can I help you?")
+                elif buddy_response.get("type") == "flow":
+                    # For flow generation, format the response nicely
+                    content = buddy_response.get("content", {})
+                    response = f"🎯 Generated Flow: {content.get('title', 'Project Flow')}\n\n"
+                    if content.get('description'):
+                        response += f"{content.get('description')}\n\n"
+                    response += "✅ Flow created successfully with personalized timeline, notes, and reminders!"
+                elif buddy_response.get("type") == "code_solution":
+                    # For code generation, show solution overview
+                    content = buddy_response.get("content", {})
+                    response = f"💻 Code Solution Generated!\n\n{content.get('solution_overview', 'Complete solution ready')}"
+                elif buddy_response.get("type") == "enhanced_response":
+                    # For enhanced responses, extract the direct answer (natural ChatGPT-style)
+                    content = buddy_response.get("content", {})
+                    response = content.get("direct_answer", "I'd be happy to help!")
+                else:
+                    response = str(buddy_response.get("content", buddy_response))
+            else:
+                response = str(buddy_response)
+            
+            # Add thinking insights to response
+            thinking_summary = thinking_result.get("summary", "")
+            if thinking_summary:
+                response = f"{response}\n\n🤔 AI Thinking: {thinking_summary}"
+                
         else:
-            response = await buddy_ai.generate_ai_response(
-                prompt=query.prompt,
-                chat_history=query.chat_history
-            )
+            # General Buddy AI - Natural ChatGPT-like responses without AI strategy overhead
+            logger.info(f"Routing to general Buddy AI for user {current_user.id if current_user else 'anonymous'}")
+            
+            # Check if this is a simple code generation request
+            prompt_lower = request.prompt.lower()
+            code_keywords = ['generate code', 'write code', 'create code', 'code for', 'build app', 'make program']
+            is_simple_code_request = any(keyword in prompt_lower for keyword in code_keywords)
+            
+            # Use natural AI system directly without strategy overhead for code requests
+            user_id = str(current_user.id) if current_user else None
+            
+            if is_simple_code_request:
+                # Direct code generation without AI strategy interference 
+                buddy_response = await buddy_ai.generate_ai_response(request.prompt, user_id)
+            else:
+                # For non-code requests, we can add some light strategy context
+                strategy = ai_thinking_service.generate_response_strategy(thinking_result)
+                enhanced_message = f"{request.prompt}\n\nContext: {strategy.get('approach', '')}"
+                buddy_response = await buddy_ai.generate_ai_response(enhanced_message, user_id)
+            
+            # Extract response text from dynamic AI response
+            if isinstance(buddy_response, dict):
+                if buddy_response.get("type") == "simple_response":
+                    # For simple responses, return the natural text directly
+                    response = buddy_response.get("content", "Hi! How can I help you?")
+                elif buddy_response.get("type") == "code_solution":
+                    # For code generation, format the response properly
+                    content = buddy_response.get("content", {})
+                    if content.get("complete_code"):
+                        response = f"Here's your calculator code:\n\n```{content.get('primary_language', 'python')}\n{content.get('complete_code')}\n```\n\n{content.get('explanation', '')}"
+                    elif content.get("direct_code"):
+                        response = content.get("direct_code")
+                    else:
+                        response = content.get('solution_overview', 'Code generated successfully!')
+                elif buddy_response.get("type") == "enhanced_response":
+                    content = buddy_response.get("content", {})
+                    response = content.get("direct_answer", "I'd be happy to help!")
+                elif buddy_response.get("type") == "error":
+                    content = buddy_response.get("content", {})
+                    response = f"I encountered an issue: {content.get('error', 'Unknown error')}"
+                else:
+                    response = str(buddy_response.get("content", buddy_response))
+            else:
+                response = str(buddy_response)
         
-        # Save conversation to database with persona context
-        user_message = BuddyFlowMessage(
-            user_id=current_user.id,
-            content=query.prompt,
-            role="user",
-            context=MessageContext.general
+        # Log the interaction for debugging
+        logger.info(f"Buddy AI Response - Intent: {thinking_result.get('primary_intent', 'general')}, User: {current_user.id if current_user else 'anonymous'}")
+        
+        return BuddyResponse(
+            response=response or "I'm here to help! You can ask me about flows, GitHub operations, system control, or general assistance.",
+            success=True,
+            thinking_summary=thinking_result.get("summary", ""),
+            intent_analysis=thinking_result.get("primary_intent", "general")
         )
-        db.add(user_message)
-        
-        buddy_message = BuddyFlowMessage(
-            user_id=current_user.id,
-            content=response,
-            role="assistant", 
-            context=MessageContext.general
-        )
-        db.add(buddy_message)
-        
-        await db.commit()
-        
-        return {
-            "response": response,
-            "active_persona": {
-                "id": active_persona.id,
-                "name": active_persona.name,
-                "description": active_persona.description
-            } if active_persona else None
-        }
         
     except Exception as e:
-        # Fallback response
-        fallback_response = "I apologize, but I'm experiencing technical difficulties. Please try again in a moment. If you're trying to create a flow, try using 'create flow for [your project]' format."
-        
-        try:
-            # Save error interaction
-            error_message = BuddyFlowMessage(
-                user_id=current_user.id,
-                content=query.prompt,
-                role="user",
-                context=MessageContext.general
-            )
-            db.add(error_message)
-            
-            fallback_message = BuddyFlowMessage(
-                user_id=current_user.id,
-                content=fallback_response,
-                role="assistant",
-                context=MessageContext.general
-            )
-            db.add(fallback_message)
-            
-            await db.commit()
-        except:
-            pass  # If database operations fail, just return the response
-        
-        return {
-            "response": fallback_response,
-            "error": str(e)
-        }
+        logger.error(f"Error in ask_buddy: {str(e)}")
+        return BuddyResponse(
+            response=f"I encountered an error: {str(e)}. Please try again or rephrase your request.",
+            success=False,
+            thinking_summary="Error occurred during processing",
+            intent_analysis="error"
+        )
 
 # Helper: Create default alarms sequentially for a flow
 async def _create_default_alarms_for_flow(
@@ -599,3 +683,62 @@ async def switch_ai_mode(mode_request: ModeSwitch):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error switching mode: {str(e)}")
+
+@router.post("/buddy/generate-flow-notes")
+async def generate_flow_notes(
+    request: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate notes for a specific flow when requested"""
+    try:
+        flow_id = request.get("flow_id")
+        flow_data = request.get("flow_data", {})
+        
+        user_id = str(current_user.id) if current_user else None
+        user_context = await buddy_ai.get_user_context(user_id) if user_id else {}
+        relevant_knowledge = await buddy_ai.get_relevant_context(f"notes for {flow_data.get('title', '')}", limit=3)
+        
+        notes = await buddy_ai.generate_flow_notes(flow_data, user_context, relevant_knowledge)
+        
+        return {
+            "success": True,
+            "notes": notes,
+            "message": "Notes generated successfully!"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating flow notes: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to generate notes"
+        }
+
+@router.post("/buddy/generate-flow-alarms")
+async def generate_flow_alarms(
+    request: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate alarms for a specific flow when requested"""
+    try:
+        flow_id = request.get("flow_id")
+        flow_data = request.get("flow_data", {})
+        
+        user_id = str(current_user.id) if current_user else None
+        user_context = await buddy_ai.get_user_context(user_id) if user_id else {}
+        
+        alarms = await buddy_ai.generate_flow_alarms(flow_data, user_context)
+        
+        return {
+            "success": True,
+            "alarms": alarms,
+            "message": "Alarms generated successfully!"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating flow alarms: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to generate alarms"
+        }

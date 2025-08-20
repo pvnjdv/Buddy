@@ -16,34 +16,50 @@ class FlowScreen extends StatefulWidget {
   State<FlowScreen> createState() => _FlowScreenState();
 }
 
-class _FlowScreenState extends State<FlowScreen> {
+class _FlowScreenState extends State<FlowScreen>
+    with SingleTickerProviderStateMixin {
   List<ProjectFlow> _flows = [];
+  List<Note> _notes = [];
+  List<FlowAlarm> _alarms = [];
   bool _isLoading = true;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _loadFlows();
+    _tabController = TabController(length: 3, vsync: this);
+    _loadAllData();
   }
 
-  Future<void> _loadFlows() async {
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadAllData() async {
+    setState(() => _isLoading = true);
     try {
       final flows = await FlowService.getProjectFlows();
+      final notes = await FlowService.getNotes();
+      final alarms = await FlowService.getAlarms();
+
       setState(() {
         _flows = flows;
+        _notes = notes;
+        _alarms = alarms;
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error loading flows: $e')));
+      ).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
     }
   }
 
-  Future<void> _refreshFlows() async {
-    setState(() => _isLoading = true);
-    await _loadFlows();
+  Future<void> _refreshData() async {
+    await _loadAllData();
   }
 
   @override
@@ -52,7 +68,7 @@ class _FlowScreenState extends State<FlowScreen> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: Text(
-          'Project Flows',
+          'Buddy',
           style: TextStyle(
             color: AppTheme.textPrimaryColor,
             fontWeight: FontWeight.w600,
@@ -62,19 +78,21 @@ class _FlowScreenState extends State<FlowScreen> {
         foregroundColor: AppTheme.textPrimaryColor,
         elevation: 0,
         automaticallyImplyLeading: false,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: AppTheme.primaryColor,
+          unselectedLabelColor: AppTheme.textSecondaryColor,
+          indicatorColor: AppTheme.primaryColor,
+          tabs: const [
+            Tab(text: 'Flows', icon: Icon(Icons.account_tree)),
+            Tab(text: 'Notes', icon: Icon(Icons.note_alt)),
+            Tab(text: 'Alarms', icon: Icon(Icons.alarm)),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: Icon(Icons.note_add, color: AppTheme.textPrimaryColor),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const NotesAlarmsScreen(),
-              ),
-            ),
-          ),
-          IconButton(
             icon: Icon(Icons.refresh, color: AppTheme.textPrimaryColor),
-            onPressed: _refreshFlows,
+            onPressed: _refreshData,
           ),
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: AppTheme.textPrimaryColor),
@@ -208,25 +226,14 @@ class _FlowScreenState extends State<FlowScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _flows.isEmpty
-          ? _buildEmptyState()
-          : RefreshIndicator(
-              onRefresh: _refreshFlows,
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _flows.length,
-                itemBuilder: (context, index) {
-                  final flow = _flows[index];
-                  return _buildFlowCard(flow);
-                },
-              ),
-            ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [_buildFlowsTab(), _buildNotesTab(), _buildAlarmsTab()],
+      ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showQuickActions,
-        icon: const Icon(Icons.add),
-        label: const Text('Quick Actions'),
+        onPressed: _getContextualAction,
+        icon: Icon(_getContextualIcon()),
+        label: Text(_getContextualLabel()),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
       ),
@@ -660,7 +667,7 @@ class _FlowScreenState extends State<FlowScreen> {
       );
 
       await FlowService.updateProjectFlow(updatedFlow);
-      await _refreshFlows();
+      await _refreshData();
 
       ScaffoldMessenger.of(
         context,
@@ -675,7 +682,7 @@ class _FlowScreenState extends State<FlowScreen> {
   Future<void> _deleteFlow(ProjectFlow flow) async {
     try {
       await FlowService.deleteProjectFlow(flow.id);
-      await _refreshFlows();
+      await _refreshData();
 
       ScaffoldMessenger.of(
         context,
@@ -1008,7 +1015,7 @@ class _FlowScreenState extends State<FlowScreen> {
       final flow = await FlowService.generateFlowFromDescription(description);
 
       // If backend created the flow, it will appear in list on refresh
-      await _refreshFlows();
+      await _refreshData();
 
       // Navigate to detail for immediate view
       if (!mounted) return;
@@ -1023,6 +1030,253 @@ class _FlowScreenState extends State<FlowScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to generate flow: $e')));
+    }
+  }
+
+  Widget _buildFlowsTab() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_flows.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refreshData,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _flows.length,
+        itemBuilder: (context, index) {
+          final flow = _flows[index];
+          return _buildFlowCard(flow);
+        },
+      ),
+    );
+  }
+
+  Widget _buildNotesTab() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_notes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.note_alt, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No Notes Yet',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add notes to keep track of important information',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CreateNoteScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.note_add),
+              label: const Text('Create Note'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refreshData,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _notes.length,
+        itemBuilder: (context, index) {
+          final note = _notes[index];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              leading: Icon(Icons.note_alt, color: AppTheme.primaryColor),
+              title: Text(note.title),
+              subtitle: Text(
+                note.content,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Text(
+                _formatDate(note.createdAt),
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+              onTap: () {
+                // Navigate to note details or edit
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAlarmsTab() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_alarms.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.alarm, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No Alarms Yet',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Set up alarms to get reminders for important tasks',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CreateAlarmScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.alarm_add),
+              label: const Text('Create Alarm'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refreshData,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _alarms.length,
+        itemBuilder: (context, index) {
+          final alarm = _alarms[index];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              leading: Icon(
+                Icons.alarm,
+                color: alarm.isActive ? AppTheme.warningColor : Colors.grey,
+              ),
+              title: Text(alarm.title),
+              subtitle: Text(alarm.description),
+              trailing: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    _formatDate(alarm.scheduledTime),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  if (alarm.isActive)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warningColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Active',
+                        style: TextStyle(color: Colors.white, fontSize: 10),
+                      ),
+                    ),
+                ],
+              ),
+              onTap: () {
+                // Navigate to alarm details or edit
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays > 7) {
+      return '${date.day}/${date.month}/${date.year}';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
+  }
+
+  void _getContextualAction() {
+    switch (_tabController.index) {
+      case 0: // Flows tab
+        _showQuickActions();
+        break;
+      case 1: // Notes tab
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CreateNoteScreen()),
+        );
+        break;
+      case 2: // Alarms tab
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CreateAlarmScreen()),
+        );
+        break;
+    }
+  }
+
+  IconData _getContextualIcon() {
+    switch (_tabController.index) {
+      case 0: // Flows tab
+        return Icons.add;
+      case 1: // Notes tab
+        return Icons.note_add;
+      case 2: // Alarms tab
+        return Icons.alarm_add;
+      default:
+        return Icons.add;
+    }
+  }
+
+  String _getContextualLabel() {
+    switch (_tabController.index) {
+      case 0: // Flows tab
+        return 'Quick Actions';
+      case 1: // Notes tab
+        return 'Add Note';
+      case 2: // Alarms tab
+        return 'Add Alarm';
+      default:
+        return 'Add';
     }
   }
 }

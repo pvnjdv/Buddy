@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/dock_models.dart';
@@ -586,6 +587,206 @@ class DockService {
       return response.statusCode == 200;
     } catch (e) {
       return false;
+    }
+  }
+
+  // ============ Enhanced System Monitoring ============
+
+  /// Get comprehensive system information for dock
+  static Future<Map<String, dynamic>> getSystemInfo() async {
+    try {
+      final systemInfo = <String, dynamic>{};
+
+      // Get system resources
+      systemInfo['resources'] = await _getSystemResources();
+
+      // Get running processes
+      systemInfo['processes'] = await _getRunningProcesses();
+
+      // Get network information
+      systemInfo['network'] = await _getNetworkInfo();
+
+      return systemInfo;
+    } catch (e) {
+      print('Error getting system info: $e');
+      return {'error': e.toString()};
+    }
+  }
+
+  /// Get current running processes
+  static Future<List<Map<String, dynamic>>> _getRunningProcesses() async {
+    try {
+      final processes = <Map<String, dynamic>>[];
+
+      if (Platform.isLinux || Platform.isMacOS) {
+        final result = await Process.run('ps', [
+          '-eo',
+          'pid,ppid,pcpu,pmem,comm,args',
+        ]);
+        if (result.exitCode == 0) {
+          final lines = result.stdout.toString().split('\n');
+          for (int i = 1; i < lines.length; i++) {
+            final line = lines[i].trim();
+            if (line.isNotEmpty) {
+              final parts = line.split(RegExp(r'\s+'));
+              if (parts.length >= 6) {
+                processes.add({
+                  'pid': int.tryParse(parts[0]) ?? 0,
+                  'ppid': int.tryParse(parts[1]) ?? 0,
+                  'cpu_percent': double.tryParse(parts[2]) ?? 0.0,
+                  'memory_percent': double.tryParse(parts[3]) ?? 0.0,
+                  'command': parts[4],
+                  'args': parts.sublist(5).join(' '),
+                  'timestamp': DateTime.now().toIso8601String(),
+                });
+              }
+            }
+          }
+        }
+      } else if (Platform.isWindows) {
+        final result = await Process.run('tasklist', ['/fo', 'csv']);
+        if (result.exitCode == 0) {
+          final lines = result.stdout.toString().split('\n');
+          for (int i = 1; i < lines.length; i++) {
+            final line = lines[i].trim();
+            if (line.isNotEmpty) {
+              final parts = line.split(',');
+              if (parts.length >= 5) {
+                processes.add({
+                  'name': parts[0].replaceAll('"', ''),
+                  'pid': int.tryParse(parts[1].replaceAll('"', '')) ?? 0,
+                  'session_name': parts[2].replaceAll('"', ''),
+                  'session_number': parts[3].replaceAll('"', ''),
+                  'memory_usage': parts[4].replaceAll('"', ''),
+                  'timestamp': DateTime.now().toIso8601String(),
+                });
+              }
+            }
+          }
+        }
+      }
+
+      return processes;
+    } catch (e) {
+      print('Error getting processes: $e');
+      return [];
+    }
+  }
+
+  /// Kill a specific process by PID
+  static Future<Map<String, dynamic>> killProcess(int pid) async {
+    try {
+      ProcessResult result;
+
+      if (Platform.isWindows) {
+        result = await Process.run('taskkill', ['/PID', pid.toString(), '/F']);
+      } else {
+        result = await Process.run('kill', ['-9', pid.toString()]);
+      }
+
+      return {
+        'success': result.exitCode == 0,
+        'message': result.exitCode == 0
+            ? 'Process $pid terminated successfully'
+            : 'Failed to terminate process $pid: ${result.stderr}',
+        'pid': pid,
+        'exit_code': result.exitCode,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error terminating process $pid: $e',
+        'pid': pid,
+      };
+    }
+  }
+
+  /// Get system resource usage
+  static Future<Map<String, dynamic>> _getSystemResources() async {
+    try {
+      final resources = <String, dynamic>{};
+
+      if (Platform.isLinux || Platform.isMacOS) {
+        // Get memory usage
+        final memResult = await Process.run('free', ['-m']);
+        if (memResult.exitCode == 0) {
+          final lines = memResult.stdout.toString().split('\n');
+          if (lines.length > 1) {
+            final memLine = lines[1].split(RegExp(r'\s+'));
+            if (memLine.length >= 3) {
+              resources['memory'] = {
+                'total_mb': int.tryParse(memLine[1]) ?? 0,
+                'used_mb': int.tryParse(memLine[2]) ?? 0,
+                'available_mb': int.tryParse(memLine[6]) ?? 0,
+              };
+            }
+          }
+        }
+
+        // Get disk usage
+        final diskResult = await Process.run('df', ['-h', '/']);
+        if (diskResult.exitCode == 0) {
+          final lines = diskResult.stdout.toString().split('\n');
+          if (lines.length > 1) {
+            final diskLine = lines[1].split(RegExp(r'\s+'));
+            if (diskLine.length >= 4) {
+              resources['disk'] = {
+                'total': diskLine[1],
+                'used': diskLine[2],
+                'available': diskLine[3],
+                'use_percent': diskLine[4],
+              };
+            }
+          }
+        }
+      }
+
+      return resources;
+    } catch (e) {
+      print('Error getting system resources: $e');
+      return {};
+    }
+  }
+
+  /// Get network information
+  static Future<Map<String, dynamic>> _getNetworkInfo() async {
+    try {
+      final network = <String, dynamic>{};
+
+      if (Platform.isLinux || Platform.isMacOS) {
+        final result = await Process.run('ifconfig', []);
+        if (result.exitCode == 0) {
+          network['interfaces'] = result.stdout.toString();
+        }
+      } else if (Platform.isWindows) {
+        final result = await Process.run('ipconfig', []);
+        if (result.exitCode == 0) {
+          network['interfaces'] = result.stdout.toString();
+        }
+      }
+
+      return network;
+    } catch (e) {
+      print('Error getting network info: $e');
+      return {};
+    }
+  }
+
+  /// Execute a system command for dock operations
+  static Future<Map<String, dynamic>> executeSystemCommand(
+    String command,
+    List<String> args,
+  ) async {
+    try {
+      final result = await Process.run(command, args);
+      return {
+        'success': result.exitCode == 0,
+        'exit_code': result.exitCode,
+        'stdout': result.stdout.toString(),
+        'stderr': result.stderr.toString(),
+      };
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
     }
   }
 }

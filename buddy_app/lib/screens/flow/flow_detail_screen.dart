@@ -12,36 +12,14 @@ class FlowDetailScreen extends StatefulWidget {
   State<FlowDetailScreen> createState() => _FlowDetailScreenState();
 }
 
-class _FlowDetailScreenState extends State<FlowDetailScreen>
-    with SingleTickerProviderStateMixin {
+class _FlowDetailScreenState extends State<FlowDetailScreen> {
   late ProjectFlow _flow;
   bool _isLoading = false;
-
-  // New: tabs and related data
-  late TabController _tabController;
-  List<Note> _flowNotes = [];
-  List<FlowAlarm> _flowAlarms = [];
-  bool _loadingExtras = true;
 
   @override
   void initState() {
     super.initState();
     _flow = widget.flow;
-    _tabController = TabController(length: 3, vsync: this);
-    _loadExtras();
-  }
-
-  Future<void> _loadExtras() async {
-    setState(() => _loadingExtras = true);
-    try {
-      final allNotes = await FlowService.getNotes();
-      // Heuristic: notes labeled with flow title belong to this flow
-      _flowNotes = allNotes
-          .where((n) => n.labels.contains(_flow.title))
-          .toList();
-      _flowAlarms = await FlowService.getAlarmsForFlow(_flow.id);
-    } catch (_) {}
-    if (mounted) setState(() => _loadingExtras = false);
   }
 
   Future<void> _toggleCheckpoint(FlowCheckpoint checkpoint) async {
@@ -162,14 +140,6 @@ class _FlowDetailScreenState extends State<FlowDetailScreen>
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 1,
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.timeline), text: 'Timelines'),
-            Tab(icon: Icon(Icons.note_alt), text: 'Notes'),
-            Tab(icon: Icon(Icons.alarm), text: 'Alarms & Meetings'),
-          ],
-        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.chat),
@@ -178,18 +148,11 @@ class _FlowDetailScreenState extends State<FlowDetailScreen>
           ),
         ],
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildTimelineTab(progressPercentage),
-          _buildNotesTab(),
-          _buildAlarmsTab(),
-        ],
-      ),
+      body: _buildTimelineView(progressPercentage),
     );
   }
 
-  Widget _buildTimelineTab(double progressPercentage) {
+  Widget _buildTimelineView(double progressPercentage) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -305,93 +268,6 @@ class _FlowDetailScreenState extends State<FlowDetailScreen>
             },
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildNotesTab() {
-    if (_loadingExtras) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_flowNotes.isEmpty) {
-      return Center(
-        child: Text(
-          'No notes for this flow yet',
-          style: TextStyle(color: Colors.grey[600]),
-        ),
-      );
-    }
-    return RefreshIndicator(
-      onRefresh: _loadExtras,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _flowNotes.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (_, i) {
-          final n = _flowNotes[i];
-          return Card(
-            child: ListTile(
-              title: Text(n.title.isEmpty ? 'Untitled' : n.title),
-              subtitle: n.type == NoteType.text
-                  ? Text(
-                      n.content,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                    )
-                  : Text('${n.checklist.length} checklist items'),
-              trailing: n.isPinned
-                  ? const Icon(Icons.push_pin, size: 18)
-                  : null,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildAlarmsTab() {
-    if (_loadingExtras) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_flowAlarms.isEmpty) {
-      return Center(
-        child: Text(
-          'No alarms or meetings for this flow yet',
-          style: TextStyle(color: Colors.grey[600]),
-        ),
-      );
-    }
-    return RefreshIndicator(
-      onRefresh: _loadExtras,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _flowAlarms.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (_, i) {
-          final a = _flowAlarms[i];
-          return Card(
-            child: ListTile(
-              leading: Icon(
-                a.type == AlarmType.meeting
-                    ? Icons.people_alt
-                    : (a.type == AlarmType.deadline
-                          ? Icons.event_available
-                          : Icons.alarm),
-                color: Colors.blue,
-              ),
-              title: Text(a.title),
-              subtitle: Text(
-                '${a.scheduledTime.toLocal()}\n${a.description}'.trim(),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              isThreeLine: true,
-              trailing: a.isActive
-                  ? const Icon(Icons.check_circle, color: Colors.green)
-                  : const Icon(Icons.remove_circle, color: Colors.redAccent),
-            ),
-          );
-        },
       ),
     );
   }

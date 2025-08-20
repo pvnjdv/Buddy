@@ -4,176 +4,406 @@ import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from app.ai.model_loader import UnifiedAIClient
+from app.services.rag_service import RAGService
 
 class BuddyAI:
-    """Enhanced Buddy AI for project flow generation and assistance"""
+    """
+    Advanced AI Assistant with GitHub Copilot-like capabilities
+    - Dynamic template generation (no hardcoded templates)
+    - Full user context awareness
+    - Code generation and execution
+    - Intelligent project management
+    - RAG-enhanced responses
+    """
     
     def __init__(self):
         # Initialize the unified AI client
         self.ai_client = UnifiedAIClient()
         
-        self.flow_templates = {
-            "website": {
-                "title": "Website Development Project",
-                "difficulty": "medium",
-                "estimated_duration": "2-3 weeks",
-                "tags": ["web", "frontend", "development"],
-                "checkpoints": [
-                    {
-                        "title": "Planning & Research",
-                        "description": "Define requirements, research target audience, and plan the project scope.",
-                        "type": "milestone",
-                        "estimated_time": "1-2 days",
-                        "requirements": ["Project brief", "Target audience research"],
-                        "deliverables": ["Requirements document", "Project timeline", "Research findings"]
-                    },
-                    {
-                        "title": "Design & Wireframing",
-                        "description": "Create wireframes, mockups, and design system for the website.",
-                        "type": "task",
-                        "estimated_time": "2-3 days",
-                        "requirements": ["Approved requirements", "Design tools", "Brand guidelines"],
-                        "deliverables": ["Wireframes", "Visual designs", "Style guide", "Responsive layouts"]
-                    },
-                    {
-                        "title": "Frontend Development",
-                        "description": "Build the user interface using HTML, CSS, and JavaScript.",
-                        "type": "task",
-                        "estimated_time": "5-7 days",
-                        "requirements": ["Approved designs", "Development environment", "Code editor"],
-                        "deliverables": ["HTML structure", "CSS styling", "JavaScript functionality", "Responsive design"]
-                    },
-                    {
-                        "title": "Content Integration",
-                        "description": "Add and optimize content, images, and media for the website.",
-                        "type": "task",
-                        "estimated_time": "2-3 days",
-                        "requirements": ["Website structure", "Content materials", "Image assets"],
-                        "deliverables": ["Integrated content", "Optimized images", "SEO-ready pages"]
-                    },
-                    {
-                        "title": "Testing & Launch",
-                        "description": "Test functionality, fix bugs, and deploy the website.",
-                        "type": "review",
-                        "estimated_time": "2-3 days",
-                        "requirements": ["Completed website", "Testing checklist", "Hosting setup"],
-                        "deliverables": ["Test results", "Bug fixes", "Live website", "Documentation"]
-                    }
-                ]
-            },
-            "mobile_app": {
-                "title": "Mobile App Development",
-                "difficulty": "hard",
-                "estimated_duration": "4-6 weeks",
-                "tags": ["mobile", "app", "development"],
-                "checkpoints": [
-                    {
-                        "title": "Concept & Market Research",
-                        "description": "Define app concept, research market, and analyze competitors.",
-                        "type": "milestone",
-                        "estimated_time": "2-3 days",
-                        "requirements": ["App idea", "Market research tools"],
-                        "deliverables": ["App concept document", "Market analysis", "Competitor research"]
-                    },
-                    {
-                        "title": "Technical Planning",
-                        "description": "Choose technology stack and design app architecture.",
-                        "type": "task",
-                        "estimated_time": "2-3 days",
-                        "requirements": ["Concept approval", "Technical knowledge"],
-                        "deliverables": ["Tech stack decision", "Architecture diagram", "Development plan"]
-                    },
-                    {
-                        "title": "UI/UX Design",
-                        "description": "Design user interface and user experience flow.",
-                        "type": "task",
-                        "estimated_time": "4-5 days",
-                        "requirements": ["App concept", "Design tools", "User research"],
-                        "deliverables": ["UI mockups", "User flow diagrams", "Design system", "Prototype"]
-                    },
-                    {
-                        "title": "Development Setup",
-                        "description": "Set up development environment and project structure.",
-                        "type": "task",
-                        "estimated_time": "1-2 days",
-                        "requirements": ["Approved designs", "Development tools"],
-                        "deliverables": ["Project setup", "Development environment", "Basic app structure"]
-                    },
-                    {
-                        "title": "Core Feature Development",
-                        "description": "Implement main app features and functionality.",
-                        "type": "task",
-                        "estimated_time": "2-3 weeks",
-                        "requirements": ["Setup completion", "Feature specifications"],
-                        "deliverables": ["Core features", "App navigation", "Data management", "API integration"]
-                    },
-                    {
-                        "title": "Testing & Optimization",
-                        "description": "Test app thoroughly and optimize performance.",
-                        "type": "testing",
-                        "estimated_time": "3-5 days",
-                        "requirements": ["Feature completion", "Test devices"],
-                        "deliverables": ["Test results", "Performance optimizations", "Bug fixes"]
-                    },
-                    {
-                        "title": "Deployment & Launch",
-                        "description": "Deploy to app stores and manage launch process.",
-                        "type": "review",
-                        "estimated_time": "2-3 days",
-                        "requirements": ["Tested app", "Store accounts", "Marketing materials"],
-                        "deliverables": ["App store listing", "Published app", "Launch strategy"]
-                    }
-                ]
-            },
-            "business": {
-                "title": "Business Project",
-                "difficulty": "medium",
-                "estimated_duration": "2-4 weeks",
-                "tags": ["business", "strategy", "planning"],
-                "checkpoints": [
-                    {
-                        "title": "Business Analysis",
-                        "description": "Analyze current business situation and identify opportunities.",
-                        "type": "milestone",
-                        "estimated_time": "2-3 days",
-                        "requirements": ["Business data", "Market information"],
-                        "deliverables": ["Business analysis report", "SWOT analysis", "Opportunity assessment"]
-                    },
-                    {
-                        "title": "Strategy Development",
-                        "description": "Develop business strategy and action plan.",
-                        "type": "task",
-                        "estimated_time": "3-4 days",
-                        "requirements": ["Analysis completion", "Stakeholder input"],
-                        "deliverables": ["Business strategy", "Action plan", "Success metrics"]
-                    },
-                    {
-                        "title": "Implementation Planning",
-                        "description": "Create detailed implementation plan with timelines and resources.",
-                        "type": "task",
-                        "estimated_time": "2-3 days",
-                        "requirements": ["Approved strategy", "Resource assessment"],
-                        "deliverables": ["Implementation plan", "Resource allocation", "Timeline"]
-                    },
-                    {
-                        "title": "Execution & Monitoring",
-                        "description": "Execute the plan and monitor progress.",
-                        "type": "task",
-                        "estimated_time": "1-2 weeks",
-                        "requirements": ["Implementation plan", "Team coordination"],
-                        "deliverables": ["Progress reports", "Milestone achievements", "Adjustments"]
-                    },
-                    {
-                        "title": "Review & Optimization",
-                        "description": "Review results and optimize for future improvements.",
-                        "type": "review",
-                        "estimated_time": "2-3 days",
-                        "requirements": ["Execution completion", "Performance data"],
-                        "deliverables": ["Results analysis", "Lessons learned", "Future recommendations"]
-                    }
-                ]
-            }
+        # Initialize RAG service for custom knowledge
+        self.rag_service = RAGService(db_path="buddy_knowledge.db")
+        
+        # Initialize with default knowledge if database is empty
+        asyncio.create_task(self._initialize_default_knowledge())
+        
+        # Advanced AI capabilities
+        self.capabilities = {
+            "code_generation": True,
+            "project_analysis": True,
+            "dynamic_templates": True,
+            "context_awareness": True,
+            "intelligent_reasoning": True,
+            "multi_language_support": True,
+            "real_time_adaptation": True
         }
+    
+    async def _initialize_default_knowledge(self):
+        """Initialize default knowledge if database is empty"""
+        try:
+            stats = await self.rag_service.get_knowledge_stats()
+            if stats['total_entries'] == 0:
+                # Add some basic Buddy-specific knowledge
+                default_knowledge = [
+                    {
+                        "title": "Buddy AI Assistant Overview",
+                        "content": "Buddy is an intelligent AI assistant designed to help with project management, flow generation, note-taking, alarm setting, and various productivity tasks. It can understand complex requests and provide structured, actionable responses.",
+                        "category": "system",
+                        "tags": ["buddy", "ai", "assistant", "overview"],
+                        "metadata": {
+                            "source": "system_initialization",
+                            "importance": "high",
+                            "context_type": "reference"
+                        }
+                    },
+                    {
+                        "title": "Flow Generation Capabilities",
+                        "content": "I can generate detailed project flows with checkpoints, timelines, and deliverables. I understand various project types including websites, mobile apps, business projects, AI/ML projects, and general software development.",
+                        "category": "capabilities",
+                        "tags": ["flows", "project-management", "capabilities"],
+                        "metadata": {
+                            "source": "system_initialization",
+                            "importance": "high",
+                            "context_type": "instruction"
+                        }
+                    }
+                ]
+                
+                for knowledge in default_knowledge:
+                    await self.rag_service.add_knowledge(knowledge)
+        except Exception as e:
+            print(f"Error initializing default knowledge: {e}")
+    
+    async def add_custom_knowledge(self, knowledge: Dict[str, Any]) -> str:
+        """
+        Add custom knowledge to enhance Buddy's responses
+        
+        Args:
+            knowledge: Knowledge dictionary with required fields
+            
+        Returns:
+            str: ID of the added knowledge entry
+        """
+        return await self.rag_service.add_knowledge(knowledge)
+    
+    async def get_relevant_context(self, query: str, limit: int = 3) -> List[Dict[str, Any]]:
+        """Get relevant context from knowledge base for a query"""
+        return await self.rag_service.get_relevant_context(query, limit)
+    
+    async def search_knowledge(self, query: str, category: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Search knowledge base"""
+        return await self.rag_service.search_knowledge(query, category)
+    
+    async def list_knowledge(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List all knowledge entries"""
+        return await self.rag_service.list_knowledge(category)
+    
+    async def get_user_context(self, user_id: str, db_session=None) -> Dict[str, Any]:
+        """
+        Get comprehensive user context from all app data
+        This is like GitHub Copilot's understanding of your codebase
+        """
+        try:
+            context = {
+                "user_profile": {},
+                "recent_activities": [],
+                "preferences": {},
+                "flows": [],
+                "notes": [],
+                "alarms": [],
+                "personas": [],
+                "knowledge_base": [],
+                "usage_patterns": {},
+                "technical_stack": [],
+                "project_history": []
+            }
+            
+            # Get user knowledge from RAG
+            user_knowledge = await self.search_knowledge(f"user_id:{user_id}", None)
+            context["knowledge_base"] = user_knowledge
+            
+            # TODO: Add actual database queries when db_session is provided
+            if db_session:
+                # This would fetch real data from database
+                # context["flows"] = await get_user_flows(db_session, user_id)
+                # context["notes"] = await get_user_notes(db_session, user_id)
+                # context["alarms"] = await get_user_alarms(db_session, user_id)
+                # context["personas"] = await get_user_personas(db_session, user_id)
+                pass
+            
+            return context
+            
+        except Exception as e:
+            print(f"Error getting user context: {e}")
+            return {"error": "Could not retrieve user context"}
+    
+    async def analyze_user_intent_and_context(self, prompt: str, user_id: str, db_session=None) -> Dict[str, Any]:
+        """
+        Advanced intent analysis with full user context awareness
+        Like GPT-5's understanding of user patterns and preferences
+        """
+        try:
+            # Get user context
+            user_context = await self.get_user_context(user_id, db_session)
+            
+            # Get relevant knowledge
+            relevant_knowledge = await self.get_relevant_context(prompt, limit=5)
+            
+            # Create comprehensive analysis prompt
+            analysis_prompt = f"""
+Analyze this user request with full context awareness:
+
+USER REQUEST: "{prompt}"
+
+INTENT DETECTION RULES:
+- If user asks to "generate code", "write code", "create code", "code for", "make program", "build app" → code_generation
+- If user asks to "create flow", "build project", "project flow", "plan project" → flow_generation  
+- Otherwise → question_answering
+
+USER CONTEXT:
+- Knowledge Base Entries: {len(user_context.get('knowledge_base', []))}
+- Recent Activities: {user_context.get('recent_activities', [])}
+- Active Flows: {len(user_context.get('flows', []))}
+- Notes Count: {len(user_context.get('notes', []))}
+- Preferred Tech Stack: {user_context.get('technical_stack', [])}
+
+RELEVANT KNOWLEDGE:
+{json.dumps(relevant_knowledge, indent=2) if relevant_knowledge else "None"}
+
+Provide analysis in JSON format:
+{{
+    "intent_type": "flow_generation|code_generation|question_answering|task_management|system_control|github_operations",
+    "confidence": 0.0-1.0,
+    "user_context_relevance": "high|medium|low",
+    "required_capabilities": ["list", "of", "required", "capabilities"],
+    "project_type": "detected project type or null",
+    "complexity_level": "beginner|intermediate|advanced|expert",
+    "estimated_time": "time estimate",
+    "personalization_factors": ["factors", "from", "user", "context"],
+    "suggested_approach": "detailed approach based on user patterns",
+    "code_generation_needed": boolean,
+    "context_integration": "how to use user context"
+}}
+
+IMPORTANT: If the request contains words like "generate code for calculator" or similar, classify as code_generation with high confidence.
+"""
+            
+            response = await self.ai_client.generate_response(analysis_prompt)
+            
+            # Parse AI response
+            try:
+                json_start = response.find('{')
+                json_end = response.rfind('}') + 1
+                if json_start != -1 and json_end != -1:
+                    json_str = response[json_start:json_end]
+                    analysis = json.loads(json_str)
+                    analysis["user_context"] = user_context
+                    analysis["relevant_knowledge"] = relevant_knowledge
+                    return analysis
+            except json.JSONDecodeError:
+                pass
+            
+            # Fallback analysis
+            return {
+                "intent_type": "code_generation" if any(word in prompt.lower() for word in ['generate code', 'write code', 'create code', 'code for']) else "question_answering",
+                "confidence": 0.8,
+                "user_context_relevance": "medium",
+                "user_context": user_context,
+                "relevant_knowledge": relevant_knowledge,
+                "raw_analysis": response
+            }
+            
+        except Exception as e:
+            print(f"Error in intent analysis: {e}")
+            return {"error": str(e)}
+    
+    async def generate_intelligent_flow(self, 
+                                      request: str, 
+                                      user_context: Dict[str, Any],
+                                      relevant_knowledge: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Generate flows intelligently like GitHub Copilot generates code
+        Uses user context and knowledge to create personalized flows
+        """
+        try:
+            # Create context-aware generation prompt
+            generation_prompt = f"""
+You are an advanced AI assistant like GitHub Copilot and GPT-5. Generate a comprehensive project flow based on the user's request and their personal context.
+
+USER REQUEST: "{request}"
+
+USER KNOWLEDGE & PREFERENCES:
+{json.dumps(relevant_knowledge, indent=2) if relevant_knowledge else "No specific knowledge found"}
+
+USER CONTEXT:
+- Technical Stack: {user_context.get('technical_stack', [])}
+- Recent Projects: {len(user_context.get('flows', []))} active flows
+- Preferred Patterns: {user_context.get('preferences', {})}
+- Experience Level: {user_context.get('usage_patterns', {})}
+
+Generate a comprehensive flow in JSON format focused on timeline and progress tracking:
+1. Dynamic timeline based on project complexity
+2. Essential checkpoints with clear deliverables
+3. AI help prompts for progress guidance
+4. Clean structure for main flow screen
+
+Response format:
+{{
+    "title": "Intelligent flow title",
+    "description": "Context-aware description",
+    "category": "detected category",
+    "priority": "high|medium|low",
+    "estimated_duration": "realistic estimate",
+    "complexity_analysis": "detailed analysis",
+    "sections": {{
+        "timeline": {{
+            "phases": [
+                {{
+                    "name": "Phase name",
+                    "duration": "time estimate",
+                    "tasks": [
+                        {{
+                            "task": "Specific task",
+                            "type": "development|research|meeting|review",
+                            "priority": "high|medium|low",
+                            "estimated_time": "time",
+                            "dependencies": ["dependency tasks"],
+                            "resources_needed": ["resources"],
+                            "code_generation": "if applicable",
+                            "github_actions": "if needed",
+                            "buddy_help_prompt": "AI guidance for this task"
+                        }}
+                    ]
+                }}
+            ]
+        }}
+    }},
+    "success_metrics": [
+        {{
+            "metric": "Success measure",
+            "target": "Specific target",
+            "measurement_method": "How to measure"
+        }}
+    ],
+    "resource_requirements": {{
+        "technical": ["technical resources"],
+        "human": ["human resources"],
+        "tools": ["tools needed"],
+        "knowledge": ["knowledge gaps to fill"]
+    }},
+    "integration_points": {{
+        "github_repos": ["if applicable"],
+        "system_commands": ["if needed"],
+        "app_integrations": ["buddy app features to use"]
+    }},
+    "personalization": {{
+        "based_on_user_preferences": "how this was personalized",
+        "knowledge_base_usage": "how knowledge was applied",
+        "pattern_matching": "user patterns considered"
+    }}
+}}
+
+Make this flow intelligent and personalized, not generic. Use the user's context to make smart decisions about timing, complexity, and approach.
+"""
+            
+            # Generate with AI
+            response = await self.ai_client.generate_response(generation_prompt)
+            
+            # Parse AI response
+            try:
+                json_start = response.find('{')
+                json_end = response.rfind('}') + 1
+                if json_start != -1 and json_end != -1:
+                    json_str = response[json_start:json_end]
+                    flow_data = json.loads(json_str)
+                    
+                    # Add metadata
+                    flow_data["generated_at"] = datetime.utcnow().isoformat()
+                    flow_data["ai_generated"] = True
+                    flow_data["generation_context"] = {
+                        "user_request": request,
+                        "knowledge_used": len(relevant_knowledge),
+                        "context_factors": list(user_context.keys())
+                    }
+                    
+                    return flow_data
+            except json.JSONDecodeError as e:
+                print(f"Error parsing AI response: {e}")
+                return {"error": "Failed to parse AI response", "raw_response": response}
+            
+        except Exception as e:
+            print(f"Error generating intelligent flow: {e}")
+            return {"error": str(e)}
+    
+    async def generate_code_solution(self, 
+                                   request: str, 
+                                   user_context: Dict[str, Any],
+                                   relevant_knowledge: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Generate code solutions like GitHub Copilot
+        Context-aware code generation based on user's tech stack and patterns
+        """
+        try:
+            # Extract technical context
+            tech_stack = user_context.get('technical_stack', [])
+            user_preferences = user_context.get('preferences', {})
+            
+            generation_prompt = f"""You are a helpful coding assistant like GitHub Copilot. Generate a complete code solution for this request:
+
+REQUEST: "{request}"
+
+USER'S TECHNICAL CONTEXT:
+- Tech Stack: {tech_stack if tech_stack else ['Python', 'JavaScript']}
+- Coding Preferences: {user_preferences if user_preferences else {'style': 'clean and readable'}}
+
+KNOWLEDGE BASE CONTEXT:
+{json.dumps(relevant_knowledge, indent=2) if relevant_knowledge else "No specific technical knowledge found"}
+
+Create a practical, working code solution. For example, if they ask for a "calculator", provide actual calculator code.
+
+Generate a complete solution in JSON format:
+{{
+    "solution_overview": "Brief explanation of what this code does",
+    "primary_language": "Python or JavaScript or other appropriate language", 
+    "complete_code": "Full working code that the user can run immediately",
+    "explanation": "How the code works and key features",
+    "usage_instructions": "How to run or use this code",
+    "customization_tips": "How users can modify or extend it"
+}}
+
+Make the code practical and immediately usable. Focus on providing working code rather than complex architecture."""
+            
+            response = await self.ai_client.generate_response(generation_prompt)
+            
+            # Parse response
+            try:
+                json_start = response.find('{')
+                json_end = response.rfind('}') + 1
+                if json_start != -1 and json_end != -1:
+                    json_str = response[json_start:json_end]
+                    solution = json.loads(json_str)
+                    
+                    # Add metadata
+                    solution["generated_at"] = datetime.utcnow().isoformat()
+                    solution["ai_generated"] = True
+                    solution["copilot_mode"] = True
+                    
+                    return solution
+            except json.JSONDecodeError:
+                print("Failed to parse JSON response, providing direct code solution")
+                # If JSON parsing fails, provide a simple direct code solution
+                return {
+                    "solution_overview": f"Here's a code solution for: {request}",
+                    "direct_code": response,
+                    "technology_choices": {
+                        "primary_language": "Python" if "python" in request.lower() else "JavaScript",
+                        "rationale": "Popular and beginner-friendly language"
+                    },
+                    "raw_response": response
+                }
+            
+        except Exception as e:
+            print(f"Error generating code solution: {e}")
+            return {"error": str(e), "solution_overview": "I encountered an error while generating the code solution. Let me try to help you with a simpler approach."}
     
     async def generate_project_flow(self, description: str, user_preferences: Optional[Dict] = None) -> Dict[str, Any]:
         """Generate an intelligent project flow using AI"""
@@ -777,7 +1007,7 @@ Create a professional timeline for: {description}
                     "estimated_time": "2-3 days",
                     "requirements": ["Project concept", "Goals definition"],
                     "deliverables": ["Project plan", "Research findings", "Success metrics"],
-                    "buddy_help_prompt": "Let's plan your project! I'll help you define clear goals, research requirements, and create an actionable plan."
+                    "buddy_help_prompt": "I'll help you define clear project goals and research requirements. Let's create an actionable plan!"
                 },
                 {
                     "title": "Resource Gathering & Preparation",
@@ -786,7 +1016,7 @@ Create a professional timeline for: {description}
                     "estimated_time": "2-4 days",
                     "requirements": ["Project plan", "Resource identification"],
                     "deliverables": ["Resource list", "Tool setup", "Material preparation"],
-                    "buddy_help_prompt": "Resource preparation! I'll help you identify what you need, find the right tools, and prepare everything for execution."
+                    "buddy_help_prompt": "I'll assist you in identifying and gathering all the resources you'll need for this project."
                 },
                 {
                     "title": "Implementation Phase 1",
@@ -795,7 +1025,7 @@ Create a professional timeline for: {description}
                     "estimated_time": "1 week",
                     "requirements": ["Preparation completion", "Resources available"],
                     "deliverables": ["Foundation work", "Initial progress", "Milestone achievements"],
-                    "buddy_help_prompt": "Implementation begins! I'll guide you through the execution, help solve problems, and keep you on track."
+                    "buddy_help_prompt": "Let's get started with the implementation! I'll guide you through the initial steps."
                 },
                 {
                     "title": "Implementation Phase 2",
@@ -1177,13 +1407,191 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
             "confidence": 0.0
         }
 
-    async def generate_ai_response(self, prompt: str, chat_history: List[Dict[str, str]] = None) -> str:
-        """Generate AI response using the unified AI client"""
+    async def generate_ai_response(self, prompt: str, user_id: str = None, db_session=None) -> Dict[str, Any]:
+        """
+        Enhanced AI response generation with RAG integration and intelligent routing
+        Works like GPT-5 with full context awareness and GitHub Copilot capabilities
+        """
         try:
-            return await self.ai_client.generate_response(prompt, chat_history or [])
+            print(f"Processing intelligent request: {prompt}")
+            
+            # Handle simple greetings and small talk quickly
+            if self._is_simple_greeting(prompt):
+                return await self._generate_simple_response(prompt)
+            
+            # For everything else, use natural ChatGPT-like intelligence without over-analysis
+            # Only do heavy analysis for clearly complex requests
+            code_keywords = ['generate code', 'write code', 'create code', 'code for', 'build app', 'make program', 'programming', 'script', 'function']
+            flow_keywords = ['create flow', 'build project', 'project flow', 'make flow', 'develop project', 'plan project']
+            
+            prompt_lower = prompt.lower()
+            is_code_request = any(keyword in prompt_lower for keyword in code_keywords)
+            is_flow_request = any(keyword in prompt_lower for keyword in flow_keywords)
+            
+            if is_code_request or is_flow_request:
+                # Get comprehensive context if user_id provided
+                user_context = {}
+                if user_id:
+                    user_context = await self.get_user_context(user_id, db_session)
+                
+                # Analyze intent with full context for complex requests
+                intent_analysis = await self.analyze_user_intent_and_context(prompt, user_id or "anonymous", db_session)
+                
+                # Get relevant knowledge from RAG
+                relevant_knowledge = intent_analysis.get('relevant_knowledge', [])
+                
+                # Route to appropriate handler based on intelligent analysis
+                intent_type = intent_analysis.get('intent_type', 'question_answering')
+                
+                # Override intent type if we clearly detected code or flow requests
+                if is_code_request:
+                    intent_type = 'code_generation'
+                elif is_flow_request:
+                    intent_type = 'flow_generation'
+                
+                if intent_type == 'flow_generation':
+                    # Generate intelligent flow
+                    flow_result = await self.generate_intelligent_flow(prompt, user_context, relevant_knowledge)
+                    return {
+                        "type": "flow",
+                        "content": flow_result,
+                        "intent_analysis": intent_analysis,
+                        "ai_mode": "intelligent_flow_generation",
+                        "context_used": len(relevant_knowledge) > 0
+                    }
+                    
+                elif intent_type == 'code_generation':
+                    # Generate code solution like GitHub Copilot
+                    try:
+                        code_result = await self.generate_code_solution(prompt, user_context, relevant_knowledge)
+                        return {
+                            "type": "code_solution",
+                            "content": code_result,
+                            "intent_analysis": intent_analysis,
+                            "ai_mode": "github_copilot_mode",
+                            "context_used": len(relevant_knowledge) > 0
+                        }
+                    except Exception as e:
+                        print(f"Error in code generation: {e}")
+                        # Fallback to simple code generation
+                        return {
+                            "type": "enhanced_response",
+                            "content": {
+                                "direct_answer": f"I'll help you create code for {prompt.replace('generate code for', '').replace('create code for', '').strip()}. Let me provide a solution...",
+                                "response_type": "code_fallback"
+                            },
+                            "ai_mode": "code_generation_fallback",
+                            "context_used": False
+                        }
+            
+            # For normal questions, respond naturally like ChatGPT without heavy analysis
+            user_context = {}
+            if user_id:
+                user_context = await self.get_user_context(user_id, db_session)
+            
+            # Get some relevant knowledge but don't over-analyze
+            relevant_knowledge = await self.get_relevant_context(prompt, limit=2)
+            
+            # Simple intent analysis - just determine complexity
+            intent_analysis = {
+                "intent_type": "question_answering",
+                "confidence": 0.9,
+                "complexity_level": "medium" if len(prompt.split()) > 10 else "beginner"
+            }
+            
+            # Generate natural, context-aware response
+            context_enhanced_response = await self.generate_context_aware_response(
+                prompt, user_context, relevant_knowledge, intent_analysis
+            )
+            return {
+                "type": "enhanced_response",
+                "content": context_enhanced_response,
+                "ai_mode": "natural_chatgpt",
+                "context_used": len(relevant_knowledge) > 0
+            }
+                
         except Exception as e:
-            print(f"Error generating AI response: {e}")
-            return "I apologize, but I'm having trouble generating a response right now. Please try again later."
+            print(f"Error in enhanced AI response: {e}")
+            return {
+                "type": "error",
+                "content": {"error": str(e)},
+                "ai_mode": "fallback"
+            }
+    
+    async def generate_context_aware_response(self, 
+                                            prompt: str,
+                                            user_context: Dict[str, Any],
+                                            relevant_knowledge: List[Dict[str, Any]],
+                                            intent_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate natural, ChatGPT-like responses that adapt to complexity
+        Simple questions get simple answers, complex ones get detailed responses
+        """
+        try:
+            # Determine response complexity based on prompt and intent
+            complexity_level = intent_analysis.get('complexity_level', 'medium')
+            prompt_length = len(prompt.split())
+            
+            # For simple questions (like ChatGPT), provide concise, direct responses
+            if complexity_level == 'beginner' or prompt_length < 10:
+                # Simple, conversational response
+                simple_prompt = f"""
+You are ChatGPT, a helpful AI assistant. Respond naturally and conversationally to this question.
+
+User: {prompt}
+
+Context: {json.dumps(relevant_knowledge[:2], indent=2) if relevant_knowledge else "No specific context"}
+
+Provide a helpful, natural response. Be conversational, not formal. Give exactly what the user needs - short for simple questions, detailed for complex ones.
+"""
+                
+                response = await self.ai_client.generate_response(simple_prompt)
+                
+                return {
+                    "direct_answer": response,
+                    "response_type": "conversational",
+                    "context_used": len(relevant_knowledge) > 0
+                }
+            
+            # For more complex questions, provide structured but natural responses
+            else:
+                enhanced_prompt = f"""
+You are an advanced AI assistant like ChatGPT. The user asked: "{prompt}"
+
+Available context: {json.dumps(relevant_knowledge, indent=2) if relevant_knowledge else "No specific context"}
+
+User's background: {user_context.get('technical_stack', [])} technical experience
+
+Respond naturally and helpfully. Structure your response appropriately:
+- For simple questions: Give direct, concise answers
+- For complex questions: Provide detailed explanations with examples
+- Always be conversational and helpful, not robotic
+
+Focus on being genuinely helpful rather than following rigid formats.
+"""
+                
+                response = await self.ai_client.generate_response(enhanced_prompt)
+                
+                # Check if the response warrants additional structure
+                if any(keyword in prompt.lower() for keyword in ['how to', 'steps', 'guide', 'tutorial', 'implement']):
+                    # For how-to questions, add some structure
+                    return {
+                        "direct_answer": response,
+                        "response_type": "instructional",
+                        "context_used": len(relevant_knowledge) > 0,
+                        "follow_up_available": True
+                    }
+                else:
+                    # For general questions, keep it simple
+                    return {
+                        "direct_answer": response,
+                        "response_type": "conversational",
+                        "context_used": len(relevant_knowledge) > 0
+                    }
+                
+        except Exception as e:
+            print(f"Error generating context-aware response: {e}")
+            return {"direct_answer": "I'd be happy to help! Could you tell me a bit more about what you're looking for?", "error": str(e)}
     
     async def generate_persona_response(
         self, 
@@ -1315,3 +1723,184 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
         # Default personalized greeting
         description_snippet = persona.description[:100] + "..." if persona.description and len(persona.description) > 100 else persona.description or ""
         return f"Hello! I'm {persona.name}. {description_snippet} How can I assist you today?"
+    
+    def _is_simple_greeting(self, prompt: str) -> bool:
+        """Check if the prompt is a simple greeting - be more natural like ChatGPT"""
+        prompt_lower = prompt.lower().strip()
+        
+        # Very simple patterns that clearly indicate basic social interaction
+        simple_patterns = [
+            'hi', 'hello', 'hey', 'hiya', 'yo',
+            'good morning', 'good afternoon', 'good evening',
+            'whats up', 'what\'s up', 'sup', 'howdy'
+        ]
+        
+        # Only treat as simple if it's VERY clearly just a greeting
+        # Let ChatGPT-like intelligence handle everything else naturally
+        if len(prompt_lower) <= 15:  # Very short messages
+            return any(greeting == prompt_lower or greeting in prompt_lower for greeting in simple_patterns)
+        
+
+        
+        return False
+    
+    async def _generate_simple_response(self, prompt: str) -> Dict[str, Any]:
+        """Generate natural, ChatGPT-like responses for simple interactions"""
+        import random
+        
+        # Natural, conversational responses like ChatGPT
+        simple_responses = [
+            "Hi! I'm Buddy, your AI assistant. What can I help you with?",
+            "Hello! How can I assist you today?",
+            "Hey there! What would you like to work on?",
+            "Hi! I'm here to help. What's on your mind?",
+            "Hello! What can I help you accomplish today?",
+            "Hey! Ready to help with whatever you need.",
+            "Hi! What would you like to explore or work on?",
+            "Hello! I'm here and ready to assist."
+        ]
+        
+        response = random.choice(simple_responses)
+        
+        # Return simple, natural response - no complex JSON structure for greetings
+        return {
+            "type": "simple_response",
+            "content": response,  # Just the text, no complex structure
+            "ai_mode": "natural_conversation",
+            "context_used": False
+        }
+    
+    async def generate_flow_notes(self, 
+                                 flow_data: Dict[str, Any], 
+                                 user_context: Dict[str, Any],
+                                 relevant_knowledge: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Generate notes for a flow when specifically requested
+        Only called when user asks for notes to be added
+        """
+        try:
+            generation_prompt = f"""
+Generate contextual notes for this project flow:
+
+FLOW TITLE: {flow_data.get('title', 'Project Flow')}
+FLOW DESCRIPTION: {flow_data.get('description', 'No description')}
+
+USER CONTEXT:
+- Technical Stack: {user_context.get('technical_stack', [])}
+- Experience Level: {user_context.get('usage_patterns', {})}
+
+RELEVANT KNOWLEDGE:
+{json.dumps(relevant_knowledge, indent=2) if relevant_knowledge else "No specific knowledge found"}
+
+Generate useful notes in JSON format:
+{{
+    "technical_notes": [
+        {{
+            "title": "Technical consideration",
+            "content": "Detailed technical note based on user's stack",
+            "category": "architecture|implementation|testing|deployment",
+            "references": ["knowledge base references"],
+            "code_snippets": "if applicable"
+        }}
+    ],
+    "contextual_insights": [
+        {{
+            "insight": "Personalized insight based on user patterns",
+            "rationale": "Why this is relevant to this user",
+            "action_items": ["specific actions"]
+        }}
+    ]
+}}
+"""
+            
+            response = await self.ai_client.generate_response(generation_prompt)
+            
+            # Parse response
+            try:
+                json_start = response.find('{')
+                json_end = response.rfind('}') + 1
+                if json_start != -1 and json_end != -1:
+                    json_str = response[json_start:json_end]
+                    return json.loads(json_str)
+            except json.JSONDecodeError:
+                pass
+                
+            # Fallback to simple notes
+            return {
+                "technical_notes": [
+                    {
+                        "title": "Project Notes",
+                        "content": "Generated notes for your project flow",
+                        "category": "general",
+                        "references": [],
+                        "code_snippets": ""
+                    }
+                ],
+                "contextual_insights": []
+            }
+            
+        except Exception as e:
+            print(f"Error generating flow notes: {e}")
+            return {"technical_notes": [], "contextual_insights": []}
+
+    async def generate_flow_alarms(self, 
+                                  flow_data: Dict[str, Any], 
+                                  user_context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Generate alarms/reminders for a flow when specifically requested
+        Only called when user asks for alarms to be added
+        """
+        try:
+            generation_prompt = f"""
+Generate smart alarms/reminders for this project flow:
+
+FLOW TITLE: {flow_data.get('title', 'Project Flow')}
+ESTIMATED DURATION: {flow_data.get('estimated_duration', '2 weeks')}
+COMPLEXITY: {flow_data.get('complexity_analysis', 'medium')}
+
+USER PREFERENCES:
+- Typical working hours: {user_context.get('working_hours', 'standard business hours')}
+- Reminder preferences: {user_context.get('reminder_preferences', 'moderate')}
+
+Generate practical alarms in JSON format:
+[
+    {{
+        "title": "Smart reminder title",
+        "description": "Context-aware reminder description",
+        "type": "milestone|deadline|review|standup",
+        "timing": "specific time recommendation",
+        "priority": "high|medium|low",
+        "auto_actions": ["actions to trigger"],
+        "context": "why this alarm is needed"
+    }}
+]
+"""
+            
+            response = await self.ai_client.generate_response(generation_prompt)
+            
+            # Parse response
+            try:
+                json_start = response.find('[')
+                json_end = response.rfind(']') + 1
+                if json_start != -1 and json_end != -1:
+                    json_str = response[json_start:json_end]
+                    return json.loads(json_str)
+            except json.JSONDecodeError:
+                pass
+                
+            # Fallback to basic alarms
+            return [
+                {
+                    "title": f"Project Deadline: {flow_data.get('title', 'Project')}",
+                    "description": "Reminder for project completion",
+                    "type": "deadline",
+                    "timing": flow_data.get('estimated_duration', '2 weeks'),
+                    "priority": "high",
+                    "auto_actions": ["notify"],
+                    "context": "Project completion tracking"
+                }
+            ]
+            
+        except Exception as e:
+            print(f"Error generating flow alarms: {e}")
+            return []

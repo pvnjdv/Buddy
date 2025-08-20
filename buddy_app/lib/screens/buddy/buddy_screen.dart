@@ -5,6 +5,7 @@ import '../../services/buddy_service.dart';
 import '../../config/theme_config.dart';
 import '../settings_screen.dart';
 import 'chat_history_screen.dart';
+import '../../widgets/chat/buddy_message_bubble.dart';
 
 class BuddyScreen extends StatefulWidget {
   const BuddyScreen({super.key});
@@ -210,14 +211,16 @@ class _BuddyScreenState extends State<BuddyScreen>
       print('Response to display: "$response"');
 
       if (mounted) {
+        // Add AI message with typing animation enabled
         final aiMsg = BuddyMessage(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           content: response,
           role: BuddyRole.assistant,
           timestamp: DateTime.now(),
+          isTyping: true, // Enable typing animation
         );
 
-        print('=== BUDDY SCREEN: Adding message to UI ===');
+        print('=== BUDDY SCREEN: Adding message to UI with typing animation ===');
         print('AI message content: "${aiMsg.content}"');
 
         setState(() {
@@ -265,6 +268,16 @@ class _BuddyScreenState extends State<BuddyScreen>
     _savedPersonas = BuddyService.getSavedPersonas();
     if (!mounted) return;
     setState(() {});
+  }
+
+  void _onTypingComplete(String messageId) {
+    // Update the message to stop typing animation
+    setState(() {
+      final messageIndex = _messages.indexWhere((msg) => msg.id == messageId);
+      if (messageIndex != -1) {
+        _messages[messageIndex] = _messages[messageIndex].copyWith(isTyping: false);
+      }
+    });
   }
 
   @override
@@ -793,80 +806,9 @@ class _BuddyScreenState extends State<BuddyScreen>
   }
 
   Widget _buildMessageBubble(BuddyMessage message) {
-    final isUser = message.role == BuddyRole.user;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: isUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!isUser) ...[
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppTheme.primaryColor, AppTheme.accentColor],
-                ),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.smart_toy, color: Colors.white, size: 16),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.7,
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: isUser ? AppTheme.primaryColor : AppTheme.surfaceColor,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(isUser ? 16 : 4),
-                  bottomRight: Radius.circular(isUser ? 4 : 16),
-                ),
-                border: isUser ? null : Border.all(color: AppTheme.borderColor),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    message.content,
-                    style: TextStyle(
-                      color: isUser ? Colors.white : AppTheme.textPrimaryColor,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatTime(message.timestamp),
-                    style: TextStyle(
-                      color: isUser
-                          ? Colors.white.withValues(alpha: 0.7)
-                          : AppTheme.textSecondaryColor,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (isUser) ...[
-            const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: AppTheme.accentColor,
-              child: Icon(Icons.person, color: Colors.white, size: 16),
-            ),
-          ],
-        ],
-      ),
+    return BuddyMessageBubble(
+      message: message,
+      onTypingComplete: () => _onTypingComplete(message.id),
     );
   }
 

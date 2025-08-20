@@ -381,14 +381,42 @@ class BuddyService {
           );
           _chatHistory.add(assistantMessage);
 
-          return {
+          // Enhanced response with navigation support
+          final response = {
             'success': true,
             'response': msg,
             'message': msg,
             'is_flow_created': agentResult.extra?['is_flow_created'] ?? false,
             'flow': agentResult.flow?.toJson(),
+            'note': agentResult.note,
+            'alarm': agentResult.alarm,
             'extra': agentResult.extra,
           };
+
+          // Handle navigation actions from AppControlSkill
+          if (agentResult.extra?['action'] == 'navigate') {
+            response['navigate'] = {
+              'route': agentResult.extra?['route'],
+              'arguments': agentResult.extra?['arguments'],
+            };
+          }
+
+          // Handle system control responses
+          if (agentResult.extra?['type'] == 'system_info' ||
+              agentResult.extra?['type'] == 'process_list') {
+            response['system_data'] = agentResult.extra?['data'];
+          }
+
+          // Handle GitHub operation results
+          if (agentResult.extra?['type'] == 'git_operation') {
+            response['git_result'] = {
+              'operation': agentResult.extra?['operation'],
+              'success': agentResult.extra?['success'],
+              'output': agentResult.extra?['output'],
+            };
+          }
+
+          return response;
         }
       } catch (e) {
         print('Orchestrator error (ignored, fallback to backend): $e');

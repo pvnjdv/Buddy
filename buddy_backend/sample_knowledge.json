@@ -1,0 +1,90 @@
+[
+  {
+    "title": "My Coding Preferences",
+    "content": "I prefer TypeScript over JavaScript. Always use strict mode. Use arrow functions for simple operations. Prefer async/await over promises. Use meaningful variable names with camelCase. Add comments for complex logic. Prefer composition over inheritance.",
+    "category": "personal",
+    "tags": ["coding", "typescript", "preferences", "style"],
+    "metadata": {
+      "source": "user_preference",
+      "importance": "high",
+      "context_type": "instruction"
+    }
+  },
+  {
+    "title": "Buddy App Architecture Overview",
+    "content": "Buddy is a comprehensive AI assistant app with Flutter frontend and FastAPI backend. Uses SQLAlchemy for database operations. Has multiple AI services including BuddyAI for flows, AIThinkingService for intent analysis, GitHubService for git operations, and SystemService for system control. Supports flow generation with checkpoints, automated alarms, notes, and meetings. Uses unified AI client for both local and API-based AI models.",
+    "category": "project",
+    "tags": ["buddy", "architecture", "flutter", "fastapi", "ai"],
+    "metadata": {
+      "source": "project_documentation",
+      "importance": "high",
+      "context_type": "reference"
+    }
+  },
+  {
+    "title": "Flutter Development Best Practices",
+    "content": "Use StatelessWidget when possible for better performance. Implement proper state management with Provider or Riverpod. Use const constructors for immutable widgets. Implement proper error handling with try-catch blocks. Use async/await for API calls. Follow Material Design guidelines. Use responsive design principles. Implement proper navigation with named routes.",
+    "category": "technical",
+    "tags": ["flutter", "dart", "best-practices", "mobile"],
+    "metadata": {
+      "source": "development_guidelines",
+      "importance": "medium",
+      "context_type": "instruction"
+    }
+  },
+  {
+    "title": "FastAPI Backend Guidelines",
+    "content": "Use async/await for all database operations. Implement proper error handling with HTTPException. Use Pydantic models for request/response validation. Follow RESTful API design principles. Use dependency injection for database sessions. Implement proper logging for debugging. Use middleware for CORS and authentication. Structure code with routers for better organization.",
+    "category": "technical",
+    "tags": ["fastapi", "python", "backend", "api"],
+    "metadata": {
+      "source": "backend_guidelines",
+      "importance": "medium",
+      "context_type": "instruction"
+    }
+  },
+  {
+    "title": "My Work Schedule",
+    "content": "I usually work from 9 AM to 6 PM IST. Most productive hours are 10 AM to 2 PM. Prefer morning meetings. Take lunch break at 1 PM. Available for urgent issues until 8 PM. Weekends are for personal projects and learning new technologies.",
+    "category": "personal",
+    "tags": ["schedule", "work", "availability"],
+    "metadata": {
+      "source": "personal_info",
+      "importance": "medium",
+      "context_type": "fact"
+    }
+  },
+  {
+    "title": "Project Management Approach",
+    "content": "Break large projects into smaller milestones. Use agile methodology with 2-week sprints. Prioritize features based on user impact. Conduct daily standups for team projects. Use GitHub for version control and issue tracking. Document important decisions and architecture choices. Regular code reviews before merging.",
+    "category": "work",
+    "tags": ["project-management", "agile", "workflow"],
+    "metadata": {
+      "source": "work_methodology",
+      "importance": "high",
+      "context_type": "instruction"
+    }
+  },
+  {
+    "title": "AI and Machine Learning Interests",
+    "content": "Interested in practical AI applications, especially in productivity tools. Focus on LLMs and their integration in applications. Prefer open-source models when possible. Interested in RAG systems for knowledge management. Like to experiment with different AI models for specific use cases. Believe in responsible AI development.",
+    "category": "interests",
+    "tags": ["ai", "machine-learning", "llm", "interests"],
+    "metadata": {
+      "source": "personal_interests",
+      "importance": "medium",
+      "context_type": "fact"
+    }
+  },
+  {
+    "title": "Communication Style",
+    "content": "Prefer clear and direct communication. Like detailed explanations for complex topics. Appreciate code examples and practical demonstrations. Prefer written communication for important decisions. Open to feedback and collaborative problem-solving. Value time efficiency in meetings and discussions.",
+    "category": "personal",
+    "tags": ["communication", "style", "preferences"],
+    "metadata": {
+      "source": "personal_preference",
+      "importance": "medium",
+      "context_type": "instruction"
+    }
+  }
+]
