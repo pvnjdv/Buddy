@@ -17,7 +17,7 @@ class BuddyMessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = message.role == BuddyRole.user;
-    
+
     return GestureDetector(
       onLongPress: onLongPress,
       child: Container(
@@ -73,7 +73,9 @@ class BuddyMessageBubble extends StatelessWidget {
                     if (!isUser && message.isTyping)
                       AnimatedTypingText(
                         text: message.content,
-                        typingSpeed: const Duration(milliseconds: 80), // Faster typing
+                        typingSpeed: const Duration(
+                          milliseconds: 80,
+                        ), // Faster typing
                         textStyle: const TextStyle(
                           fontSize: 15,
                           color: Color(0xFF2D3748),
@@ -86,7 +88,9 @@ class BuddyMessageBubble extends StatelessWidget {
                         message.content,
                         style: TextStyle(
                           fontSize: 15,
-                          color: isUser ? Colors.white : const Color(0xFF2D3748),
+                          color: isUser
+                              ? Colors.white
+                              : const Color(0xFF2D3748),
                           height: 1.4,
                         ),
                       ),
@@ -103,11 +107,7 @@ class BuddyMessageBubble extends StatelessWidget {
                         ),
                         if (isUser) ...[
                           const SizedBox(width: 4),
-                          Icon(
-                            Icons.done_all,
-                            size: 16,
-                            color: Colors.white70,
-                          ),
+                          Icon(Icons.done_all, size: 16, color: Colors.white70),
                         ],
                       ],
                     ),
@@ -120,11 +120,7 @@ class BuddyMessageBubble extends StatelessWidget {
               CircleAvatar(
                 radius: 16,
                 backgroundColor: const Color(0xFF007AFF),
-                child: const Icon(
-                  Icons.person,
-                  size: 16,
-                  color: Colors.white,
-                ),
+                child: const Icon(Icons.person, size: 16, color: Colors.white),
               ),
             ],
           ],

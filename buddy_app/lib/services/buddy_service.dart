@@ -75,6 +75,12 @@ class BuddyService {
   static List<AIPersona> _savedPersonas = [];
   static bool _isProcessingRequest = false; // Add request throttling
 
+  // Chat session management
+  static String _currentChatSessionId = DateTime.now().millisecondsSinceEpoch
+      .toString();
+  static const String _chatHistoryKey = 'buddy_chat_history';
+  static const String _currentSessionKey = 'buddy_current_session';
+
   // Get authorization token
   static Future<String?> _getAuthToken() async {
     try {
@@ -298,6 +304,53 @@ class BuddyService {
     return List.from(_chatHistory);
   }
 
+  // Load chat history from persistent storage
+  static Future<void> loadChatHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final sessionId = prefs.getString(_currentSessionKey);
+      if (sessionId != null) {
+        _currentChatSessionId = sessionId;
+      }
+
+      final historyJson = prefs.getString(
+        '${_chatHistoryKey}_$_currentChatSessionId',
+      );
+      if (historyJson != null) {
+        final List<dynamic> historyList = json.decode(historyJson);
+        _chatHistory = historyList
+            .map((item) => FlowBuddyMessage.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      print('Error loading chat history: $e');
+    }
+  }
+
+  // Save chat history to persistent storage
+  static Future<void> saveChatHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_currentSessionKey, _currentChatSessionId);
+      final historyJson = json.encode(
+        _chatHistory.map((msg) => msg.toJson()).toList(),
+      );
+      await prefs.setString(
+        '${_chatHistoryKey}_$_currentChatSessionId',
+        historyJson,
+      );
+    } catch (e) {
+      print('Error saving chat history: $e');
+    }
+  }
+
+  // Start new conversation
+  static Future<void> startNewConversation() async {
+    _chatHistory.clear();
+    _currentChatSessionId = DateTime.now().millisecondsSinceEpoch.toString();
+    await saveChatHistory();
+  }
+
   static void clearChatHistory() {
     _chatHistory.clear();
   }
@@ -380,6 +433,9 @@ class BuddyService {
             timestamp: DateTime.now(),
           );
           _chatHistory.add(assistantMessage);
+
+          // Save chat history to persistent storage
+          await saveChatHistory();
 
           // Enhanced response with navigation support
           final response = {
@@ -467,6 +523,9 @@ class BuddyService {
         );
         _chatHistory.add(assistantMessage);
 
+        // Save chat history to persistent storage
+        await saveChatHistory();
+
         print('=== SUCCESS - RETURNING RESPONSE ===');
         print('AI Response: $aiResponse');
 
@@ -490,6 +549,9 @@ class BuddyService {
         timestamp: DateTime.now(),
       );
       _chatHistory.add(assistantMessage);
+
+      // Save chat history to persistent storage
+      await saveChatHistory();
 
       return {
         'success': false,

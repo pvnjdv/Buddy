@@ -838,15 +838,19 @@ class FlowTask {
     DateTime? createdAt,
     DateTime? updatedAt,
     this.labels = const [],
-  })  : createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
+  }) : createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   factory FlowTask.fromJson(Map<String, dynamic> json) {
     return FlowTask(
-      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      id:
+          json['id']?.toString() ??
+          DateTime.now().millisecondsSinceEpoch.toString(),
       title: json['title']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
-      dueDate: json['due_date'] != null ? DateTime.tryParse(json['due_date'].toString()) : null,
+      dueDate: json['due_date'] != null
+          ? DateTime.tryParse(json['due_date'].toString())
+          : null,
       priority: TaskPriority.values.firstWhere(
         (e) => e.name == (json['priority']?.toString() ?? 'normal'),
         orElse: () => TaskPriority.normal,
@@ -857,9 +861,15 @@ class FlowTask {
       ),
       flowId: json['flow_id']?.toString(),
       checkpointId: json['checkpoint_id']?.toString(),
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? '') ?? DateTime.now(),
-      labels: (json['labels'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
+      updatedAt:
+          DateTime.tryParse(json['updated_at']?.toString() ?? '') ??
+          DateTime.now(),
+      labels:
+          (json['labels'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
     );
   }
 

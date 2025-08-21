@@ -94,7 +94,10 @@ class _BuddyScreenState extends State<BuddyScreen>
     }
   }
 
-  void _loadChatHistory() {
+  void _loadChatHistory() async {
+    // Load chat history from persistent storage first
+    await BuddyService.loadChatHistory();
+
     final history = BuddyService.getChatHistory();
     setState(() {
       _messages = history
@@ -220,7 +223,9 @@ class _BuddyScreenState extends State<BuddyScreen>
           isTyping: true, // Enable typing animation
         );
 
-        print('=== BUDDY SCREEN: Adding message to UI with typing animation ===');
+        print(
+          '=== BUDDY SCREEN: Adding message to UI with typing animation ===',
+        );
         print('AI message content: "${aiMsg.content}"');
 
         setState(() {
@@ -271,13 +276,20 @@ class _BuddyScreenState extends State<BuddyScreen>
   }
 
   void _onTypingComplete(String messageId) {
-    // Update the message to stop typing animation
     setState(() {
-      final messageIndex = _messages.indexWhere((msg) => msg.id == messageId);
-      if (messageIndex != -1) {
-        _messages[messageIndex] = _messages[messageIndex].copyWith(isTyping: false);
+      final index = _messages.indexWhere((msg) => msg.id == messageId);
+      if (index != -1) {
+        _messages[index] = _messages[index].copyWith(isTyping: false);
       }
     });
+  }
+
+  Future<void> _startNewConversation() async {
+    await BuddyService.startNewConversation();
+    setState(() {
+      _messages.clear();
+    });
+    _showSnackBar('New conversation started');
   }
 
   @override
@@ -464,6 +476,9 @@ class _BuddyScreenState extends State<BuddyScreen>
                 case 'history':
                   _showChatHistory();
                   break;
+                case 'new_conversation':
+                  _startNewConversation();
+                  break;
                 default:
                   // Handle persona selection
                   if (value.startsWith('persona_')) {
@@ -587,6 +602,22 @@ class _BuddyScreenState extends State<BuddyScreen>
               ),
               const PopupMenuDivider(),
               PopupMenuItem(
+                value: 'new_conversation',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.add_comment_outlined,
+                      color: AppTheme.textPrimaryColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'New Conversation',
+                      style: TextStyle(color: AppTheme.textPrimaryColor),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
                 value: 'clear',
                 child: Row(
                   children: [
@@ -629,6 +660,19 @@ class _BuddyScreenState extends State<BuddyScreen>
                     const SizedBox(width: 8),
                     Text(
                       'Chat history',
+                      style: TextStyle(color: AppTheme.textPrimaryColor),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'new_conversation',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh, color: AppTheme.textPrimaryColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'New conversation',
                       style: TextStyle(color: AppTheme.textPrimaryColor),
                     ),
                   ],

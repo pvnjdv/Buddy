@@ -52,14 +52,14 @@ class _AnimatedTypingTextState extends State<AnimatedTypingText> {
 
   void _typeNextWord() {
     final words = widget.text.trim().split(RegExp(r'\s+'));
-    
+
     if (_currentIndex >= words.length) {
       widget.onComplete?.call();
       return;
     }
 
     final word = words[_currentIndex];
-    
+
     setState(() {
       if (_currentIndex == 0) {
         _displayedText = word;
@@ -72,9 +72,13 @@ class _AnimatedTypingTextState extends State<AnimatedTypingText> {
     // Variable typing speed: slower after punctuation for natural feel
     Duration nextDelay = widget.typingSpeed ?? const Duration(milliseconds: 80);
     if (word.endsWith('.') || word.endsWith('!') || word.endsWith('?')) {
-      nextDelay = Duration(milliseconds: (nextDelay.inMilliseconds * 1.5).round());
+      nextDelay = Duration(
+        milliseconds: (nextDelay.inMilliseconds * 1.5).round(),
+      );
     } else if (word.endsWith(',') || word.endsWith(';') || word.endsWith(':')) {
-      nextDelay = Duration(milliseconds: (nextDelay.inMilliseconds * 1.2).round());
+      nextDelay = Duration(
+        milliseconds: (nextDelay.inMilliseconds * 1.2).round(),
+      );
     }
 
     _typingTimer = Timer(nextDelay, _typeNextWord);
@@ -82,9 +86,6 @@ class _AnimatedTypingTextState extends State<AnimatedTypingText> {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      _displayedText,
-      style: widget.textStyle,
-    );
+    return Text(_displayedText, style: widget.textStyle);
   }
 }

@@ -8,6 +8,8 @@ import 'flow_detail_screen.dart';
 import 'notes_alarms_screen.dart';
 import 'create_note_screen.dart';
 import 'create_alarm_screen.dart';
+import 'enhanced_notes_screen.dart';
+import 'enhanced_alarms_screen.dart';
 
 class FlowScreen extends StatefulWidget {
   const FlowScreen({super.key});
@@ -228,7 +230,11 @@ class _FlowScreenState extends State<FlowScreen>
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [_buildFlowsTab(), _buildNotesTab(), _buildAlarmsTab()],
+        children: [
+          _buildFlowsTab(),
+          const EnhancedNotesScreen(),
+          const EnhancedAlarmsScreen(),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _getContextualAction,
