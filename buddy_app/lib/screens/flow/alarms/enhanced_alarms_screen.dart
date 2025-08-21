@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../models/flow_models.dart';
-import '../../services/flow_service.dart';
-import '../../config/theme_config.dart';
+import '../../../models/flow_models.dart';
+import '../../../services/flow_service.dart';
+import '../../../config/theme_config.dart';
+import 'create_alarm_screen.dart';
 
 class EnhancedAlarmsScreen extends StatefulWidget {
   const EnhancedAlarmsScreen({super.key});
@@ -212,10 +213,11 @@ class _EnhancedAlarmsScreenState extends State<EnhancedAlarmsScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _createAlarm,
         backgroundColor: AppTheme.primaryColor,
-        child: const Icon(Icons.alarm_add, color: Colors.white),
+        icon: const Icon(Icons.alarm_add, color: Colors.white),
+        label: const Text('New Alarm', style: TextStyle(color: Colors.white)),
       ),
     );
   }
@@ -568,14 +570,16 @@ class _EnhancedAlarmsScreenState extends State<EnhancedAlarmsScreen> {
   }
 
   void _createAlarm() {
-    Navigator.pushNamed(context, '/create-alarm').then((_) => _loadAlarms());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CreateAlarmScreen()),
+    ).then((_) => _loadAlarms());
   }
 
   void _editAlarm(FlowAlarm alarm) {
-    Navigator.pushNamed(
+    Navigator.push(
       context,
-      '/edit-alarm',
-      arguments: alarm,
+      MaterialPageRoute(builder: (context) => CreateAlarmScreen(alarm: alarm)),
     ).then((_) => _loadAlarms());
   }
 

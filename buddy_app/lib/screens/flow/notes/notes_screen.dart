@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../services/flow_service.dart';
-import '../../models/flow_models.dart';
-import '../../widgets/flow/note_card.dart';
+import '../../../services/flow_service.dart';
+import '../../../models/flow_models.dart';
+import '../../../widgets/flow/note_card.dart';
 import 'note_editor_screen.dart';
 
 class NotesScreen extends StatefulWidget {

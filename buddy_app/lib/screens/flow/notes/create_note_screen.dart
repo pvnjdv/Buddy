@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../models/flow_models.dart';
-import '../../services/flow_service.dart';
+import '../../../models/flow_models.dart';
+import '../../../services/flow_service.dart';
 
 class CreateNoteScreen extends StatefulWidget {
   final Note? note; // For editing existing notes

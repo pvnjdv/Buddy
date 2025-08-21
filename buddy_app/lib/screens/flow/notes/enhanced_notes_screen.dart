@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
-import '../../models/flow_models.dart';
-import '../../services/flow_service.dart';
-import '../../config/theme_config.dart';
+import '../../../models/flow_models.dart';
+import '../../../services/flow_service.dart';
+import '../../../config/theme_config.dart';
+import 'create_note_screen.dart';
 
 class EnhancedNotesScreen extends StatefulWidget {
   const EnhancedNotesScreen({super.key});
@@ -242,10 +243,11 @@ class _EnhancedNotesScreenState extends State<EnhancedNotesScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _createNote,
         backgroundColor: AppTheme.primaryColor,
-        child: const Icon(Icons.add, color: Colors.white),
+        icon: const Icon(Icons.edit_note, color: Colors.white),
+        label: const Text('New Note', style: TextStyle(color: Colors.white)),
       ),
     );
   }
@@ -529,14 +531,16 @@ class _EnhancedNotesScreenState extends State<EnhancedNotesScreen> {
   }
 
   void _createNote() {
-    Navigator.pushNamed(context, '/create-note').then((_) => _loadNotes());
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CreateNoteScreen()),
+    ).then((_) => _loadNotes());
   }
 
   void _editNote(Note note) {
-    Navigator.pushNamed(
+    Navigator.push(
       context,
-      '/edit-note',
-      arguments: note,
+      MaterialPageRoute(builder: (context) => CreateNoteScreen(note: note)),
     ).then((_) => _loadNotes());
   }
 

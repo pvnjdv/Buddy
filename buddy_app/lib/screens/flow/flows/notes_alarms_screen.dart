@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../models/flow_models.dart';
-import '../../services/flow_service.dart';
-import 'create_note_screen.dart';
-import 'create_alarm_screen.dart';
+import '../../../models/flow_models.dart';
+import '../../../services/flow_service.dart';
+import '../notes/create_note_screen.dart';
+import '../alarms/create_alarm_screen.dart';
 
 class NotesAlarmsScreen extends StatefulWidget {
   const NotesAlarmsScreen({super.key});

@@ -4,12 +4,12 @@ import '../../services/flow_service.dart';
 import '../../services/auth_service.dart';
 import '../../config/theme_config.dart';
 import '../settings_screen.dart';
-import 'flow_detail_screen.dart';
-import 'notes_alarms_screen.dart';
-import 'create_note_screen.dart';
-import 'create_alarm_screen.dart';
-import 'enhanced_notes_screen.dart';
-import 'enhanced_alarms_screen.dart';
+import 'flows/flow_detail_screen.dart';
+import 'flows/notes_alarms_screen.dart';
+import 'notes/create_note_screen.dart';
+import 'alarms/create_alarm_screen.dart';
+import 'notes/enhanced_notes_screen.dart';
+import 'alarms/enhanced_alarms_screen.dart';
 
 class FlowScreen extends StatefulWidget {
   const FlowScreen({super.key});
@@ -21,8 +21,7 @@ class FlowScreen extends StatefulWidget {
 class _FlowScreenState extends State<FlowScreen>
     with SingleTickerProviderStateMixin {
   List<ProjectFlow> _flows = [];
-  List<Note> _notes = [];
-  List<FlowAlarm> _alarms = [];
+
   bool _isLoading = true;
   late TabController _tabController;
 
@@ -43,13 +42,9 @@ class _FlowScreenState extends State<FlowScreen>
     setState(() => _isLoading = true);
     try {
       final flows = await FlowService.getProjectFlows();
-      final notes = await FlowService.getNotes();
-      final alarms = await FlowService.getAlarms();
 
       setState(() {
         _flows = flows;
-        _notes = notes;
-        _alarms = alarms;
         _isLoading = false;
       });
     } catch (e) {
@@ -947,35 +942,6 @@ class _FlowScreenState extends State<FlowScreen>
     );
   }
 
-  void _logout() async {
-    final shouldLogout = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout completely?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Logout', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldLogout == true) {
-      await AuthService.logout();
-      if (mounted) {
-        Navigator.of(
-          context,
-        ).pushNamedAndRemoveUntil('/login', (route) => false);
-      }
-    }
-  }
-
   // Prompt user for a description and auto-generate flow
   void _promptAutoGenerateFlow() {
     final controller = TextEditingController();
@@ -1059,185 +1025,6 @@ class _FlowScreenState extends State<FlowScreen>
         },
       ),
     );
-  }
-
-  Widget _buildNotesTab() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_notes.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.note_alt, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'No Notes Yet',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Add notes to keep track of important information',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[500]),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CreateNoteScreen(),
-                ),
-              ),
-              icon: const Icon(Icons.note_add),
-              label: const Text('Create Note'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _refreshData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _notes.length,
-        itemBuilder: (context, index) {
-          final note = _notes[index];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: ListTile(
-              leading: Icon(Icons.note_alt, color: AppTheme.primaryColor),
-              title: Text(note.title),
-              subtitle: Text(
-                note.content,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: Text(
-                _formatDate(note.createdAt),
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-              onTap: () {
-                // Navigate to note details or edit
-              },
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildAlarmsTab() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_alarms.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.alarm, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'No Alarms Yet',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Set up alarms to get reminders for important tasks',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[500]),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CreateAlarmScreen(),
-                ),
-              ),
-              icon: const Icon(Icons.alarm_add),
-              label: const Text('Create Alarm'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _refreshData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _alarms.length,
-        itemBuilder: (context, index) {
-          final alarm = _alarms[index];
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: ListTile(
-              leading: Icon(
-                Icons.alarm,
-                color: alarm.isActive ? AppTheme.warningColor : Colors.grey,
-              ),
-              title: Text(alarm.title),
-              subtitle: Text(alarm.description),
-              trailing: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    _formatDate(alarm.scheduledTime),
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                  if (alarm.isActive)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.warningColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'Active',
-                        style: TextStyle(color: Colors.white, fontSize: 10),
-                      ),
-                    ),
-                ],
-              ),
-              onTap: () {
-                // Navigate to alarm details or edit
-              },
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays > 7) {
-      return '${date.day}/${date.month}/${date.year}';
-    } else if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
   }
 
   void _getContextualAction() {

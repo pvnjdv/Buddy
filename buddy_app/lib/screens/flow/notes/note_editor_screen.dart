@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../models/flow_models.dart';
-import '../../services/flow_service.dart';
-import '../../widgets/flow/color_picker.dart';
+import '../../../models/flow_models.dart';
+import '../../../services/flow_service.dart';
+import '../../../widgets/flow/color_picker.dart';
 
 class NoteEditorScreen extends StatefulWidget {
   final Note? note;
