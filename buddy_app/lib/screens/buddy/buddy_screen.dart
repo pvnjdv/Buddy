@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../models/flow_models.dart';
 import '../../services/buddy_service.dart';
-import '../../config/theme_config.dart';
-import '../settings_screen.dart';
+import '../../config/settings/theme_config.dart';
+import '../../config/settings/settings_manager.dart';
+import '../settings/settings_screen.dart';
 import 'chat_history_screen.dart';
 import '../../widgets/chat/buddy_message_bubble.dart';
 
@@ -29,8 +30,10 @@ class _BuddyScreenState extends State<BuddyScreen>
 
   // Real-time sync
   Timer? _syncTimer;
+  Timer? _quickSyncTimer;
   bool _isOnline = true;
   DateTime? _lastSyncTime;
+  bool _hasDataChanged = false;
 
   // Custom AI Persona (UI state)
   AIPersona? _activePersona;
@@ -58,12 +61,85 @@ class _BuddyScreenState extends State<BuddyScreen>
     _scrollController.dispose();
     _typingController.dispose();
     _syncTimer?.cancel();
+    _quickSyncTimer?.cancel();
     super.dispose();
   }
 
-  void _startRealTimeSync() {
-    _syncTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      _syncData();
+  void _startRealTimeSync() async {
+    // Get sync interval from settings
+    final quickSyncInterval = await SettingsManager.getSyncInterval();
+    final autoSyncEnabled = await SettingsManager.getAutoSyncEnabled();
+
+    if (autoSyncEnabled) {
+      // Start quick sync for chat data changes
+      _quickSyncTimer = Timer.periodic(Duration(seconds: quickSyncInterval), (
+        timer,
+      ) {
+        _quickSyncData();
+      });
+
+      // Start regular sync for other data (every 30 seconds)
+      _syncTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+        _syncData();
+      });
+    }
+  }
+
+  Future<void> _quickSyncData() async {
+    try {
+      // Quick check for chat history changes
+      final history = BuddyService.getChatHistory();
+      if (history.length != _messages.length) {
+        await _reloadChatData();
+        setState(() {
+          _hasDataChanged = true;
+          _lastSyncTime = DateTime.now();
+          _isOnline = true;
+        });
+
+        // Show brief sync indicator when data changes
+        if (_hasDataChanged) {
+          _showSyncIndicator();
+          // Reset flag after showing indicator
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              setState(() {
+                _hasDataChanged = false;
+              });
+            }
+          });
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isOnline = false;
+        _hasDataChanged = false;
+      });
+    }
+  }
+
+  Future<void> _reloadChatData() async {
+    final history = BuddyService.getChatHistory();
+    _messages = history
+        .map(
+          (msg) => BuddyMessage(
+            id: msg.id,
+            content: msg.content,
+            role: msg.role,
+            timestamp: msg.timestamp,
+          ),
+        )
+        .toList();
+
+    // Auto-scroll to bottom if user was near bottom
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        final currentScroll = _scrollController.offset;
+        if (maxScroll - currentScroll < 100) {
+          _scrollToBottom();
+        }
+      }
     });
   }
 
@@ -660,19 +736,6 @@ class _BuddyScreenState extends State<BuddyScreen>
                     const SizedBox(width: 8),
                     Text(
                       'Chat history',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'new_conversation',
-                child: Row(
-                  children: [
-                    Icon(Icons.refresh, color: AppTheme.textPrimaryColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      'New conversation',
                       style: TextStyle(color: AppTheme.textPrimaryColor),
                     ),
                   ],
@@ -1381,13 +1444,6 @@ class _BuddyScreenState extends State<BuddyScreen>
     );
   }
 
-  String _formatTime(DateTime dateTime) {
-    final hour = dateTime.hour > 12 ? dateTime.hour - 12 : dateTime.hour;
-    final minute = dateTime.minute.toString().padLeft(2, '0');
-    final period = dateTime.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $period';
-  }
-
   String _formatSyncTime(DateTime syncTime) {
     final now = DateTime.now();
     final difference = now.difference(syncTime);
@@ -1401,5 +1457,32 @@ class _BuddyScreenState extends State<BuddyScreen>
     } else {
       return '${difference.inDays}d ago';
     }
+  }
+
+  // Show sync indicator when data changes
+  void _showSyncIndicator() {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text('Syncing new messages...'),
+          ],
+        ),
+        duration: const Duration(seconds: 1),
+        backgroundColor: AppTheme.primaryColor,
+      ),
+    );
   }
 }

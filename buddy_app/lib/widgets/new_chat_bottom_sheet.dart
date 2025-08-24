@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/flow_models.dart';
 import '../services/contacts_service.dart';
-import '../config/theme_config.dart';
+import '../config/settings/theme_config.dart';
 import '../screens/chat/enhanced_individual_chat_screen.dart';
 import '../screens/contacts_screen.dart';
 

@@ -35,11 +35,16 @@ class AppTheme {
 
   static Color _primaryColor = defaultPrimary;
   static Color _accentColor = defaultAccent;
-  static bool _isDarkMode = false;
+  static bool _isDarkMode =
+      true; // Default to dark mode for stylish black theme
 
   static Color get primaryColor => _primaryColor;
   static Color get accentColor => _accentColor;
   static bool get isDarkMode => _isDarkMode;
+
+  static void setDarkMode(bool isDark) {
+    _isDarkMode = isDark;
+  }
 
   static Future<void> loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
@@ -124,9 +129,11 @@ class AppTheme {
       colorScheme: ColorScheme.fromSeed(
         seedColor: _primaryColor,
         brightness: Brightness.dark,
+        surface: const Color(0xFF0F172A), // Very dark background
+        onSurface: Colors.white,
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: const Color(0xFF0F172A), // Pure black/dark slate
         foregroundColor: Colors.white,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
@@ -135,17 +142,20 @@ class AppTheme {
           fontSize: 20,
           fontWeight: FontWeight.w600,
         ),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       cardTheme: CardThemeData(
-        elevation: 2,
+        elevation: 8,
+        shadowColor: Colors.black.withValues(alpha: 0.3),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: const Color(0xFF334155),
+        color: const Color(0xFF1E293B), // Dark slate card
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: _primaryColor,
           foregroundColor: Colors.white,
-          elevation: 2,
+          elevation: 6,
+          shadowColor: _primaryColor.withValues(alpha: 0.3),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -185,5 +195,5 @@ class AppTheme {
   static Color get successColor => const Color(0xFF10B981);
   static Color get warningColor => const Color(0xFFF59E0B);
   static Color get shadowColor =>
-      _isDarkMode ? Colors.black26 : Colors.grey.withOpacity(0.1);
+      _isDarkMode ? Colors.black26 : Colors.grey.withValues(alpha: 0.1);
 }

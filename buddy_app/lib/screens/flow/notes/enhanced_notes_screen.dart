@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../../../models/flow_models.dart';
 import '../../../services/flow_service.dart';
-import '../../../config/theme_config.dart';
+import '../../../config/settings/theme_config.dart';
 import 'create_note_screen.dart';
 
 class EnhancedNotesScreen extends StatefulWidget {

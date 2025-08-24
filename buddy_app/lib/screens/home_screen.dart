@@ -3,8 +3,8 @@ import 'chat/chat_list_screen.dart';
 import 'buddy/buddy_screen.dart';
 import 'flow/flow_screen.dart';
 import 'dock/dock_screen.dart';
-import 'settings_screen.dart';
-import '../config/theme_config.dart';
+import 'settings/settings_screen.dart';
+import '../config/settings/theme_config.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/dock_models.dart';
-import '../../config/theme_config.dart';
+import '../../config/settings/theme_config.dart';
 
 class MacroEditorScreen extends StatefulWidget {
   final DockMacro? macro;

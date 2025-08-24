@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/flow_models.dart';
 import '../config/api_config.dart';
 import 'agent/buddy_orchestrator.dart';
+import 'databases/buddy_chat_database.dart';
 
 class AIPersona {
   final String id;
@@ -75,11 +76,30 @@ class BuddyService {
   static List<AIPersona> _savedPersonas = [];
   static bool _isProcessingRequest = false; // Add request throttling
 
-  // Chat session management
+  // Chat session management - now using BuddyChatDatabase
   static String _currentChatSessionId = DateTime.now().millisecondsSinceEpoch
       .toString();
-  static const String _chatHistoryKey = 'buddy_chat_history';
-  static const String _currentSessionKey = 'buddy_current_session';
+
+  // Initialize the service
+  static Future<void> initialize() async {
+    await BuddyChatDatabase.initialize();
+    await _loadCurrentChatHistory();
+  }
+
+  // Load current chat history from BuddyChatDatabase
+  static Future<void> _loadCurrentChatHistory() async {
+    try {
+      final messages = await BuddyChatDatabase.getCurrentMessages();
+      _chatHistory = messages.map((messageJson) {
+        final messageData = json.decode(messageJson);
+        return FlowBuddyMessage.fromJson(messageData);
+      }).toList();
+      print('Loaded ${_chatHistory.length} messages from chat database');
+    } catch (e) {
+      print('Error loading chat history: $e');
+      _chatHistory = [];
+    }
+  }
 
   // Get authorization token
   static Future<String?> _getAuthToken() async {
@@ -306,53 +326,70 @@ class BuddyService {
 
   // Load chat history from persistent storage
   static Future<void> loadChatHistory() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final sessionId = prefs.getString(_currentSessionKey);
-      if (sessionId != null) {
-        _currentChatSessionId = sessionId;
-      }
-
-      final historyJson = prefs.getString(
-        '${_chatHistoryKey}_$_currentChatSessionId',
-      );
-      if (historyJson != null) {
-        final List<dynamic> historyList = json.decode(historyJson);
-        _chatHistory = historyList
-            .map((item) => FlowBuddyMessage.fromJson(item))
-            .toList();
-      }
-    } catch (e) {
-      print('Error loading chat history: $e');
-    }
+    await _loadCurrentChatHistory();
   }
 
   // Save chat history to persistent storage
   static Future<void> saveChatHistory() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_currentSessionKey, _currentChatSessionId);
-      final historyJson = json.encode(
-        _chatHistory.map((msg) => msg.toJson()).toList(),
-      );
-      await prefs.setString(
-        '${_chatHistoryKey}_$_currentChatSessionId',
-        historyJson,
-      );
+      // Save each message to the database
+      for (final message in _chatHistory) {
+        await BuddyChatDatabase.addMessage(json.encode(message.toJson()));
+      }
     } catch (e) {
       print('Error saving chat history: $e');
     }
   }
 
-  // Start new conversation
+  // Start new conversation - Save current one before starting new
   static Future<void> startNewConversation() async {
-    _chatHistory.clear();
-    _currentChatSessionId = DateTime.now().millisecondsSinceEpoch.toString();
-    await saveChatHistory();
+    try {
+      // Use the new database for conversation management
+      final conversationId = await BuddyChatDatabase.startNewConversation();
+      _currentChatSessionId = conversationId;
+
+      // Clear current chat history in memory
+      _chatHistory.clear();
+
+      print('Started new conversation: $conversationId');
+    } catch (e) {
+      print('Error starting new conversation: $e');
+      _chatHistory.clear();
+      _currentChatSessionId = DateTime.now().millisecondsSinceEpoch.toString();
+    }
+  }
+
+  // Get all conversations
+  static Future<List<Map<String, dynamic>>> getAllConversations() async {
+    try {
+      return await BuddyChatDatabase.getAllConversations();
+    } catch (e) {
+      print('Error getting conversations: $e');
+      return [];
+    }
+  }
+
+  // Load a specific conversation
+  static Future<void> loadConversation(String conversationId) async {
+    try {
+      // Load conversation from database
+      await BuddyChatDatabase.loadConversation(conversationId);
+      _currentChatSessionId = conversationId;
+
+      // Reload chat history from the loaded conversation
+      await _loadCurrentChatHistory();
+
+      print(
+        'Loaded conversation: $conversationId with ${_chatHistory.length} messages',
+      );
+    } catch (e) {
+      print('Error loading conversation: $e');
+    }
   }
 
   static void clearChatHistory() {
     _chatHistory.clear();
+    saveChatHistory();
   }
 
   // Flow detection methods
@@ -368,6 +405,116 @@ class BuddyService {
     ];
 
     return flowKeywords.any((keyword) => lowerMessage.contains(keyword));
+  }
+
+  // Detect task continuation/modification requests
+  static bool isTaskContinuationRequest(String message) {
+    final lowerMessage = message.toLowerCase();
+    final continuationKeywords = [
+      'add this',
+      'add that',
+      'also add',
+      'include this',
+      'put this',
+      'add another',
+      'and also',
+      'modify',
+      'change',
+      'update',
+      'edit this',
+      'add to it',
+      'add to that',
+      'add in it',
+      'append',
+      'insert',
+      'put in',
+      'add more',
+      'additional',
+      'also make',
+      'also create',
+    ];
+
+    // Check if this looks like a continuation request
+    final hasContinuationKeywords = continuationKeywords.any(
+      (keyword) => lowerMessage.contains(keyword),
+    );
+
+    // Check if we have recent context (recent messages about notes/alarms/flows)
+    final hasRecentContext =
+        _chatHistory.length >= 2 &&
+        _chatHistory.reversed
+            .take(3)
+            .any(
+              (msg) =>
+                  msg.role == BuddyRole.assistant &&
+                  (msg.content.toLowerCase().contains('note') ||
+                      msg.content.toLowerCase().contains('alarm') ||
+                      msg.content.toLowerCase().contains('flow') ||
+                      msg.content.toLowerCase().contains('created') ||
+                      msg.content.toLowerCase().contains('added')),
+            );
+
+    return hasContinuationKeywords ||
+        (hasRecentContext && _isFollowUpMessage(lowerMessage));
+  }
+
+  // Check if this is a follow-up message based on context
+  static bool _isFollowUpMessage(String lowerMessage) {
+    final followUpPatterns = [
+      RegExp(r'\b(that|this|it)\b'),
+      RegExp(r'\b(the (note|alarm|flow|task))\b'),
+      RegExp(r'\b(make it|do it|add it)\b'),
+    ];
+
+    return followUpPatterns.any((pattern) => pattern.hasMatch(lowerMessage));
+  }
+
+  // Get recent task context for continuation
+  static Map<String, dynamic>? _getRecentTaskContext() {
+    // Look for recent assistant messages about created tasks
+    final recentMessages = _chatHistory.reversed.take(5).toList();
+
+    for (final message in recentMessages) {
+      if (message.role == BuddyRole.assistant) {
+        final content = message.content.toLowerCase();
+
+        // Check for note creation
+        if (content.contains('note') &&
+            (content.contains('created') ||
+                content.contains('added') ||
+                content.contains('saved'))) {
+          return {
+            'type': 'note',
+            'content': message.content,
+            'timestamp': message.timestamp.toIso8601String(),
+          };
+        }
+
+        // Check for alarm creation
+        if (content.contains('alarm') &&
+            (content.contains('created') ||
+                content.contains('set') ||
+                content.contains('added'))) {
+          return {
+            'type': 'alarm',
+            'content': message.content,
+            'timestamp': message.timestamp.toIso8601String(),
+          };
+        }
+
+        // Check for flow creation
+        if (content.contains('flow') &&
+            (content.contains('created') || content.contains('generated'))) {
+          return {
+            'type': 'flow',
+            'content': message.content,
+            'timestamp': message.timestamp.toIso8601String(),
+          };
+        }
+      }
+    }
+
+    return null;
   }
 
   static String extractProjectDescription(String message) {
@@ -413,6 +560,8 @@ class BuddyService {
       timestamp: DateTime.now(),
     );
     _chatHistory.add(userMessage);
+    // Save user message to database immediately
+    await BuddyChatDatabase.addMessage(json.encode(userMessage.toJson()));
 
     try {
       print('=== SIMPLE ASKBUDDY STARTED ===');
@@ -491,14 +640,25 @@ class BuddyService {
         if (token != null) 'Authorization': 'Bearer $token',
       };
 
+      // Enhanced request body with task continuation context
+      final isTaskContinuation = isTaskContinuationRequest(prompt);
+      final recentContext = isTaskContinuation ? _getRecentTaskContext() : null;
+
       final requestBody = {
         'prompt': prompt,
         'chat_history': _chatHistory
             .map((msg) => {'role': msg.role.name, 'content': msg.content})
             .toList(),
+        'is_task_continuation': isTaskContinuation,
+        'recent_context': recentContext,
+        'session_id': _currentChatSessionId,
       };
 
-      print('Sending simplified request...');
+      print('Sending enhanced request...');
+      print('Is task continuation: $isTaskContinuation');
+      if (recentContext != null) {
+        print('Recent context included: ${recentContext['type']}');
+      }
       print('Headers: $headers');
 
       final response = await http.post(

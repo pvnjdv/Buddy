@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../models/flow_models.dart';
 import '../../../services/flow_service.dart';
-import '../../../config/theme_config.dart';
+import '../../../config/settings/theme_config.dart';
 import 'create_alarm_screen.dart';
 
 class EnhancedAlarmsScreen extends StatefulWidget {

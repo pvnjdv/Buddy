@@ -31,6 +31,9 @@ class BuddyQuery(BaseModel):
     chat_history: Optional[List[Dict[str, Any]]] = []
     is_flow_request: Optional[bool] = False
     persona_id: Optional[str] = None  # Added for persona support
+    is_task_continuation: Optional[bool] = False  # For task continuation detection
+    recent_context: Optional[str] = None  # Recent conversation context for task continuation
+    session_id: Optional[str] = None  # Session identifier for conversation management
 
 class BuddyRequest(BaseModel):
     message: str
@@ -358,6 +361,53 @@ async def ask_buddy(
 ) -> BuddyResponse:
     """Enhanced Buddy AI endpoint with intelligent routing and thinking capabilities"""
     try:
+        # Handle task continuation requests first
+        if request.is_task_continuation and request.recent_context:
+            session_info = f"session {request.session_id}" if request.session_id else "no session"
+            logger.info(f"Processing task continuation for user {current_user.id if current_user else 'anonymous'} ({session_info})")
+            
+            # Create enhanced prompt with recent context for task continuation
+            enhanced_prompt = f"""Previous context: {request.recent_context}
+
+Current request: {request.prompt}
+
+This is a task continuation request. Please modify or add to the previous task based on the current request."""
+            
+            # Use buddy AI directly for task continuation with context
+            user_id = str(current_user.id) if current_user else None
+            buddy_response = await buddy_ai.generate_ai_response(enhanced_prompt, user_id)
+            
+            # Extract response text from dynamic AI response
+            if isinstance(buddy_response, dict):
+                if buddy_response.get("type") == "simple_response":
+                    response = buddy_response.get("content", "Task updated successfully!")
+                elif buddy_response.get("type") == "flow":
+                    content = buddy_response.get("content", {})
+                    response = f"🔄 Updated Flow: {content.get('title', 'Modified Project Flow')}\n\n"
+                    if content.get('description'):
+                        response += f"{content.get('description')}\n\n"
+                    response += "✅ Flow updated successfully with your requested changes!"
+                elif buddy_response.get("type") == "code_solution":
+                    content = buddy_response.get("content", {})
+                    if content.get("complete_code"):
+                        response = f"Here's your updated code:\n\n```{content.get('primary_language', 'python')}\n{content.get('complete_code')}\n```\n\n{content.get('explanation', '')}"
+                    else:
+                        response = content.get('solution_overview', 'Code updated successfully!')
+                elif buddy_response.get("type") == "enhanced_response":
+                    content = buddy_response.get("content", {})
+                    response = content.get("direct_answer", "Task continuation completed!")
+                else:
+                    response = str(buddy_response.get("content", buddy_response))
+            else:
+                response = str(buddy_response)
+            
+            return BuddyResponse(
+                response=response,
+                success=True,
+                thinking_summary="Task continuation with context awareness",
+                intent_analysis="task_continuation"
+            )
+        
         # Early detection for simple requests that don't need AI thinking overhead
         prompt_lower = request.prompt.lower()
         

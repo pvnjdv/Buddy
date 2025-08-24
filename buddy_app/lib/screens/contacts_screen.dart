@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import '../services/contacts_service.dart';
 import '../models/flow_models.dart';
-import '../config/theme_config.dart';
+import '../config/settings/theme_config.dart';
 import 'chat/enhanced_individual_chat_screen.dart';
 
 class ContactsScreen extends StatefulWidget {

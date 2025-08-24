@@ -6,11 +6,28 @@ import 'screens/otp_screen.dart';
 import 'screens/buddy/buddy_screen.dart';
 import 'screens/flow/flow_screen.dart';
 import 'services/auth_service.dart';
-import 'config/theme_config.dart';
+import 'services/buddy_service.dart';
+import 'config/settings/theme_config.dart';
+import 'config/settings/settings_manager.dart';
+import 'services/databases/buddy_chat_database.dart';
+import 'services/databases/flow_database.dart';
+import 'services/databases/dock_database.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize all databases
+  await BuddyChatDatabase.initialize();
+  await FlowDatabase.initialize();
+  await DockDatabase.initialize();
+
+  // Initialize services
+  await BuddyService.initialize();
+
+  // Initialize theme and settings
   await AppTheme.loadTheme();
+  await SettingsManager.initialize();
+
   runApp(const BuddyApp());
 }
 

@@ -7,7 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 import '../../services/contacts_service.dart';
 import '../../services/status_service.dart';
-import '../../config/theme_config.dart';
+import '../../config/settings/theme_config.dart';
 import '../../widgets/new_chat_bottom_sheet.dart';
 import '../contacts_screen.dart';
 import 'enhanced_individual_chat_screen.dart';

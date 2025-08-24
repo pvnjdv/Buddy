@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../models/dock_models.dart';
 import '../../services/dock_service.dart';
-import '../../config/theme_config.dart';
-import '../settings_screen.dart';
+import '../../config/settings/theme_config.dart';
+import '../settings/settings_screen.dart';
 import 'device_detail_screen.dart';
 import 'macro_editor_screen.dart';
 
