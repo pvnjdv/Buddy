@@ -17,9 +17,28 @@ class BuddyChatDatabase {
     final prefs = await SharedPreferences.getInstance();
     _activeConversationId = prefs.getString(_activeConversationKey);
 
-    // If no active conversation, create a new one
+    // Only create a new conversation if there are existing conversations
+    // or if this is the very first time the app is run
     if (_activeConversationId == null) {
-      await startNewConversation();
+      final conversationsJson = prefs.getString(_conversationsKey) ?? '[]';
+      final List<dynamic> conversations = json.decode(conversationsJson);
+
+      // Only auto-create if this is truly the first time (no conversations at all)
+      if (conversations.isEmpty && !prefs.containsKey(_conversationsKey)) {
+        await startNewConversation();
+        print('🆕 First time setup: Created initial conversation');
+      } else if (conversations.isNotEmpty) {
+        // Load the most recent conversation
+        conversations.sort(
+          (a, b) =>
+              (b['timestamp'] as String).compareTo(a['timestamp'] as String),
+        );
+        final mostRecentConv = conversations.first;
+        await loadConversation(mostRecentConv['id']);
+        print('🔄 Loaded most recent conversation: ${mostRecentConv['id']}');
+      } else {
+        print('📭 No active conversation - waiting for user to start one');
+      }
     }
   }
 
@@ -53,9 +72,29 @@ class BuddyChatDatabase {
     final prefs = await SharedPreferences.getInstance();
     final chatHistory = prefs.getStringList(_chatHistoryKey) ?? [];
 
+    // Parse messages to generate title
+    List<Map<String, dynamic>> parsedMessages = [];
+    for (String msgJson in chatHistory) {
+      try {
+        final decoded = json.decode(msgJson);
+        parsedMessages.add({
+          'message': decoded['content'] ?? decoded['message'] ?? '',
+          'isUser': decoded['isUser'] ?? false,
+          'timestamp': decoded['timestamp'] ?? DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        // Skip malformed messages
+        continue;
+      }
+    }
+
+    // Generate title from messages
+    String title = _generateConversationTitle(parsedMessages);
+
     // Save conversation data
     final conversationData = {
       'id': _activeConversationId,
+      'title': title,
       'messages': chatHistory,
       'timestamp': DateTime.now().toIso8601String(),
       'messageCount': chatHistory.length,
@@ -109,44 +148,81 @@ class BuddyChatDatabase {
   static Future<List<Map<String, dynamic>>> getAllConversations() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Save current conversation first
-    await _saveCurrentConversation();
+    // Save current conversation first (only if there is one)
+    if (_activeConversationId != null) {
+      await _saveCurrentConversation();
+    }
 
     final conversationsJson = prefs.getString(_conversationsKey) ?? '[]';
     final List<dynamic> conversations = json.decode(conversationsJson);
 
-    return conversations
-        .cast<Map<String, dynamic>>()
-        .map(
-          (conv) => {
-            'id': conv['id'],
-            'timestamp': conv['timestamp'],
-            'messageCount': conv['messageCount'],
-            'preview': _getConversationPreview(conv['messages']),
-          },
-        )
-        .toList()
-      ..sort((a, b) => b['timestamp'].compareTo(a['timestamp']));
+    return conversations.cast<Map<String, dynamic>>().map((conv) {
+      final messages = List<Map<String, dynamic>>.from(
+        (conv['messages'] as List? ?? []).map((msgJson) {
+          try {
+            if (msgJson is String) {
+              final decoded = json.decode(msgJson);
+              return {
+                'message': decoded['content'] ?? decoded['message'] ?? '',
+                'isUser': decoded['isUser'] ?? false,
+                'timestamp':
+                    decoded['timestamp'] ?? DateTime.now().toIso8601String(),
+              };
+            }
+            return msgJson as Map<String, dynamic>;
+          } catch (e) {
+            return {
+              'message': 'Error loading message',
+              'isUser': false,
+              'timestamp': DateTime.now().toIso8601String(),
+            };
+          }
+        }),
+      );
+
+      return {
+        'id': conv['id'],
+        'title': conv['title'] ?? _generateConversationTitle(messages),
+        'messages': messages,
+        'created_at': conv['timestamp'] ?? DateTime.now().toIso8601String(),
+        'updated_at': conv['timestamp'] ?? DateTime.now().toIso8601String(),
+        'messageCount': messages.length,
+      };
+    }).toList()..sort(
+      (a, b) =>
+          (b['updated_at'] as String).compareTo(a['updated_at'] as String),
+    );
   }
 
-  /// Get conversation preview text
-  static String _getConversationPreview(dynamic messages) {
-    if (messages == null || (messages as List).isEmpty) {
-      return 'New conversation';
+  /// Generate a conversation title from messages
+  static String _generateConversationTitle(
+    List<Map<String, dynamic>> messages,
+  ) {
+    if (messages.isEmpty) return 'New Conversation';
+
+    // Find first user message
+    final firstUserMessage = messages.firstWhere(
+      (msg) => msg['isUser'] == true,
+      orElse: () => messages.first,
+    );
+
+    String content =
+        firstUserMessage['message']?.toString() ?? 'New Conversation';
+    if (content.length > 40) {
+      content = '${content.substring(0, 40)}...';
     }
 
-    try {
-      final List<String> messageList = List<String>.from(messages);
-      if (messageList.isNotEmpty) {
-        final firstMessage = json.decode(messageList.first);
-        final content = firstMessage['content'] ?? '';
-        return content.length > 50 ? '${content.substring(0, 50)}...' : content;
-      }
-    } catch (e) {
-      // Fallback for parsing errors
-    }
+    return content;
+  }
 
-    return 'Conversation';
+  /// Force refresh - save current conversation and update list
+  static Future<void> forceRefresh() async {
+    print('🔄 Force refreshing conversations...');
+    // Only save if there's an active conversation
+    if (_activeConversationId != null) {
+      await _saveCurrentConversation();
+    }
+    print('✅ Force refresh complete');
   }
 
   /// Save conversation metadata
@@ -176,14 +252,30 @@ class BuddyChatDatabase {
   /// Add message to current conversation
   static Future<void> addMessage(String messageJson) async {
     final prefs = await SharedPreferences.getInstance();
+
+    // If no active conversation, start a new one
+    if (_activeConversationId == null) {
+      print('💬 No active conversation, starting new one...');
+      await startNewConversation();
+    }
+
     final chatHistory = prefs.getStringList(_chatHistoryKey) ?? [];
 
     chatHistory.add(messageJson);
     await prefs.setStringList(_chatHistoryKey, chatHistory);
 
+    print(
+      '💬 Added message to conversation ${_activeConversationId}. Total messages: ${chatHistory.length}',
+    );
+
     // Update conversation metadata
     if (_activeConversationId != null) {
       await _saveConversationMetadata(_activeConversationId!, chatHistory);
+      // Also save the current conversation to update the conversations list
+      await _saveCurrentConversation();
+      print(
+        '📚 Saved conversation ${_activeConversationId} with ${chatHistory.length} messages',
+      );
     }
   }
 
@@ -219,10 +311,57 @@ class BuddyChatDatabase {
     metadataList.removeWhere((meta) => meta['id'] == conversationId);
     await prefs.setString(_conversationMetadataKey, json.encode(metadataList));
 
-    // If deleted conversation was active, start new one
+    // If deleted conversation was active
     if (_activeConversationId == conversationId) {
-      await startNewConversation();
+      // Check if there are other conversations remaining
+      if (conversations.isNotEmpty) {
+        // Load the most recent conversation
+        conversations.sort(
+          (a, b) =>
+              (b['timestamp'] as String).compareTo(a['timestamp'] as String),
+        );
+        final mostRecentConv = conversations.first;
+        await loadConversation(mostRecentConv['id']);
+      } else {
+        // No conversations left, just clear everything
+        _activeConversationId = null;
+        await prefs.remove(_activeConversationKey);
+        await prefs.remove(_chatHistoryKey);
+        print('🗑️ All conversations deleted. Chat history cleared.');
+      }
     }
+  }
+
+  /// Rename a specific conversation
+  static Future<void> renameConversation(
+    String conversationId,
+    String newTitle,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Update in conversations list
+    final conversationsJson = prefs.getString(_conversationsKey) ?? '[]';
+    final List<dynamic> conversations = json.decode(conversationsJson);
+    for (var conv in conversations) {
+      if (conv['id'] == conversationId) {
+        conv['title'] = newTitle;
+        conv['updated_at'] = DateTime.now().toIso8601String();
+        break;
+      }
+    }
+    await prefs.setString(_conversationsKey, json.encode(conversations));
+
+    // Update in metadata
+    final metadataListJson = prefs.getString(_conversationMetadataKey) ?? '[]';
+    final List<dynamic> metadataList = json.decode(metadataListJson);
+    for (var meta in metadataList) {
+      if (meta['id'] == conversationId) {
+        meta['title'] = newTitle;
+        meta['updated_at'] = DateTime.now().toIso8601String();
+        break;
+      }
+    }
+    await prefs.setString(_conversationMetadataKey, json.encode(metadataList));
   }
 
   /// Get current active conversation ID

@@ -82,8 +82,10 @@ class BuddyService {
 
   // Initialize the service
   static Future<void> initialize() async {
+    print('🚀 Initializing BuddyService...');
     await BuddyChatDatabase.initialize();
     await _loadCurrentChatHistory();
+    print('✅ BuddyService initialized with ${_chatHistory.length} messages');
   }
 
   // Load current chat history from BuddyChatDatabase
@@ -94,9 +96,9 @@ class BuddyService {
         final messageData = json.decode(messageJson);
         return FlowBuddyMessage.fromJson(messageData);
       }).toList();
-      print('Loaded ${_chatHistory.length} messages from chat database');
+      print('📚 Loaded ${_chatHistory.length} messages from chat database');
     } catch (e) {
-      print('Error loading chat history: $e');
+      print('❌ Error loading chat history: $e');
       _chatHistory = [];
     }
   }
@@ -107,7 +109,7 @@ class BuddyService {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('jwt');
       print(
-        'Auth token retrieved: ${token != null ? "${token.substring(0, 10)}..." : "null"}',
+        'Auth token retrieved: ${token != null ? _truncateString(token, 10) : "null"}',
       );
       return token;
     } catch (e) {
@@ -119,7 +121,9 @@ class BuddyService {
   // Get auth headers
   static Future<Map<String, String>> _getAuthHeaders() async {
     final token = await _getAuthToken();
-    print('Retrieved auth token: ${token?.substring(0, 10)}...');
+    print(
+      'Retrieved auth token: ${token != null ? _truncateString(token, 10) : "null"}',
+    );
 
     final headers = {'Content-Type': 'application/json'};
 
@@ -332,12 +336,11 @@ class BuddyService {
   // Save chat history to persistent storage
   static Future<void> saveChatHistory() async {
     try {
-      // Save each message to the database
-      for (final message in _chatHistory) {
-        await BuddyChatDatabase.addMessage(json.encode(message.toJson()));
-      }
+      // This method is now deprecated - individual messages are saved immediately
+      // when added. This is kept for compatibility but does nothing to avoid duplicates.
+      print('saveChatHistory() called - individual messages already saved');
     } catch (e) {
-      print('Error saving chat history: $e');
+      print('Error in saveChatHistory: $e');
     }
   }
 
@@ -531,7 +534,9 @@ class BuddyService {
     for (final trigger in flowTriggers) {
       if (lowerMessage.contains(trigger)) {
         final startIndex = lowerMessage.indexOf(trigger) + trigger.length;
-        return message.substring(startIndex).trim();
+        if (startIndex < message.length) {
+          return message.substring(startIndex).trim();
+        }
       }
     }
 
@@ -562,6 +567,7 @@ class BuddyService {
     _chatHistory.add(userMessage);
     // Save user message to database immediately
     await BuddyChatDatabase.addMessage(json.encode(userMessage.toJson()));
+    print('💾 Saved user message: ${_truncateString(userMessage.content, 50)}');
 
     try {
       print('=== SIMPLE ASKBUDDY STARTED ===');
@@ -582,9 +588,13 @@ class BuddyService {
             timestamp: DateTime.now(),
           );
           _chatHistory.add(assistantMessage);
-
-          // Save chat history to persistent storage
-          await saveChatHistory();
+          // Save assistant message to database immediately
+          await BuddyChatDatabase.addMessage(
+            json.encode(assistantMessage.toJson()),
+          );
+          print(
+            '💾 Saved assistant message: ${_truncateString(assistantMessage.content, 50)}',
+          );
 
           // Enhanced response with navigation support
           final response = {
@@ -621,6 +631,7 @@ class BuddyService {
             };
           }
 
+          _isProcessingRequest = false; // Reset flag before returning
           return response;
         }
       } catch (e) {
@@ -654,12 +665,9 @@ class BuddyService {
         'session_id': _currentChatSessionId,
       };
 
-      print('Sending enhanced request...');
-      print('Is task continuation: $isTaskContinuation');
-      if (recentContext != null) {
-        print('Recent context included: ${recentContext['type']}');
-      }
-      print('Headers: $headers');
+      print(
+        '💬 Buddy Request - Session: $_currentChatSessionId, History: ${_chatHistory.length} msgs',
+      );
 
       final response = await http.post(
         url,
@@ -682,13 +690,15 @@ class BuddyService {
           timestamp: DateTime.now(),
         );
         _chatHistory.add(assistantMessage);
-
-        // Save chat history to persistent storage
-        await saveChatHistory();
+        // Save assistant message to database immediately
+        await BuddyChatDatabase.addMessage(
+          json.encode(assistantMessage.toJson()),
+        );
 
         print('=== SUCCESS - RETURNING RESPONSE ===');
         print('AI Response: $aiResponse');
 
+        _isProcessingRequest = false; // Reset flag before returning
         return {'success': true, 'response': aiResponse, 'message': aiResponse};
       } else {
         print('Server error: ${response.statusCode} - ${response.body}');
@@ -709,9 +719,10 @@ class BuddyService {
         timestamp: DateTime.now(),
       );
       _chatHistory.add(assistantMessage);
-
-      // Save chat history to persistent storage
-      await saveChatHistory();
+      // Save assistant message to database immediately
+      await BuddyChatDatabase.addMessage(
+        json.encode(assistantMessage.toJson()),
+      );
 
       return {
         'success': false,
@@ -874,5 +885,93 @@ class BuddyService {
             'Error getting help. Please try asking me directly in the chat.',
       };
     }
+  }
+
+  // Test method for debugging chat history
+  static Future<void> addTestMessage(String role, String content) async {
+    final message = FlowBuddyMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      content: content,
+      role: role == 'user' ? BuddyRole.user : BuddyRole.assistant,
+      timestamp: DateTime.now(),
+    );
+
+    _chatHistory.add(message);
+    await BuddyChatDatabase.addMessage(json.encode(message.toJson()));
+    print('Added test message: $content');
+  }
+
+  // Debug method to check chat history status
+  static Future<void> debugChatHistory() async {
+    print('=== CHAT HISTORY DEBUG ===');
+    print('Memory chat history count: ${_chatHistory.length}');
+
+    final dbMessages = await BuddyChatDatabase.getCurrentMessages();
+    print('Database messages count: ${dbMessages.length}');
+
+    print('Memory messages:');
+    for (int i = 0; i < _chatHistory.length; i++) {
+      print('  $i: [${_chatHistory[i].role.name}] ${_chatHistory[i].content}');
+    }
+
+    print('Database messages:');
+    for (int i = 0; i < dbMessages.length; i++) {
+      final msg = json.decode(dbMessages[i]);
+      print('  $i: [${msg['role']}] ${msg['content']}');
+    }
+    print('=== END DEBUG ===');
+  }
+
+  // Helper method for safe string truncation
+  static String _truncateString(String text, int maxLength) {
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return '${text.substring(0, maxLength)}...';
+  }
+
+  // Emergency method to reset processing flag if it gets stuck
+  static void resetProcessingFlag() {
+    print('🔄 Manually resetting processing flag');
+    _isProcessingRequest = false;
+  }
+
+  // Check if currently processing
+  static bool isProcessing() {
+    return _isProcessingRequest;
+  }
+
+  /// Get conversation context with optional cross-conversation awareness
+  static Map<String, dynamic> getConversationContext({
+    bool includeAllConversations = false,
+  }) {
+    final context = {
+      'current_session_id': _currentChatSessionId,
+      'current_conversation_messages': _chatHistory.length,
+      'active_persona': _activePersona?.toJson(),
+    };
+
+    if (includeAllConversations) {
+      // This could be used for advanced context awareness
+      // For now, we keep it simple and focused on current conversation
+      context['note'] = 'Cross-conversation context disabled for performance';
+    }
+
+    return context;
+  }
+
+  /// Get conversation summary for context sharing
+  static String getConversationSummary({int maxMessages = 5}) {
+    if (_chatHistory.isEmpty) return 'No conversation history';
+
+    final recentMessages = _chatHistory.length > maxMessages
+        ? _chatHistory.sublist(_chatHistory.length - maxMessages)
+        : _chatHistory;
+
+    final summary = recentMessages
+        .map((msg) => '${msg.role.name}: ${msg.content}')
+        .join('\n');
+
+    return 'Recent conversation context:\n$summary';
   }
 }

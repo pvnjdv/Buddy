@@ -1407,7 +1407,7 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
             "confidence": 0.0
         }
 
-    async def generate_ai_response(self, prompt: str, user_id: str = None, db_session=None) -> Dict[str, Any]:
+    async def generate_ai_response(self, prompt: str, user_id: str = None, db_session=None, chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
         """
         Enhanced AI response generation with RAG integration and intelligent routing
         Works like GPT-5 with full context awareness and GitHub Copilot capabilities
@@ -1501,7 +1501,7 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
             
             # Generate natural, context-aware response
             context_enhanced_response = await self.generate_context_aware_response(
-                prompt, user_context, relevant_knowledge, intent_analysis
+                prompt, user_context, relevant_knowledge, intent_analysis, chat_history=chat_history
             )
             return {
                 "type": "enhanced_response",
@@ -1522,7 +1522,8 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
                                             prompt: str,
                                             user_context: Dict[str, Any],
                                             relevant_knowledge: List[Dict[str, Any]],
-                                            intent_analysis: Dict[str, Any]) -> Dict[str, Any]:
+                                            intent_analysis: Dict[str, Any],
+                                            chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
         """
         Generate natural, ChatGPT-like responses that adapt to complexity
         Simple questions get simple answers, complex ones get detailed responses
@@ -1536,7 +1537,7 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
             if complexity_level == 'beginner' or prompt_length < 10:
                 # Simple, conversational response
                 simple_prompt = f"""
-You are ChatGPT, a helpful AI assistant. Respond naturally and conversationally to this question.
+You are Buddy, a helpful AI assistant. Respond naturally and conversationally to this question.
 
 User: {prompt}
 
@@ -1545,7 +1546,7 @@ Context: {json.dumps(relevant_knowledge[:2], indent=2) if relevant_knowledge els
 Provide a helpful, natural response. Be conversational, not formal. Give exactly what the user needs - short for simple questions, detailed for complex ones.
 """
                 
-                response = await self.ai_client.generate_response(simple_prompt)
+                response = await self.ai_client.generate_response(simple_prompt, chat_history=chat_history)
                 
                 return {
                     "direct_answer": response,
@@ -1556,7 +1557,7 @@ Provide a helpful, natural response. Be conversational, not formal. Give exactly
             # For more complex questions, provide structured but natural responses
             else:
                 enhanced_prompt = f"""
-You are an advanced AI assistant like ChatGPT. The user asked: "{prompt}"
+You are Buddy, an advanced AI assistant. The user asked: "{prompt}"
 
 Available context: {json.dumps(relevant_knowledge, indent=2) if relevant_knowledge else "No specific context"}
 
@@ -1570,7 +1571,7 @@ Respond naturally and helpfully. Structure your response appropriately:
 Focus on being genuinely helpful rather than following rigid formats.
 """
                 
-                response = await self.ai_client.generate_response(enhanced_prompt)
+                response = await self.ai_client.generate_response(enhanced_prompt, chat_history=chat_history)
                 
                 # Check if the response warrants additional structure
                 if any(keyword in prompt.lower() for keyword in ['how to', 'steps', 'guide', 'tutorial', 'implement']):

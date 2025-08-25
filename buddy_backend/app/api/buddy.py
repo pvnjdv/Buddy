@@ -375,7 +375,7 @@ This is a task continuation request. Please modify or add to the previous task b
             
             # Use buddy AI directly for task continuation with context
             user_id = str(current_user.id) if current_user else None
-            buddy_response = await buddy_ai.generate_ai_response(enhanced_prompt, user_id)
+            buddy_response = await buddy_ai.generate_ai_response(enhanced_prompt, user_id, chat_history=request.chat_history)
             
             # Extract response text from dynamic AI response
             if isinstance(buddy_response, dict):
@@ -426,7 +426,7 @@ This is a task continuation request. Please modify or add to the previous task b
             logger.info(f"Direct routing (no thinking overhead) for user {current_user.id if current_user else 'anonymous'}")
             
             user_id = str(current_user.id) if current_user else None
-            buddy_response = await buddy_ai.generate_ai_response(request.prompt, user_id)
+            buddy_response = await buddy_ai.generate_ai_response(request.prompt, user_id, chat_history=request.chat_history)
             
             # Format response naturally
             if isinstance(buddy_response, dict):
@@ -548,7 +548,7 @@ This is a task continuation request. Please modify or add to the previous task b
             
             # Use new dynamic AI system with user context
             user_id = str(current_user.id) if current_user else None
-            buddy_response = await buddy_ai.generate_ai_response(enhanced_message, user_id)
+            buddy_response = await buddy_ai.generate_ai_response(enhanced_message, user_id, chat_history=request.chat_history)
             
             # Extract response text from dynamic AI response
             if isinstance(buddy_response, dict):
@@ -594,12 +594,12 @@ This is a task continuation request. Please modify or add to the previous task b
             
             if is_simple_code_request:
                 # Direct code generation without AI strategy interference 
-                buddy_response = await buddy_ai.generate_ai_response(request.prompt, user_id)
+                buddy_response = await buddy_ai.generate_ai_response(request.prompt, user_id, chat_history=request.chat_history)
             else:
                 # For non-code requests, we can add some light strategy context
                 strategy = ai_thinking_service.generate_response_strategy(thinking_result)
                 enhanced_message = f"{request.prompt}\n\nContext: {strategy.get('approach', '')}"
-                buddy_response = await buddy_ai.generate_ai_response(enhanced_message, user_id)
+                buddy_response = await buddy_ai.generate_ai_response(enhanced_message, user_id, chat_history=request.chat_history)
             
             # Extract response text from dynamic AI response
             if isinstance(buddy_response, dict):

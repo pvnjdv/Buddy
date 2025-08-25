@@ -1,6 +1,6 @@
 import asyncio
 import httpx
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from app.core.config import settings
 
 class GroqClient:
@@ -14,8 +14,8 @@ class GroqClient:
             "Content-Type": "application/json"
         }
 
-    async def generate_response(self, prompt: str, model: str = None) -> str:
-        """Generate response using Groq API"""
+    async def generate_response(self, prompt: str, model: str = None, chat_history: List[Dict[str, str]] = None) -> str:
+        """Generate response using Groq API with optional chat history"""
         if not model:
             model = settings.GROQ_MODEL
             
@@ -31,18 +31,33 @@ class GroqClient:
         if model not in valid_models:
             model = "llama-3.1-8b-instant"  # Default to fast, reliable production model
             
+        # Build messages array
+        messages = [
+            {
+                "role": "system", 
+                "content": "You are Buddy, a helpful and friendly AI assistant. You're designed to be conversational, remember context from previous messages, and provide thoughtful, personalized responses. You help users with project management, coding, planning, and various tasks. Always maintain context from the conversation history and refer to previous messages when relevant. Never claim to be ChatGPT or any other AI - you are Buddy."
+            }
+        ]
+        
+        # Add chat history if provided
+        if chat_history:
+            print(f"📜 Adding {len(chat_history)} messages from chat history to AI context")
+            for msg in chat_history:
+                if msg.get('role') in ['user', 'assistant'] and msg.get('content'):
+                    messages.append({
+                        "role": msg['role'] if msg['role'] == 'user' else 'assistant',
+                        "content": msg['content']
+                    })
+        
+        # Add current prompt
+        messages.append({
+            "role": "user",
+            "content": prompt
+        })
+        
         payload = {
             "model": model,
-            "messages": [
-                {
-                    "role": "system", 
-                    "content": "You are Buddy, a helpful AI assistant focused on project management and development guidance. Be encouraging, practical, and provide actionable advice."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
+            "messages": messages,
             "max_tokens": 512,
             "temperature": 0.7,
             "top_p": 0.95

@@ -60,12 +60,13 @@ class UnifiedAIClient:
             self.groq_client = None
     
     async def generate_response(self, prompt: str, chat_history: List[Dict[str, str]] = None) -> str:
-        """Generate response using current mode (local or API)"""
+        """Generate response using current mode (local or API) with optional chat history"""
         try:
             if self.current_mode == "local":
                 if not self.local_model:
                     self._init_local_model()
                 if self.local_model:
+                    # Local models don't support chat history in this implementation
                     return self.local_model.generate_response(prompt)
                 else:
                     raise Exception("Local model not available")
@@ -74,16 +75,16 @@ class UnifiedAIClient:
                 if not self.groq_client:
                     self._init_groq_client()
                 if self.groq_client:
-                    return await self.groq_client.generate_response(prompt)
+                    return await self.groq_client.generate_response(prompt, chat_history=chat_history)
                 else:
                     raise Exception("Groq API client not available")
             
         except Exception as e:
             print(f"Error generating response in {self.current_mode} mode: {e}")
             # Fallback to the other mode if current fails
-            return await self._try_fallback_mode(prompt)
+            return await self._try_fallback_mode(prompt, chat_history)
     
-    async def _try_fallback_mode(self, prompt: str) -> str:
+    async def _try_fallback_mode(self, prompt: str, chat_history: List[Dict[str, str]] = None) -> str:
         """Try the alternative mode if current mode fails"""
         try:
             fallback_mode = "api" if self.current_mode == "local" else "local"
@@ -97,7 +98,7 @@ class UnifiedAIClient:
             elif fallback_mode == "api" and not self.groq_client:
                 self._init_groq_client()
                 if self.groq_client:
-                    return await self.groq_client.generate_response(prompt)
+                    return await self.groq_client.generate_response(prompt, chat_history=chat_history)
             
         except Exception as e:
             print(f"Fallback mode also failed: {e}")
