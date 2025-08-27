@@ -9,7 +9,6 @@ import 'package:web_socket_channel/status.dart' as ws_status;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tzdata;
-import 'package:flutter_native_timezone/flutter_native_timezone.dart';
 
 class FlowService {
   // Update the completion status of a checkpoint in a flow (backend first, fallback to local)
@@ -908,10 +907,20 @@ class FlowService {
 
     // Initialize timezone
     try {
-      final String timeZoneName =
-          await FlutterNativeTimezone.getLocalTimezone();
+      // Use system timezone or fallback to UTC
       tzdata.initializeTimeZones();
-      tz.setLocalLocation(tz.getLocation(timeZoneName));
+
+      // Try to detect timezone from DateTime
+      final now = DateTime.now();
+      final offset = now.timeZoneOffset;
+      final timeZoneName = _getTimeZoneFromOffset(offset);
+
+      try {
+        tz.setLocalLocation(tz.getLocation(timeZoneName));
+      } catch (_) {
+        // Fallback to UTC if timezone detection fails
+        tz.setLocalLocation(tz.getLocation('UTC'));
+      }
     } catch (_) {
       tzdata.initializeTimeZones();
       tz.setLocalLocation(tz.getLocation('UTC'));
@@ -973,6 +982,39 @@ class FlowService {
   // Smart creator used by flow enrichment
   static Future<FlowAlarm> _createAlarmSmart(FlowAlarm alarm) async {
     return await createAlarm(alarm);
+  }
+
+  // Helper method to get timezone name from offset
+  static String _getTimeZoneFromOffset(Duration offset) {
+    final hours = offset.inHours;
+
+    // Common timezone mappings based on offset
+    switch (hours) {
+      case 0:
+        return 'UTC';
+      case -5:
+        return 'America/New_York'; // EST
+      case -6:
+        return 'America/Chicago'; // CST
+      case -7:
+        return 'America/Denver'; // MST
+      case -8:
+        return 'America/Los_Angeles'; // PST
+      case 1:
+        return 'Europe/London'; // CET
+      case 2:
+        return 'Europe/Berlin'; // CEST
+      case 5:
+      case 6:
+        return 'Asia/Kolkata'; // IST
+      case 8:
+        return 'Asia/Shanghai'; // CST
+      case 9:
+        return 'Asia/Tokyo'; // JST
+      default:
+        // For other offsets, use UTC
+        return 'UTC';
+    }
   }
 }
 
