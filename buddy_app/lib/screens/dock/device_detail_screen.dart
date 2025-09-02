@@ -3,7 +3,7 @@ import '../../models/dock_models.dart';
 import '../../config/settings/theme_config.dart';
 
 class DeviceDetailScreen extends StatefulWidget {
-  final ConnectedDevice device;
+  final Device device;
 
   const DeviceDetailScreen({super.key, required this.device});
 
@@ -44,29 +44,21 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                     ),
                     const SizedBox(height: 16),
                     _buildInfoRow('Name', widget.device.name),
-                    _buildInfoRow(
-                      'Type',
-                      widget.device.type.name.toUpperCase(),
-                    ),
                     _buildInfoRow('Platform', widget.device.platform),
-                    _buildInfoRow(
-                      'Status',
-                      widget.device.isOnline ? 'Online' : 'Offline',
-                    ),
-                    _buildInfoRow(
-                      'IP Address',
-                      widget.device.ipAddress ?? 'Unknown',
-                    ),
+                    _buildInfoRow('Status', widget.device.displayStatus),
+                    _buildInfoRow('IP Address', widget.device.ipAddress),
+                    _buildInfoRow('Port', widget.device.port.toString()),
+                    _buildInfoRow('Device Type', widget.device.deviceType),
                     _buildInfoRow(
                       'Last Seen',
-                      widget.device.lastSeen.toString(),
+                      _formatDateTime(widget.device.lastSeen),
                     ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            if (widget.device.isOnline) ...[
+            if (widget.device.capabilities.isNotEmpty) ...[
               Card(
                 color: AppTheme.surfaceColor,
                 child: Padding(
@@ -75,7 +67,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'System Status',
+                        'Capabilities',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -83,47 +75,46 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _buildStatusRow(
-                        'CPU Usage',
-                        widget.device.status.cpuUsage,
-                        '%',
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: widget.device.capabilities.keys.map((
+                          capability,
+                        ) {
+                          return Chip(
+                            label: Text(capability),
+                            backgroundColor: AppTheme.primaryColor.withValues(
+                              alpha: 0.1,
+                            ),
+                          );
+                        }).toList(),
                       ),
-                      _buildStatusRow(
-                        'Memory Usage',
-                        widget.device.status.memoryUsage,
-                        '%',
-                      ),
-                      _buildStatusRow(
-                        'Disk Usage',
-                        widget.device.status.diskUsage,
-                        '%',
-                      ),
-                      if (widget.device.status.gpuUsage != null)
-                        _buildStatusRow(
-                          'GPU Usage',
-                          widget.device.status.gpuUsage!,
-                          '%',
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            if (widget.device.metadata.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Card(
+                color: AppTheme.surfaceColor,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Metadata',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimaryColor,
                         ),
-                      _buildStatusRow(
-                        'Network Upload',
-                        widget.device.status.networkUpload,
-                        'KB/s',
                       ),
-                      _buildStatusRow(
-                        'Network Download',
-                        widget.device.status.networkDownload,
-                        'KB/s',
-                      ),
-                      _buildStatusRow(
-                        'Battery Level',
-                        widget.device.status.batteryLevel.toDouble(),
-                        '%',
-                      ),
-                      _buildStatusRow(
-                        'Temperature',
-                        widget.device.status.temperature,
-                        '°C',
-                      ),
+                      const SizedBox(height: 16),
+                      ...widget.device.metadata.entries.map((entry) {
+                        return _buildInfoRow(entry.key, entry.value.toString());
+                      }),
                     ],
                   ),
                 ),
@@ -183,42 +174,18 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     );
   }
 
-  Widget _buildStatusRow(String label, double value, String unit) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: AppTheme.textSecondaryColor,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Expanded(
-            child: LinearProgressIndicator(
-              value: unit == '%' ? value / 100 : value / 1000,
-              backgroundColor: AppTheme.borderColor,
-              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 60,
-            child: Text(
-              '${value.toStringAsFixed(1)}$unit',
-              style: TextStyle(
-                color: AppTheme.textPrimaryColor,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.right,
-            ),
-          ),
-        ],
-      ),
-    );
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${difference.inDays}d ago';
+    }
   }
 }

@@ -1,520 +1,257 @@
 // Device Models for Cross-Platform Control
-class ConnectedDevice {
+import 'package:json_annotation/json_annotation.dart';
+
+part 'dock_models.g.dart';
+
+@JsonSerializable()
+class Device {
   final String id;
   final String name;
-  final DeviceType type;
-  final String platform; // Windows, macOS, Linux, Android, iOS
-  final bool isOnline;
-  final DeviceStatus status;
+  final String platform;
+  @JsonKey(name: 'ip_address')
+  final String ipAddress;
+  final int port;
+  final String status;
+  @JsonKey(name: 'last_seen')
   final DateTime lastSeen;
-  final String? ipAddress;
   final Map<String, dynamic> capabilities;
+  final Map<String, dynamic> metadata;
+  @JsonKey(name: 'created_at')
+  final DateTime createdAt;
+  @JsonKey(name: 'updated_at')
+  final DateTime? updatedAt;
 
-  ConnectedDevice({
+  Device({
     required this.id,
     required this.name,
-    required this.type,
     required this.platform,
-    required this.isOnline,
+    required this.ipAddress,
+    required this.port,
     required this.status,
     required this.lastSeen,
-    this.ipAddress,
-    this.capabilities = const {},
-  });
-
-  factory ConnectedDevice.fromJson(Map<String, dynamic> json) {
-    return ConnectedDevice(
-      id: json['id'] ?? '',
-      name: json['name'] ?? 'Unknown Device',
-      type: DeviceType.values.firstWhere(
-        (e) => e.name == json['type'],
-        orElse: () => DeviceType.unknown,
-      ),
-      platform: json['platform'] ?? 'Unknown',
-      isOnline: json['is_online'] ?? false,
-      status: DeviceStatus.fromJson(json['status'] ?? {}),
-      lastSeen: DateTime.parse(
-        json['last_seen'] ?? DateTime.now().toIso8601String(),
-      ),
-      ipAddress: json['ip_address'],
-      capabilities: json['capabilities'] ?? {},
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'type': type.name,
-      'platform': platform,
-      'is_online': isOnline,
-      'status': status.toJson(),
-      'last_seen': lastSeen.toIso8601String(),
-      'ip_address': ipAddress,
-      'capabilities': capabilities,
-    };
-  }
-}
-
-enum DeviceType { desktop, laptop, mobile, tablet, server, iot, unknown }
-
-class DeviceStatus {
-  final double cpuUsage; // 0-100
-  final double memoryUsage; // 0-100
-  final double? gpuUsage; // 0-100, null if no GPU
-  final double diskUsage; // 0-100
-  final double networkUpload; // KB/s
-  final double networkDownload; // KB/s
-  final int batteryLevel; // 0-100, -1 if no battery
-  final bool isCharging;
-  final double temperature; // Celsius
-  final List<RunningProcess> topProcesses;
-  final Map<String, dynamic> customMetrics;
-
-  DeviceStatus({
-    required this.cpuUsage,
-    required this.memoryUsage,
-    this.gpuUsage,
-    required this.diskUsage,
-    required this.networkUpload,
-    required this.networkDownload,
-    required this.batteryLevel,
-    required this.isCharging,
-    required this.temperature,
-    required this.topProcesses,
-    this.customMetrics = const {},
-  });
-
-  factory DeviceStatus.fromJson(Map<String, dynamic> json) {
-    return DeviceStatus(
-      cpuUsage: (json['cpu_usage'] ?? 0.0).toDouble(),
-      memoryUsage: (json['memory_usage'] ?? 0.0).toDouble(),
-      gpuUsage: json['gpu_usage']?.toDouble(),
-      diskUsage: (json['disk_usage'] ?? 0.0).toDouble(),
-      networkUpload: (json['network_upload'] ?? 0.0).toDouble(),
-      networkDownload: (json['network_download'] ?? 0.0).toDouble(),
-      batteryLevel: json['battery_level'] ?? -1,
-      isCharging: json['is_charging'] ?? false,
-      temperature: (json['temperature'] ?? 0.0).toDouble(),
-      topProcesses:
-          (json['top_processes'] as List<dynamic>?)
-              ?.map((p) => RunningProcess.fromJson(p))
-              .toList() ??
-          [],
-      customMetrics: json['custom_metrics'] ?? {},
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'cpu_usage': cpuUsage,
-      'memory_usage': memoryUsage,
-      'gpu_usage': gpuUsage,
-      'disk_usage': diskUsage,
-      'network_upload': networkUpload,
-      'network_download': networkDownload,
-      'battery_level': batteryLevel,
-      'is_charging': isCharging,
-      'temperature': temperature,
-      'top_processes': topProcesses.map((p) => p.toJson()).toList(),
-      'custom_metrics': customMetrics,
-    };
-  }
-}
-
-class RunningProcess {
-  final String name;
-  final int pid;
-  final double cpuUsage;
-  final double memoryUsage; // MB
-  final String status;
-  final DateTime startTime;
-
-  RunningProcess({
-    required this.name,
-    required this.pid,
-    required this.cpuUsage,
-    required this.memoryUsage,
-    required this.status,
-    required this.startTime,
-  });
-
-  factory RunningProcess.fromJson(Map<String, dynamic> json) {
-    return RunningProcess(
-      name: json['name'] ?? '',
-      pid: json['pid'] ?? 0,
-      cpuUsage: (json['cpu_usage'] ?? 0.0).toDouble(),
-      memoryUsage: (json['memory_usage'] ?? 0.0).toDouble(),
-      status: json['status'] ?? 'running',
-      startTime: DateTime.parse(
-        json['start_time'] ?? DateTime.now().toIso8601String(),
-      ),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'name': name,
-      'pid': pid,
-      'cpu_usage': cpuUsage,
-      'memory_usage': memoryUsage,
-      'status': status,
-      'start_time': startTime.toIso8601String(),
-    };
-  }
-}
-
-// Macro and Automation Models
-class DockMacro {
-  final String id;
-  final String name;
-  final String description;
-  final String targetDeviceId; // '*' for all devices
-  final List<MacroStep> steps;
-  final MacroTrigger? trigger;
-  final bool isEnabled;
-  final DateTime createdAt;
-  final DateTime? lastExecuted;
-  final MacroExecution? currentExecution;
-
-  DockMacro({
-    required this.id,
-    required this.name,
-    required this.description,
-    required this.targetDeviceId,
-    required this.steps,
-    this.trigger,
-    required this.isEnabled,
+    required this.capabilities,
+    required this.metadata,
     required this.createdAt,
-    this.lastExecuted,
-    this.currentExecution,
+    this.updatedAt,
   });
 
-  factory DockMacro.fromJson(Map<String, dynamic> json) {
-    return DockMacro(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
-      description: json['description'] ?? '',
-      targetDeviceId: json['target_device_id'] ?? '',
-      steps:
-          (json['steps'] as List<dynamic>?)
-              ?.map((s) => MacroStep.fromJson(s))
-              .toList() ??
-          [],
-      trigger: json['trigger'] != null
-          ? MacroTrigger.fromJson(json['trigger'])
-          : null,
-      isEnabled: json['is_enabled'] ?? false,
-      createdAt: DateTime.parse(
-        json['created_at'] ?? DateTime.now().toIso8601String(),
-      ),
-      lastExecuted: json['last_executed'] != null
-          ? DateTime.parse(json['last_executed'])
-          : null,
-      currentExecution: json['current_execution'] != null
-          ? MacroExecution.fromJson(json['current_execution'])
-          : null,
-    );
-  }
+  factory Device.fromJson(Map<String, dynamic> json) => _$DeviceFromJson(json);
+  Map<String, dynamic> toJson() => _$DeviceToJson(this);
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'description': description,
-      'target_device_id': targetDeviceId,
-      'steps': steps.map((s) => s.toJson()).toList(),
-      'trigger': trigger?.toJson(),
-      'is_enabled': isEnabled,
-      'created_at': createdAt.toIso8601String(),
-      'last_executed': lastExecuted?.toIso8601String(),
-      'current_execution': currentExecution?.toJson(),
-    };
+  bool get isOnline => status == 'online';
+
+  String get deviceType => metadata['device_type'] ?? 'unknown';
+
+  String get displayStatus {
+    switch (status) {
+      case 'online':
+        return 'Online';
+      case 'offline':
+        return 'Offline';
+      case 'busy':
+        return 'Busy';
+      default:
+        return status.toUpperCase();
+    }
   }
 }
 
-class MacroStep {
+@JsonSerializable()
+class DeviceCommand {
   final String id;
-  final MacroAction action;
+  @JsonKey(name: 'device_id')
+  final String deviceId;
+  @JsonKey(name: 'command_type')
+  final String commandType;
+  final String command;
   final Map<String, dynamic> parameters;
-  final Duration? delay;
-  final String? condition; // JavaScript expression
-  final int order;
+  final String status;
+  final String? result;
+  @JsonKey(name: 'error_message')
+  final String? errorMessage;
+  @JsonKey(name: 'executed_at')
+  final DateTime? executedAt;
+  @JsonKey(name: 'completed_at')
+  final DateTime? completedAt;
+  @JsonKey(name: 'created_at')
+  final DateTime createdAt;
 
-  MacroStep({
+  DeviceCommand({
     required this.id,
-    required this.action,
+    required this.deviceId,
+    required this.commandType,
+    required this.command,
     required this.parameters,
-    this.delay,
-    this.condition,
-    required this.order,
-  });
-
-  factory MacroStep.fromJson(Map<String, dynamic> json) {
-    return MacroStep(
-      id: json['id'] ?? '',
-      action: MacroAction.values.firstWhere(
-        (e) => e.name == json['action'],
-        orElse: () => MacroAction.unknown,
-      ),
-      parameters: json['parameters'] ?? {},
-      delay: json['delay'] != null
-          ? Duration(milliseconds: json['delay'])
-          : null,
-      condition: json['condition'],
-      order: json['order'] ?? 0,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'action': action.name,
-      'parameters': parameters,
-      'delay': delay?.inMilliseconds,
-      'condition': condition,
-      'order': order,
-    };
-  }
-}
-
-enum MacroAction {
-  runCommand,
-  openApp,
-  closeApp,
-  sendKeys,
-  mouseClick,
-  fileOperation,
-  systemControl,
-  networkRequest,
-  waitFor,
-  conditional,
-  loop,
-  unknown,
-}
-
-class MacroTrigger {
-  final TriggerType type;
-  final Map<String, dynamic> conditions;
-  final bool isEnabled;
-
-  MacroTrigger({
-    required this.type,
-    required this.conditions,
-    required this.isEnabled,
-  });
-
-  factory MacroTrigger.fromJson(Map<String, dynamic> json) {
-    return MacroTrigger(
-      type: TriggerType.values.firstWhere(
-        (e) => e.name == json['type'],
-        orElse: () => TriggerType.manual,
-      ),
-      conditions: json['conditions'] ?? {},
-      isEnabled: json['is_enabled'] ?? false,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'type': type.name,
-      'conditions': conditions,
-      'is_enabled': isEnabled,
-    };
-  }
-}
-
-enum TriggerType {
-  manual,
-  schedule,
-  deviceEvent,
-  systemMetric,
-  flowEvent,
-  buddyCommand,
-}
-
-class MacroExecution {
-  final String id;
-  final String macroId;
-  final DateTime startTime;
-  final DateTime? endTime;
-  final ExecutionStatus status;
-  final int currentStepIndex;
-  final String? error;
-  final Map<String, dynamic> logs;
-  final double progress; // 0.0 to 1.0
-
-  MacroExecution({
-    required this.id,
-    required this.macroId,
-    required this.startTime,
-    this.endTime,
     required this.status,
-    required this.currentStepIndex,
-    this.error,
-    this.logs = const {},
-    required this.progress,
+    this.result,
+    this.errorMessage,
+    this.executedAt,
+    this.completedAt,
+    required this.createdAt,
   });
 
-  factory MacroExecution.fromJson(Map<String, dynamic> json) {
-    return MacroExecution(
-      id: json['id'] ?? '',
-      macroId: json['macro_id'] ?? '',
-      startTime: DateTime.parse(
-        json['start_time'] ?? DateTime.now().toIso8601String(),
-      ),
-      endTime: json['end_time'] != null
-          ? DateTime.parse(json['end_time'])
-          : null,
-      status: ExecutionStatus.values.firstWhere(
-        (e) => e.name == json['status'],
-        orElse: () => ExecutionStatus.pending,
-      ),
-      currentStepIndex: json['current_step_index'] ?? 0,
-      error: json['error'],
-      logs: json['logs'] ?? {},
-      progress: (json['progress'] ?? 0.0).toDouble(),
-    );
-  }
+  factory DeviceCommand.fromJson(Map<String, dynamic> json) =>
+      _$DeviceCommandFromJson(json);
+  Map<String, dynamic> toJson() => _$DeviceCommandToJson(this);
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'macro_id': macroId,
-      'start_time': startTime.toIso8601String(),
-      'end_time': endTime?.toIso8601String(),
-      'status': status.name,
-      'current_step_index': currentStepIndex,
-      'error': error,
-      'logs': logs,
-      'progress': progress,
-    };
-  }
+  bool get isCompleted => status == 'completed';
+  bool get isFailed => status == 'failed';
+  bool get isRunning => status == 'running';
+  bool get isPending => status == 'pending';
 }
 
-enum ExecutionStatus { pending, running, paused, completed, failed, cancelled }
-
-// Intelligent Automation Models
-class AutomationRule {
+@JsonSerializable()
+class DeviceMacro {
   final String id;
   final String name;
-  final String description;
-  final List<AutomationCondition> conditions;
-  final List<AutomationAction> actions;
-  final bool isEnabled;
-  final int priority;
+  final String? description;
+  @JsonKey(name: 'device_id')
+  final String deviceId;
+  final List<Map<String, dynamic>> commands;
+  @JsonKey(name: 'is_active')
+  final bool isActive;
+  @JsonKey(name: 'execution_count')
+  final int executionCount;
+  @JsonKey(name: 'last_executed')
+  final DateTime? lastExecuted;
+  @JsonKey(name: 'created_at')
   final DateTime createdAt;
-  final DateTime? lastTriggered;
+  @JsonKey(name: 'updated_at')
+  final DateTime? updatedAt;
 
-  AutomationRule({
+  DeviceMacro({
     required this.id,
     required this.name,
-    required this.description,
-    required this.conditions,
-    required this.actions,
-    required this.isEnabled,
-    required this.priority,
+    this.description,
+    required this.deviceId,
+    required this.commands,
+    required this.isActive,
+    required this.executionCount,
+    this.lastExecuted,
     required this.createdAt,
-    this.lastTriggered,
+    this.updatedAt,
   });
 
-  factory AutomationRule.fromJson(Map<String, dynamic> json) {
-    return AutomationRule(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
-      description: json['description'] ?? '',
-      conditions:
-          (json['conditions'] as List<dynamic>?)
-              ?.map((c) => AutomationCondition.fromJson(c))
-              .toList() ??
-          [],
-      actions:
-          (json['actions'] as List<dynamic>?)
-              ?.map((a) => AutomationAction.fromJson(a))
-              .toList() ??
-          [],
-      isEnabled: json['is_enabled'] ?? false,
-      priority: json['priority'] ?? 0,
-      createdAt: DateTime.parse(
-        json['created_at'] ?? DateTime.now().toIso8601String(),
-      ),
-      lastTriggered: json['last_triggered'] != null
-          ? DateTime.parse(json['last_triggered'])
-          : null,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'description': description,
-      'conditions': conditions.map((c) => c.toJson()).toList(),
-      'actions': actions.map((a) => a.toJson()).toList(),
-      'is_enabled': isEnabled,
-      'priority': priority,
-      'created_at': createdAt.toIso8601String(),
-      'last_triggered': lastTriggered?.toIso8601String(),
-    };
-  }
+  factory DeviceMacro.fromJson(Map<String, dynamic> json) =>
+      _$DeviceMacroFromJson(json);
+  Map<String, dynamic> toJson() => _$DeviceMacroToJson(this);
 }
 
-class AutomationCondition {
-  final String type; // device_metric, time, flow_event, etc.
-  final String target; // device_id, flow_id, etc.
-  final String operator; // >, <, ==, contains, etc.
-  final dynamic value;
+// Request models
+@JsonSerializable()
+class DeviceRegisterRequest {
+  final String name;
+  final String platform;
+  @JsonKey(name: 'ip_address')
+  final String ipAddress;
+  final int port;
+  final Map<String, dynamic> capabilities;
   final Map<String, dynamic> metadata;
 
-  AutomationCondition({
-    required this.type,
-    required this.target,
-    required this.operator,
-    required this.value,
+  DeviceRegisterRequest({
+    required this.name,
+    required this.platform,
+    required this.ipAddress,
+    this.port = 8000,
+    this.capabilities = const {},
     this.metadata = const {},
   });
 
-  factory AutomationCondition.fromJson(Map<String, dynamic> json) {
-    return AutomationCondition(
-      type: json['type'] ?? '',
-      target: json['target'] ?? '',
-      operator: json['operator'] ?? '',
-      value: json['value'],
-      metadata: json['metadata'] ?? {},
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'type': type,
-      'target': target,
-      'operator': operator,
-      'value': value,
-      'metadata': metadata,
-    };
-  }
+  factory DeviceRegisterRequest.fromJson(Map<String, dynamic> json) =>
+      _$DeviceRegisterRequestFromJson(json);
+  Map<String, dynamic> toJson() => _$DeviceRegisterRequestToJson(this);
 }
 
-class AutomationAction {
-  final String type; // execute_macro, create_flow, send_notification, etc.
-  final String target;
+@JsonSerializable()
+class CommandRequest {
+  @JsonKey(name: 'device_id')
+  final String deviceId;
+  @JsonKey(name: 'command_type')
+  final String commandType;
+  final String command;
   final Map<String, dynamic> parameters;
 
-  AutomationAction({
-    required this.type,
-    required this.target,
-    required this.parameters,
+  CommandRequest({
+    required this.deviceId,
+    required this.commandType,
+    required this.command,
+    this.parameters = const {},
   });
 
-  factory AutomationAction.fromJson(Map<String, dynamic> json) {
-    return AutomationAction(
-      type: json['type'] ?? '',
-      target: json['target'] ?? '',
-      parameters: json['parameters'] ?? {},
-    );
-  }
+  factory CommandRequest.fromJson(Map<String, dynamic> json) =>
+      _$CommandRequestFromJson(json);
+  Map<String, dynamic> toJson() => _$CommandRequestToJson(this);
+}
 
-  Map<String, dynamic> toJson() {
-    return {'type': type, 'target': target, 'parameters': parameters};
-  }
+// Response wrappers
+@JsonSerializable()
+class DevicesResponse {
+  final List<Device> devices;
+
+  DevicesResponse({required this.devices});
+
+  factory DevicesResponse.fromJson(Map<String, dynamic> json) =>
+      _$DevicesResponseFromJson(json);
+  Map<String, dynamic> toJson() => _$DevicesResponseToJson(this);
+}
+
+@JsonSerializable()
+class MacroRequest {
+  final String name;
+  final String description;
+  @JsonKey(name: 'device_id')
+  final String deviceId;
+  final List<Map<String, dynamic>> commands;
+
+  MacroRequest({
+    required this.name,
+    required this.description,
+    required this.deviceId,
+    required this.commands,
+  });
+
+  factory MacroRequest.fromJson(Map<String, dynamic> json) =>
+      _$MacroRequestFromJson(json);
+  Map<String, dynamic> toJson() => _$MacroRequestToJson(this);
+}
+
+@JsonSerializable()
+class SystemActionRequest {
+  final String action;
+  final int delay;
+  final bool force;
+
+  SystemActionRequest({
+    required this.action,
+    this.delay = 0,
+    this.force = false,
+  });
+
+  factory SystemActionRequest.fromJson(Map<String, dynamic> json) =>
+      _$SystemActionRequestFromJson(json);
+  Map<String, dynamic> toJson() => _$SystemActionRequestToJson(this);
+}
+
+// Simplified device type enum
+enum DeviceType { desktop, laptop, mobile, tablet, server, iot, unknown }
+
+// Platform constants
+class DevicePlatforms {
+  static const String windows = 'Windows';
+  static const String macos = 'macOS';
+  static const String linux = 'Linux';
+  static const String android = 'Android';
+  static const String ios = 'iOS';
+
+  static List<String> get all => [windows, macos, linux, android, ios];
+}
+
+// Command types
+class CommandTypes {
+  static const String system = 'system';
+  static const String app = 'app';
+  static const String file = 'file';
+  static const String network = 'network';
+
+  static List<String> get all => [system, app, file, network];
 }

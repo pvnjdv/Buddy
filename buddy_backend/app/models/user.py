@@ -14,3 +14,4 @@ class User(Base):
     refresh_token_expires = Column(DateTime, nullable=True)  # Refresh token expiry
     tasks = relationship("Task", back_populates="owner")
     ai_personas = relationship("AIPersona", back_populates="user")
+    devices = relationship("Device", back_populates="owner")

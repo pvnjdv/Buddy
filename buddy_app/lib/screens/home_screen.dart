@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'chat/chat_list_screen.dart';
 import 'buddy/buddy_screen.dart';
 import 'flow/flow_screen.dart';
-import 'dock/dock_screen.dart';
+import 'dock_screen.dart';
 import 'settings/settings_screen.dart';
 import '../config/settings/theme_config.dart';
 

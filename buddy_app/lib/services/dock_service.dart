@@ -1,792 +1,287 @@
-import 'dart:async';
+// lib/services/dock_service.dart
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/dock_models.dart';
 import '../config/api_config.dart';
+import '../services/auth_service.dart';
 
 class DockService {
-  static const String _devicesCacheKey = 'cached_devices';
-  static const String _macrosCacheKey = 'cached_macros';
+  static final DockService _instance = DockService._internal();
+  factory DockService() => _instance;
+  DockService._internal();
 
-  static List<ConnectedDevice> _cachedDevices = [];
-  static List<DockMacro> _cachedMacros = [];
-  static List<MacroExecution> _activeExecutions = [];
+  WebSocketChannel? _webSocketChannel;
+  Stream<dynamic>? _webSocketStream;
 
-  static Timer? _statusUpdateTimer;
-  static StreamController<List<ConnectedDevice>>? _devicesController;
-  static StreamController<List<MacroExecution>>? _executionsController;
+  Stream<dynamic> get webSocketStream =>
+      _webSocketStream ?? const Stream.empty();
 
-  // Helper method to get authenticated headers
-  static Future<Map<String, String>> _getAuthHeaders() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('jwt');
-
+  // HTTP Helper Methods
+  Future<Map<String, String>> _getAuthHeaders() async {
+    final token = await AuthService.getToken();
     return {
       'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
+      'Authorization': 'Bearer $token',
     };
   }
 
-  // Initialize dock service
-  static Future<void> initialize() async {
-    await _loadCachedData();
-    _startRealTimeUpdates();
+  Future<http.Response> _get(String url) async {
+    final headers = await _getAuthHeaders();
+    return await http.get(Uri.parse(url), headers: headers);
   }
 
-  // Clean up resources
-  static void dispose() {
-    _statusUpdateTimer?.cancel();
-    _devicesController?.close();
-    _executionsController?.close();
+  Future<http.Response> _post(String url, Map<String, dynamic> body) async {
+    final headers = await _getAuthHeaders();
+    return await http.post(
+      Uri.parse(url),
+      headers: headers,
+      body: jsonEncode(body),
+    );
   }
 
-  // Real-time device monitoring
-  static Stream<List<ConnectedDevice>> get devicesStream {
-    _devicesController ??= StreamController<List<ConnectedDevice>>.broadcast();
-    return _devicesController!.stream;
-  }
-
-  static Stream<List<MacroExecution>> get executionsStream {
-    _executionsController ??=
-        StreamController<List<MacroExecution>>.broadcast();
-    return _executionsController!.stream;
-  }
-
-  static void _startRealTimeUpdates() {
-    _statusUpdateTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      _updateDeviceStatuses();
-      _updateExecutionStatuses();
-    });
+  Future<http.Response> _delete(String url) async {
+    final headers = await _getAuthHeaders();
+    return await http.delete(Uri.parse(url), headers: headers);
   }
 
   // Device Management
-  static Future<List<ConnectedDevice>> getConnectedDevices({
-    bool forceRefresh = false,
-  }) async {
-    if (!forceRefresh && _cachedDevices.isNotEmpty) {
-      return _cachedDevices;
-    }
-
+  // Auto-register current device when user logs in
+  Future<Map<String, dynamic>> autoRegisterDevice() async {
     try {
-      final headers = await _getAuthHeaders();
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/dock/devices'),
-        headers: headers,
-      );
-
+      final response = await _post(ApiConfig.dockAutoRegister, {});
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final devices = (data['devices'] as List<dynamic>)
-            .map((d) => ConnectedDevice.fromJson(d))
-            .toList();
-
-        _cachedDevices = devices;
-        await _cacheDevices();
-        _devicesController?.add(devices);
-
-        return devices;
+        print('🔐 Auto-registration response: $data');
+        return data;
       } else {
-        throw Exception('Failed to fetch devices: ${response.statusCode}');
+        throw Exception('Auto-registration failed: ${response.statusCode}');
       }
     } catch (e) {
-      // Return cached data on error
-      return _cachedDevices;
+      print('❌ Auto-registration error: $e');
+      rethrow;
     }
   }
 
-  static Future<ConnectedDevice?> getDevice(String deviceId) async {
+  // Send remote control command to another device
+  Future<Map<String, dynamic>> sendRemoteControlCommand(
+    Map<String, dynamic> request,
+  ) async {
     try {
-      final headers = await _getAuthHeaders();
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/dock/devices/$deviceId'),
-        headers: headers,
+      final response = await _post(
+        '${ApiConfig.baseUrl}/dock/control/remote',
+        request,
       );
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return ConnectedDevice.fromJson(data['device']);
+        print('📱 Remote control command sent: ${data['message']}');
+        return data;
+      } else {
+        throw Exception('Remote control failed: ${response.statusCode}');
       }
-      return null;
     } catch (e) {
-      return null;
+      print('❌ Remote control error: $e');
+      rethrow;
     }
   }
 
-  static Future<bool> registerDevice(String deviceName, String platform) async {
+  // Execute cross-platform command on target device
+  Future<Map<String, dynamic>> executeCrossPlatformCommand(
+    Map<String, dynamic> request,
+  ) async {
     try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/devices/register'),
-        headers: headers,
-        body: json.encode({'device_name': deviceName, 'platform': platform}),
+      final response = await _post(
+        '${ApiConfig.baseUrl}/dock/control/cross-platform',
+        request,
       );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('⚡ Cross-platform command executed: ${data['message']}');
+        return data;
+      } else {
+        throw Exception(
+          'Cross-platform command failed: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      print('❌ Cross-platform command error: $e');
+      rethrow;
+    }
+  }
+
+  // Get user devices with real-time status
+  Future<Map<String, dynamic>> getUserDevices() async {
+    try {
+      final response = await _get(ApiConfig.dockDevices);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print(
+          '📱 Retrieved ${data['total_count']} devices (${data['online_count']} online)',
+        );
+        return data;
+      } else {
+        throw Exception('Get devices failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Get devices error: $e');
+      rethrow;
+    }
+  }
+
+  Future<Device> registerDevice(DeviceRegisterRequest request) async {
+    try {
+      final response = await _post(ApiConfig.dockRegister, request.toJson());
 
       if (response.statusCode == 201) {
-        await getConnectedDevices(forceRefresh: true);
-        return true;
+        return Device.fromJson(jsonDecode(response.body));
+      } else {
+        throw Exception('Failed to register device: ${response.statusCode}');
       }
-      return false;
     } catch (e) {
-      return false;
+      print('Error registering device: $e');
+      rethrow;
     }
   }
 
-  static Future<bool> removeDevice(String deviceId) async {
+  Future<void> removeDevice(String deviceId) async {
     try {
-      final headers = await _getAuthHeaders();
-      final response = await http.delete(
-        Uri.parse('${ApiConfig.baseUrl}/dock/devices/$deviceId'),
-        headers: headers,
-      );
+      final response = await _delete(ApiConfig.dockDevice(deviceId));
+
+      if (response.statusCode != 204) {
+        throw Exception('Failed to remove device: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error removing device: $e');
+      rethrow;
+    }
+  }
+
+  // Command Execution
+  Future<DeviceCommand> executeCommand(CommandRequest request) async {
+    try {
+      final response = await _post(ApiConfig.dockCommands, request.toJson());
+
+      if (response.statusCode == 201) {
+        return DeviceCommand.fromJson(jsonDecode(response.body));
+      } else {
+        throw Exception('Failed to execute command: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error executing command: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<DeviceCommand>> getCommandHistory() async {
+    try {
+      final response = await _get(ApiConfig.dockCommands);
 
       if (response.statusCode == 200) {
-        _cachedDevices.removeWhere((d) => d.id == deviceId);
-        await _cacheDevices();
-        _devicesController?.add(_cachedDevices);
-        return true;
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => DeviceCommand.fromJson(json)).toList();
+      } else {
+        throw Exception(
+          'Failed to load command history: ${response.statusCode}',
+        );
       }
-      return false;
     } catch (e) {
-      return false;
+      print('Error getting command history: $e');
+      return [];
     }
   }
 
   // Macro Management
-  static Future<List<DockMacro>> getMacros() async {
-    if (_cachedMacros.isNotEmpty) {
-      return _cachedMacros;
-    }
-
+  Future<List<DeviceMacro>> getUserMacros() async {
     try {
-      final headers = await _getAuthHeaders();
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/dock/macros'),
-        headers: headers,
-      );
+      final response = await _get(ApiConfig.dockMacros);
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final macros = (data['macros'] as List<dynamic>)
-            .map((m) => DockMacro.fromJson(m))
-            .toList();
-
-        _cachedMacros = macros;
-        await _cacheMacros();
-
-        return macros;
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => DeviceMacro.fromJson(json)).toList();
       } else {
-        throw Exception('Failed to fetch macros: ${response.statusCode}');
+        throw Exception('Failed to load macros: ${response.statusCode}');
       }
     } catch (e) {
-      return _cachedMacros;
-    }
-  }
-
-  static Future<DockMacro?> createMacro(DockMacro macro) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/macros'),
-        headers: headers,
-        body: json.encode(macro.toJson()),
-      );
-
-      if (response.statusCode == 201) {
-        final data = json.decode(response.body);
-        final newMacro = DockMacro.fromJson(data['macro']);
-        _cachedMacros.add(newMacro);
-        await _cacheMacros();
-        return newMacro;
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  static Future<bool> updateMacro(DockMacro macro) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.put(
-        Uri.parse('${ApiConfig.baseUrl}/dock/macros/${macro.id}'),
-        headers: headers,
-        body: json.encode(macro.toJson()),
-      );
-
-      if (response.statusCode == 200) {
-        final index = _cachedMacros.indexWhere((m) => m.id == macro.id);
-        if (index != -1) {
-          _cachedMacros[index] = macro;
-          await _cacheMacros();
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  static Future<bool> deleteMacro(String macroId) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.delete(
-        Uri.parse('${ApiConfig.baseUrl}/dock/macros/$macroId'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        _cachedMacros.removeWhere((m) => m.id == macroId);
-        await _cacheMacros();
-        return true;
-      }
-      return false;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Macro Execution
-  static Future<MacroExecution?> executeMacro(
-    String macroId, {
-    String? deviceId,
-  }) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/macros/$macroId/execute'),
-        headers: headers,
-        body: json.encode({if (deviceId != null) 'device_id': deviceId}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final execution = MacroExecution.fromJson(data['execution']);
-        _activeExecutions.add(execution);
-        _executionsController?.add(_activeExecutions);
-        return execution;
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  static Future<bool> cancelExecution(String executionId) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/executions/$executionId/cancel'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        _activeExecutions.removeWhere((e) => e.id == executionId);
-        _executionsController?.add(_activeExecutions);
-        return true;
-      }
-      return false;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  static Future<bool> pauseExecution(String executionId) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/executions/$executionId/pause'),
-        headers: headers,
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  static Future<bool> resumeExecution(String executionId) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/executions/$executionId/resume'),
-        headers: headers,
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Device Control Commands
-  static Future<bool> executeCommand(
-    String deviceId,
-    String command, {
-    Map<String, dynamic>? parameters,
-  }) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/devices/$deviceId/command'),
-        headers: headers,
-        body: json.encode({'command': command, 'parameters': parameters ?? {}}),
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  static Future<bool> sendFileToDevice(
-    String deviceId,
-    String filePath,
-    String remotePath,
-  ) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/devices/$deviceId/file/send'),
-        headers: headers,
-        body: json.encode({'local_path': filePath, 'remote_path': remotePath}),
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  static Future<bool> getFileFromDevice(
-    String deviceId,
-    String remotePath,
-    String localPath,
-  ) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/devices/$deviceId/file/get'),
-        headers: headers,
-        body: json.encode({'remote_path': remotePath, 'local_path': localPath}),
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Automation Rules
-  static Future<List<AutomationRule>> getAutomationRules() async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/dock/automation/rules'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return (data['rules'] as List<dynamic>)
-            .map((r) => AutomationRule.fromJson(r))
-            .toList();
-      }
-      return [];
-    } catch (e) {
+      print('Error getting user macros: $e');
       return [];
     }
   }
 
-  static Future<AutomationRule?> createAutomationRule(
-    AutomationRule rule,
-  ) async {
+  Future<DeviceMacro> executeMacro(String macroId) async {
     try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/automation/rules'),
-        headers: headers,
-        body: json.encode(rule.toJson()),
-      );
-
-      if (response.statusCode == 201) {
-        final data = json.decode(response.body);
-        return AutomationRule.fromJson(data['rule']);
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Private helper methods
-  static Future<void> _updateDeviceStatuses() async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/dock/devices/status'),
-        headers: headers,
-      );
+      final response = await _post(ApiConfig.dockMacro(macroId), {});
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final devices = (data['devices'] as List<dynamic>)
-            .map((d) => ConnectedDevice.fromJson(d))
-            .toList();
-
-        _cachedDevices = devices;
-        _devicesController?.add(devices);
-      }
-    } catch (e) {
-      // Silent fail for real-time updates
-    }
-  }
-
-  static Future<void> _updateExecutionStatuses() async {
-    if (_activeExecutions.isEmpty) return;
-
-    try {
-      final headers = await _getAuthHeaders();
-      final executionIds = _activeExecutions.map((e) => e.id).join(',');
-      final response = await http.get(
-        Uri.parse(
-          '${ApiConfig.baseUrl}/dock/executions/status?ids=$executionIds',
-        ),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final executions = (data['executions'] as List<dynamic>)
-            .map((e) => MacroExecution.fromJson(e))
-            .toList();
-
-        // Update active executions and remove completed ones
-        _activeExecutions = executions
-            .where(
-              (e) =>
-                  e.status != ExecutionStatus.completed &&
-                  e.status != ExecutionStatus.failed &&
-                  e.status != ExecutionStatus.cancelled,
-            )
-            .toList();
-
-        _executionsController?.add(_activeExecutions);
-      }
-    } catch (e) {
-      // Silent fail for real-time updates
-    }
-  }
-
-  static Future<void> _loadCachedData() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // Load cached devices
-    final devicesJson = prefs.getString(_devicesCacheKey);
-    if (devicesJson != null) {
-      final devicesList = json.decode(devicesJson) as List<dynamic>;
-      _cachedDevices = devicesList
-          .map((d) => ConnectedDevice.fromJson(d))
-          .toList();
-    }
-
-    // Load cached macros
-    final macrosJson = prefs.getString(_macrosCacheKey);
-    if (macrosJson != null) {
-      final macrosList = json.decode(macrosJson) as List<dynamic>;
-      _cachedMacros = macrosList.map((m) => DockMacro.fromJson(m)).toList();
-    }
-  }
-
-  static Future<void> _cacheDevices() async {
-    final prefs = await SharedPreferences.getInstance();
-    final devicesJson = json.encode(
-      _cachedDevices.map((d) => d.toJson()).toList(),
-    );
-    await prefs.setString(_devicesCacheKey, devicesJson);
-  }
-
-  static Future<void> _cacheMacros() async {
-    final prefs = await SharedPreferences.getInstance();
-    final macrosJson = json.encode(
-      _cachedMacros.map((m) => m.toJson()).toList(),
-    );
-    await prefs.setString(_macrosCacheKey, macrosJson);
-  }
-
-  // Quick action methods for common use cases
-  static Future<bool> quickRestart(String deviceId) async {
-    return await executeCommand(deviceId, 'restart');
-  }
-
-  static Future<bool> quickShutdown(String deviceId) async {
-    return await executeCommand(deviceId, 'shutdown');
-  }
-
-  static Future<bool> quickSleep(String deviceId) async {
-    return await executeCommand(deviceId, 'sleep');
-  }
-
-  static Future<bool> openApplication(String deviceId, String appName) async {
-    return await executeCommand(
-      deviceId,
-      'open_app',
-      parameters: {'app_name': appName},
-    );
-  }
-
-  static Future<bool> closeApplication(String deviceId, String appName) async {
-    return await executeCommand(
-      deviceId,
-      'close_app',
-      parameters: {'app_name': appName},
-    );
-  }
-
-  // Integration with Flow and Buddy
-  static Future<bool> triggerFlowFromDevice(
-    String deviceId,
-    String flowDescription,
-  ) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/integration/flow'),
-        headers: headers,
-        body: json.encode({
-          'device_id': deviceId,
-          'flow_description': flowDescription,
-          'source': 'dock',
-        }),
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  static Future<bool> askBuddyFromDevice(
-    String deviceId,
-    String question,
-  ) async {
-    try {
-      final headers = await _getAuthHeaders();
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/dock/integration/buddy'),
-        headers: headers,
-        body: json.encode({
-          'device_id': deviceId,
-          'question': question,
-          'source': 'dock',
-        }),
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // ============ Enhanced System Monitoring ============
-
-  /// Get comprehensive system information for dock
-  static Future<Map<String, dynamic>> getSystemInfo() async {
-    try {
-      final systemInfo = <String, dynamic>{};
-
-      // Get system resources
-      systemInfo['resources'] = await _getSystemResources();
-
-      // Get running processes
-      systemInfo['processes'] = await _getRunningProcesses();
-
-      // Get network information
-      systemInfo['network'] = await _getNetworkInfo();
-
-      return systemInfo;
-    } catch (e) {
-      print('Error getting system info: $e');
-      return {'error': e.toString()};
-    }
-  }
-
-  /// Get current running processes
-  static Future<List<Map<String, dynamic>>> _getRunningProcesses() async {
-    try {
-      final processes = <Map<String, dynamic>>[];
-
-      if (Platform.isLinux || Platform.isMacOS) {
-        final result = await Process.run('ps', [
-          '-eo',
-          'pid,ppid,pcpu,pmem,comm,args',
-        ]);
-        if (result.exitCode == 0) {
-          final lines = result.stdout.toString().split('\n');
-          for (int i = 1; i < lines.length; i++) {
-            final line = lines[i].trim();
-            if (line.isNotEmpty) {
-              final parts = line.split(RegExp(r'\s+'));
-              if (parts.length >= 6) {
-                processes.add({
-                  'pid': int.tryParse(parts[0]) ?? 0,
-                  'ppid': int.tryParse(parts[1]) ?? 0,
-                  'cpu_percent': double.tryParse(parts[2]) ?? 0.0,
-                  'memory_percent': double.tryParse(parts[3]) ?? 0.0,
-                  'command': parts[4],
-                  'args': parts.sublist(5).join(' '),
-                  'timestamp': DateTime.now().toIso8601String(),
-                });
-              }
-            }
-          }
-        }
-      } else if (Platform.isWindows) {
-        final result = await Process.run('tasklist', ['/fo', 'csv']);
-        if (result.exitCode == 0) {
-          final lines = result.stdout.toString().split('\n');
-          for (int i = 1; i < lines.length; i++) {
-            final line = lines[i].trim();
-            if (line.isNotEmpty) {
-              final parts = line.split(',');
-              if (parts.length >= 5) {
-                processes.add({
-                  'name': parts[0].replaceAll('"', ''),
-                  'pid': int.tryParse(parts[1].replaceAll('"', '')) ?? 0,
-                  'session_name': parts[2].replaceAll('"', ''),
-                  'session_number': parts[3].replaceAll('"', ''),
-                  'memory_usage': parts[4].replaceAll('"', ''),
-                  'timestamp': DateTime.now().toIso8601String(),
-                });
-              }
-            }
-          }
-        }
-      }
-
-      return processes;
-    } catch (e) {
-      print('Error getting processes: $e');
-      return [];
-    }
-  }
-
-  /// Kill a specific process by PID
-  static Future<Map<String, dynamic>> killProcess(int pid) async {
-    try {
-      ProcessResult result;
-
-      if (Platform.isWindows) {
-        result = await Process.run('taskkill', ['/PID', pid.toString(), '/F']);
+        return DeviceMacro.fromJson(jsonDecode(response.body));
       } else {
-        result = await Process.run('kill', ['-9', pid.toString()]);
+        throw Exception('Failed to execute macro: ${response.statusCode}');
       }
-
-      return {
-        'success': result.exitCode == 0,
-        'message': result.exitCode == 0
-            ? 'Process $pid terminated successfully'
-            : 'Failed to terminate process $pid: ${result.stderr}',
-        'pid': pid,
-        'exit_code': result.exitCode,
-      };
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Error terminating process $pid: $e',
-        'pid': pid,
-      };
+      print('Error executing macro: $e');
+      rethrow;
     }
   }
 
-  /// Get system resource usage
-  static Future<Map<String, dynamic>> _getSystemResources() async {
+  // Network Operations
+  Future<List<Device>> scanNetwork() async {
     try {
-      final resources = <String, dynamic>{};
+      final response = await _post(ApiConfig.dockNetworkScan, {});
 
-      if (Platform.isLinux || Platform.isMacOS) {
-        // Get memory usage
-        final memResult = await Process.run('free', ['-m']);
-        if (memResult.exitCode == 0) {
-          final lines = memResult.stdout.toString().split('\n');
-          if (lines.length > 1) {
-            final memLine = lines[1].split(RegExp(r'\s+'));
-            if (memLine.length >= 3) {
-              resources['memory'] = {
-                'total_mb': int.tryParse(memLine[1]) ?? 0,
-                'used_mb': int.tryParse(memLine[2]) ?? 0,
-                'available_mb': int.tryParse(memLine[6]) ?? 0,
-              };
-            }
-          }
-        }
-
-        // Get disk usage
-        final diskResult = await Process.run('df', ['-h', '/']);
-        if (diskResult.exitCode == 0) {
-          final lines = diskResult.stdout.toString().split('\n');
-          if (lines.length > 1) {
-            final diskLine = lines[1].split(RegExp(r'\s+'));
-            if (diskLine.length >= 4) {
-              resources['disk'] = {
-                'total': diskLine[1],
-                'used': diskLine[2],
-                'available': diskLine[3],
-                'use_percent': diskLine[4],
-              };
-            }
-          }
-        }
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => Device.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to scan network: ${response.statusCode}');
       }
-
-      return resources;
     } catch (e) {
-      print('Error getting system resources: $e');
-      return {};
+      print('Error scanning network: $e');
+      return [];
     }
   }
 
-  /// Get network information
-  static Future<Map<String, dynamic>> _getNetworkInfo() async {
+  // WebSocket Connection
+  Future<void> connectWebSocket(String deviceId) async {
     try {
-      final network = <String, dynamic>{};
-
-      if (Platform.isLinux || Platform.isMacOS) {
-        final result = await Process.run('ifconfig', []);
-        if (result.exitCode == 0) {
-          network['interfaces'] = result.stdout.toString();
-        }
-      } else if (Platform.isWindows) {
-        final result = await Process.run('ipconfig', []);
-        if (result.exitCode == 0) {
-          network['interfaces'] = result.stdout.toString();
-        }
+      final token = await AuthService.getToken();
+      if (token == null) {
+        throw Exception('No authentication token available');
       }
 
-      return network;
+      final wsUrl = ApiConfig.dockWebSocketConnect(deviceId);
+
+      _webSocketChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      _webSocketStream = _webSocketChannel!.stream.asBroadcastStream();
+
+      // Send authentication message immediately after connection
+      sendWebSocketMessage({
+        'type': 'auth',
+        'token': token,
+        'device_id': deviceId,
+      });
+
+      print('WebSocket connected to: $wsUrl');
     } catch (e) {
-      print('Error getting network info: $e');
-      return {};
+      print('Error connecting to WebSocket: $e');
     }
   }
 
-  /// Execute a system command for dock operations
-  static Future<Map<String, dynamic>> executeSystemCommand(
-    String command,
-    List<String> args,
-  ) async {
+  void sendWebSocketMessage(Map<String, dynamic> message) {
     try {
-      final result = await Process.run(command, args);
-      return {
-        'success': result.exitCode == 0,
-        'exit_code': result.exitCode,
-        'stdout': result.stdout.toString(),
-        'stderr': result.stderr.toString(),
-      };
+      if (_webSocketChannel != null) {
+        _webSocketChannel!.sink.add(jsonEncode(message));
+      }
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      print('Error sending WebSocket message: $e');
+    }
+  }
+
+  void dispose() {
+    try {
+      _webSocketChannel?.sink.close();
+      _webSocketChannel = null;
+      _webSocketStream = null;
+    } catch (e) {
+      print('Error disposing WebSocket: $e');
     }
   }
 }
