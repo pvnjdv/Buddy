@@ -95,7 +95,7 @@ class DeviceCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    'Last seen: ${_formatDateTime(device.lastSeen)}',
+                    'Last seen: ${_formatDateTime(device.lastSeenDateTime)}',
                     style: Theme.of(
                       context,
                     ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
@@ -630,10 +630,10 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
                     'IP Address',
                     '${widget.device.ipAddress}:${widget.device.port}',
                   ),
-                  _buildInfoRow('Device Type', widget.device.deviceType),
+                  _buildInfoRow('Device Type', widget.device.deviceTypeDisplay),
                   _buildInfoRow(
                     'Last Seen',
-                    _formatDateTime(widget.device.lastSeen),
+                    _formatDateTime(widget.device.lastSeenDateTime),
                   ),
                 ],
               ),

@@ -13,13 +13,11 @@ Device _$DeviceFromJson(Map<String, dynamic> json) => Device(
   ipAddress: json['ip_address'] as String,
   port: (json['port'] as num).toInt(),
   status: json['status'] as String,
-  lastSeen: DateTime.parse(json['last_seen'] as String),
+  lastSeen: json['last_seen'] as String,
   capabilities: json['capabilities'] as Map<String, dynamic>,
   metadata: json['metadata'] as Map<String, dynamic>,
-  createdAt: DateTime.parse(json['created_at'] as String),
-  updatedAt: json['updated_at'] == null
-      ? null
-      : DateTime.parse(json['updated_at'] as String),
+  deviceType: json['device_type'] as String?,
+  isOnlineFlag: json['is_online'] as bool?,
 );
 
 Map<String, dynamic> _$DeviceToJson(Device instance) => <String, dynamic>{
@@ -29,11 +27,11 @@ Map<String, dynamic> _$DeviceToJson(Device instance) => <String, dynamic>{
   'ip_address': instance.ipAddress,
   'port': instance.port,
   'status': instance.status,
-  'last_seen': instance.lastSeen.toIso8601String(),
+  'last_seen': instance.lastSeen,
   'capabilities': instance.capabilities,
   'metadata': instance.metadata,
-  'created_at': instance.createdAt.toIso8601String(),
-  'updated_at': instance.updatedAt?.toIso8601String(),
+  'device_type': instance.deviceType,
+  'is_online': instance.isOnlineFlag,
 };
 
 DeviceCommand _$DeviceCommandFromJson(Map<String, dynamic> json) =>

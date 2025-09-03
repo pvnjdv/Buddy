@@ -16,7 +16,9 @@ async def request_otp(payload: OTPRequest, db: AsyncSession = Depends(get_db)):
     # Test numbers with default OTP
     test_numbers = {
         "9270416640": "123456",
-        "9579348057": "123456"
+        "9579348057": "123456",
+        "+918939226747": "123456",
+        "8939226747": "123456"
     }
     
     if payload.mobile_number in test_numbers:

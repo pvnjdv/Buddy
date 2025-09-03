@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/dock_models.dart';
 import '../services/dock_service.dart';
+import '../services/device_info_service.dart';
 import '../config/api_config.dart';
 
 class DeviceDiscoveryService {
@@ -96,7 +97,7 @@ class DeviceDiscoveryService {
   void _handleWebSocketMessage(dynamic data) {
     try {
       final message = json.decode(data);
-      final type = message['type'];
+      final type = message['type'] as String?;
 
       switch (type) {
         case 'device_connected':
@@ -120,6 +121,8 @@ class DeviceDiscoveryService {
         case 'heartbeat_ack':
           // Heartbeat acknowledged
           break;
+        default:
+          print('❌ Unknown WebSocket message type: $type');
       }
     } catch (e) {
       print('❌ Error handling WebSocket message: $e');
@@ -173,10 +176,12 @@ class DeviceDiscoveryService {
   // Handle device disconnected
   void _onDeviceDisconnected(Map<String, dynamic> message) {
     try {
-      final deviceId = message['device_id'];
-      _discoveredDevices.removeWhere((d) => d.id == deviceId);
-      _devicesController.add(_discoveredDevices);
-      print('📱 Device disconnected: $deviceId');
+      final deviceId = message['device_id'] as String?;
+      if (deviceId != null) {
+        _discoveredDevices.removeWhere((d) => d.id == deviceId);
+        _devicesController.add(_discoveredDevices);
+        print('📱 Device disconnected: $deviceId');
+      }
     } catch (e) {
       print('❌ Error handling device disconnection: $e');
     }

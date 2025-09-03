@@ -5,6 +5,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/dock_models.dart';
 import '../config/api_config.dart';
 import '../services/auth_service.dart';
+import '../services/device_info_service.dart';
 
 class DockService {
   static final DockService _instance = DockService._internal();
@@ -49,12 +50,27 @@ class DockService {
   // Auto-register current device when user logs in
   Future<Map<String, dynamic>> autoRegisterDevice() async {
     try {
-      final response = await _post(ApiConfig.dockAutoRegister, {});
+      // Get device information from the Flutter side (works on all platforms)
+      final deviceInfoService = DeviceInfoService();
+      final deviceInfo = await deviceInfoService.getDeviceInfo();
+      final capabilities = deviceInfoService.getDeviceCapabilities();
+
+      // Create the payload with Flutter-collected device info
+      final payload = {
+        'device_info': deviceInfo,
+        'capabilities': capabilities,
+        'device_type': deviceInfoService.isMobile() ? 'mobile' : 'desktop',
+        'platform': deviceInfoService.getPlatformDisplayName(),
+      };
+
+      final response = await _post(ApiConfig.dockAutoRegister, payload);
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         print('🔐 Auto-registration response: $data');
         return data;
       } else {
+        print('❌ Auto-registration failed: ${response.statusCode}');
+        print('Response body: ${response.body}');
         throw Exception('Auto-registration failed: ${response.statusCode}');
       }
     } catch (e) {
@@ -196,8 +212,9 @@ class DockService {
       final response = await _get(ApiConfig.dockMacros);
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((json) => DeviceMacro.fromJson(json)).toList();
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        final List<dynamic> macrosList = data['macros'] ?? [];
+        return macrosList.map((json) => DeviceMacro.fromJson(json)).toList();
       } else {
         throw Exception('Failed to load macros: ${response.statusCode}');
       }
@@ -282,6 +299,28 @@ class DockService {
       _webSocketStream = null;
     } catch (e) {
       print('Error disposing WebSocket: $e');
+    }
+  }
+
+  Future<Device> renameDevice(String deviceId, String newName) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.put(
+        Uri.parse(
+          '${ApiConfig.dockDevices}/$deviceId/rename?new_name=$newName',
+        ),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return Device.fromJson(data['device']);
+      } else {
+        throw Exception('Failed to rename device: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error renaming device: $e');
+      rethrow;
     }
   }
 }

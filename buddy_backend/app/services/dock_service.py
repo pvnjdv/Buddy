@@ -25,7 +25,7 @@ class DockService:
     async def get_user_devices(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all devices registered to a user"""
         try:
-            devices = DeviceCRUD.get_devices_by_owner(self.db, user_id)
+            devices = await DeviceCRUD.get_devices_by_owner(self.db, user_id)
             return [
                 {
                     "id": device.id,
@@ -389,78 +389,134 @@ class DockService:
             device_type = device_info.get('device_type', 'desktop')
             capabilities = device_info.get('capabilities', {})
             
-            # Check if device already exists
-            devices = DeviceCRUD.get_devices_by_owner(self.db, user_id)
-            existing_device = None
+            print(f"Registering device for user: {user_id}")
+            print(f"System info: {system_info}")
             
+            # Check if device already exists
+            try:
+                devices = await DeviceCRUD.get_devices_by_owner(self.db, user_id)
+                print(f"Found {len(devices)} existing devices")
+            except Exception as e:
+                print(f"Error getting devices: {e}")
+                devices = []
+                
+            existing_device = None
             hostname = system_info.get('hostname', 'unknown')
+            
+            # Check for existing device by hostname
             for device in devices:
                 if device.name == hostname:
                     existing_device = device
+                    print(f"Found existing device: {device.name}")
                     break
             
             if existing_device:
                 # Update existing device
-                update_data = DeviceUpdate(
-                    ip_address=system_info.get('ip_address', existing_device.ip_address),
-                    status="online",
-                    last_seen=datetime.utcnow(),
+                try:
+                    update_data = DeviceUpdate(
+                        ip_address=system_info.get('ip_address', existing_device.ip_address),
+                        status="online",
+                        last_seen=datetime.utcnow(),
+                        capabilities=capabilities,
+                        device_metadata={
+                            **(existing_device.device_metadata or {}),
+                            "device_type": device_type,
+                            "last_auto_register": datetime.utcnow().isoformat(),
+                            **system_info
+                        }
+                    )
+                    
+                    updated_device = await DeviceCRUD.update_device(self.db, existing_device.id, update_data)
+                    
+                    if updated_device:
+                        return {
+                            "id": updated_device.id,
+                            "name": updated_device.name,
+                            "platform": updated_device.platform,
+                            "ip_address": updated_device.ip_address,
+                            "port": updated_device.port,
+                            "capabilities": updated_device.capabilities or {},
+                            "status": updated_device.status,
+                            "device_type": device_type,
+                            "updated": True
+                        }
+                except Exception as e:
+                    print(f"Error updating device: {e}")
+                    # Fall through to create new device
+            
+            # Create new device if update failed or no existing device
+            try:
+                device_create = DeviceCreate(
+                    name=hostname,
+                    platform=system_info.get('platform', 'Unknown'),
+                    ip_address=system_info.get('ip_address', '127.0.0.1'),
+                    port=8000,
                     capabilities=capabilities,
                     device_metadata={
-                        **(existing_device.device_metadata or {}),
                         "device_type": device_type,
-                        "last_auto_register": datetime.utcnow().isoformat(),
+                        "registered_via": "auto_register",
+                        "auto_register_time": datetime.utcnow().isoformat(),
                         **system_info
                     }
                 )
                 
-                updated_device = DeviceCRUD.update_device(self.db, existing_device.id, update_data)
+                print(f"Creating new device: {device_create.name}")
+                device = await DeviceCRUD.create_device(self.db, device_create, user_id)
                 
-                if updated_device:
+                if device:
+                    print(f"Device created successfully: {device.id}")
                     return {
-                        "id": updated_device.id,
-                        "name": updated_device.name,
-                        "platform": updated_device.platform,
-                        "ip_address": updated_device.ip_address,
-                        "port": updated_device.port,
-                        "capabilities": updated_device.capabilities or {},
-                        "status": updated_device.status,
+                        "id": device.id,
+                        "name": device.name,
+                        "platform": device.platform,
+                        "ip_address": device.ip_address,
+                        "port": device.port,
+                        "capabilities": device.capabilities or {},
+                        "status": device.status,
                         "device_type": device_type,
-                        "updated": True
+                        "created": True
                     }
-            
-            # Create new device if update failed or no existing device
-            device_create = DeviceCreate(
-                name=hostname,
-                platform=system_info.get('platform', 'Unknown'),
-                ip_address=system_info.get('ip_address', '127.0.0.1'),
-                port=8000,
-                capabilities=capabilities,
-                device_metadata={
-                    "device_type": device_type,
-                    "registered_via": "auto_register",
-                    "auto_register_time": datetime.utcnow().isoformat(),
-                    **system_info
-                }
-            )
-            
-            device = DeviceCRUD.create_device(self.db, device_create, user_id)
-            
-            if device:
-                return {
-                    "id": device.id,
-                    "name": device.name,
-                    "platform": device.platform,
-                    "ip_address": device.ip_address,
-                    "port": device.port,
-                    "capabilities": device.capabilities or {},
-                    "status": device.status,
-                    "device_type": device_type,
-                    "created": True
-                }
-            else:
-                raise Exception("Failed to create device")
+                else:
+                    raise Exception("Device creation returned None")
+                    
+            except Exception as e:
+                print(f"Error creating device: {e}")
+                raise Exception(f"Failed to create device: {str(e)}")
                 
         except Exception as e:
             print(f"Error in register_or_update_device: {str(e)}")
+            import traceback
+            traceback.print_exc()
             raise Exception(f"Failed to register or update device: {str(e)}")
+    
+    async def rename_device(self, device_id: str, new_name: str, user_id: str) -> Dict[str, Any]:
+        """Rename a device"""
+        try:
+            # Find and update the device name in the database
+            device = await DeviceCRUD.get_device_by_id(self.db, device_id)
+            if not device or device.owner_id != user_id:
+                raise Exception("Device not found or access denied")
+            
+            # Update device name
+            device_update = DeviceUpdate(name=new_name)
+            updated_device = await DeviceCRUD.update_device(self.db, device_id, device_update)
+            
+            # Update in connected devices cache if present
+            if device_id in self.connected_devices:
+                self.connected_devices[device_id]['name'] = new_name
+            
+            return {
+                "id": updated_device.id,
+                "name": updated_device.name,
+                "platform": updated_device.platform,
+                "device_type": updated_device.device_metadata.get("device_type", "unknown") if updated_device.device_metadata else "unknown",
+                "is_online": updated_device.status == "online",
+                "last_seen": updated_device.last_seen.isoformat() if updated_device.last_seen else None,
+                "ip_address": updated_device.ip_address,
+                "port": updated_device.port,
+                "capabilities": updated_device.capabilities or {},
+                "metadata": updated_device.device_metadata or {},
+                "status": updated_device.status
+            }
+        except Exception as e:
+            raise Exception(f"Failed to rename device: {str(e)}")

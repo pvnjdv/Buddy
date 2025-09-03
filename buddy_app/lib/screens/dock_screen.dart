@@ -185,9 +185,10 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
                 _buildSettingsTab(),
               ],
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddDeviceDialog,
-        child: const Icon(Icons.add),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showDeviceActions,
+        icon: const Icon(Icons.devices),
+        label: const Text('Device'),
       ),
     );
   }
@@ -195,35 +196,6 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
   Widget _buildDevicesTab() {
     return Column(
       children: [
-        // Auto-discovery status bar
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          color: Colors.green.withValues(alpha: 0.1),
-          child: Row(
-            children: [
-              const Icon(Icons.radar, color: Colors.green, size: 16),
-              const SizedBox(width: 8),
-              const Text(
-                '🔍 Auto-discovering devices...',
-                style: TextStyle(fontSize: 12, color: Colors.green),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: () {
-                  _discoveryService.refreshDiscovery();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Refreshing device discovery...'),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.refresh, size: 16),
-                tooltip: 'Refresh Discovery',
-              ),
-            ],
-          ),
-        ),
         // Devices list
         Expanded(
           child: _devices.isEmpty
@@ -236,7 +208,7 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
                       Text('No devices connected'),
                       SizedBox(height: 8),
                       Text(
-                        'Tap + to add a device',
+                        'Use the Device button to add or discover devices',
                         style: TextStyle(color: Colors.grey),
                       ),
                     ],
@@ -267,6 +239,7 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
   Widget _buildCommandsTab() {
     return Column(
       children: [
+        // Enhanced Command Interface
         Padding(
           padding: const EdgeInsets.all(16),
           child: Card(
@@ -275,11 +248,27 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.terminal,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Command Center',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
                   Text(
                     'Quick Commands',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -287,8 +276,11 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
                       _buildQuickCommandChip('System Info', Icons.info, () {
                         _executeQuickCommand('system', 'uname -a');
                       }),
+                      _buildQuickCommandChip('Memory Usage', Icons.memory, () {
+                        _executeQuickCommand('system', 'free -h');
+                      }),
                       _buildQuickCommandChip('List Processes', Icons.list, () {
-                        _executeQuickCommand('system', 'ps aux');
+                        _executeQuickCommand('system', 'ps aux | head -20');
                       }),
                       _buildQuickCommandChip('Disk Usage', Icons.storage, () {
                         _executeQuickCommand('system', 'df -h');
@@ -297,8 +289,46 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
                         'Network Info',
                         Icons.network_check,
                         () {
-                          _executeQuickCommand('network', 'ipconfig');
+                          _executeQuickCommand('network', 'ip addr show');
                         },
+                      ),
+                      _buildQuickCommandChip('CPU Info', Icons.computer, () {
+                        _executeQuickCommand('system', 'lscpu');
+                      }),
+                      _buildQuickCommandChip(
+                        'Running Services',
+                        Icons.settings,
+                        () {
+                          _executeQuickCommand(
+                            'system',
+                            'systemctl list-units --type=service --state=running',
+                          );
+                        },
+                      ),
+                      _buildQuickCommandChip('Uptime', Icons.schedule, () {
+                        _executeQuickCommand('system', 'uptime');
+                      }),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _showBulkCommandDialog(),
+                          icon: const Icon(Icons.send),
+                          label: const Text('Send Command to All'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).primaryColor,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => _showCommandHistoryDialog(),
+                        icon: const Icon(Icons.history),
+                        label: const Text('History'),
                       ),
                     ],
                   ),
@@ -307,6 +337,8 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
             ),
           ),
         ),
+
+        // Device Command Interface
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -314,21 +346,95 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
             itemBuilder: (context, index) {
               final device = _devices[index];
               return Card(
-                child: ListTile(
+                child: ExpansionTile(
                   leading: Icon(
                     _getPlatformIcon(device.platform),
                     color: device.isOnline ? Colors.green : Colors.grey,
+                    size: 32,
                   ),
-                  title: Text(device.name),
-                  subtitle: Text(
-                    '${device.platform} • ${device.displayStatus}',
+                  title: Text(
+                    device.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  trailing: ElevatedButton(
-                    onPressed: device.isOnline
-                        ? () => _showCommandDialog(device)
-                        : null,
-                    child: const Text('Execute'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${device.platform} • ${device.displayStatus}'),
+                      Text(
+                        'IP: ${device.ipAddress}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
                   ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          // Device Capabilities
+                          if (device.capabilities.isNotEmpty) ...[
+                            Text(
+                              'Available Commands:',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              children: device.capabilities.entries
+                                  .where((e) => e.value == true)
+                                  .map(
+                                    (capability) => Chip(
+                                      label: Text(
+                                        capability.key.replaceAll('_', ' '),
+                                        style: const TextStyle(fontSize: 10),
+                                      ),
+                                      backgroundColor: Colors.blue.withOpacity(
+                                        0.1,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
+                          // Action Buttons
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: device.isOnline
+                                      ? () => _showCommandDialog(device)
+                                      : null,
+                                  icon: const Icon(Icons.terminal),
+                                  label: const Text('Open Terminal'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: device.isOnline
+                                      ? () => _showRemoteControlDialog(device)
+                                      : null,
+                                  icon: const Icon(Icons.control_camera),
+                                  label: const Text('Remote Control'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               );
             },
@@ -478,7 +584,118 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
     }
   }
 
-  void _showAddDeviceDialog() {
+  void _showDeviceActions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Device Management',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+
+            // Auto Register Current Device
+            ListTile(
+              leading: const Icon(Icons.smartphone),
+              title: const Text('Register This Device'),
+              subtitle: const Text('Add current device automatically'),
+              onTap: () {
+                Navigator.pop(context);
+                _autoRegisterCurrentDevice();
+              },
+            ),
+
+            // Network Discovery
+            ListTile(
+              leading: const Icon(Icons.radar),
+              title: const Text('Discover Network Devices'),
+              subtitle: const Text('Scan network for available devices'),
+              onTap: () {
+                Navigator.pop(context);
+                _startNetworkDiscovery();
+              },
+            ),
+
+            // Manual Add Device
+            ListTile(
+              leading: const Icon(Icons.add_circle_outline),
+              title: const Text('Add Device Manually'),
+              subtitle: const Text('Enter device details manually'),
+              onTap: () {
+                Navigator.pop(context);
+                _showManualAddDeviceDialog();
+              },
+            ),
+
+            // Remote Access
+            ListTile(
+              leading: const Icon(Icons.desktop_access_disabled),
+              title: const Text('Remote Access'),
+              subtitle: const Text('Connect to remote devices'),
+              onTap: () {
+                Navigator.pop(context);
+                _showRemoteAccessDialog();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Auto register current device
+  Future<void> _autoRegisterCurrentDevice() async {
+    try {
+      setState(() => _isLoading = true);
+      await _dockService.autoRegisterDevice();
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Device registered successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Start network discovery
+  Future<void> _startNetworkDiscovery() async {
+    try {
+      setState(() => _isLoading = true);
+      _discoveryService.refreshDiscovery();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Scanning network for devices...')),
+      );
+      // Auto-refresh after a delay
+      await Future.delayed(const Duration(seconds: 3));
+      await _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Network scan failed: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Show manual add device dialog
+  void _showManualAddDeviceDialog() {
     showDialog(
       context: context,
       builder: (context) => AddDeviceDialog(
@@ -499,6 +716,81 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
             ).showSnackBar(SnackBar(content: Text('Error adding device: $e')));
           }
         },
+      ),
+    );
+  }
+
+  // Show remote access options
+  void _showRemoteAccessDialog() {
+    if (_devices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No devices available for remote access')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remote Access'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Select a device for remote access:'),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 200,
+              width: double.maxFinite,
+              child: ListView.builder(
+                itemCount: _devices.length,
+                itemBuilder: (context, index) {
+                  final device = _devices[index];
+                  return ListTile(
+                    leading: Icon(
+                      device.isOnline ? Icons.circle : Icons.circle_outlined,
+                      color: device.isOnline ? Colors.green : Colors.grey,
+                    ),
+                    title: Text(device.name),
+                    subtitle: Text('${device.platform} • ${device.deviceType}'),
+                    onTap: device.isOnline
+                        ? () {
+                            Navigator.pop(context);
+                            _initiateRemoteAccess(device);
+                          }
+                        : null,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Initiate remote access to a device
+  void _initiateRemoteAccess(Device device) {
+    // We need to find the current device from the registered devices
+    final currentDevice = _devices.firstWhere(
+      (d) =>
+          d.name.contains('current') ||
+          d.id.contains(_discoveryService.currentDeviceId ?? ''),
+      orElse: () => _devices.first, // fallback to first device
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RemoteControlScreen(
+          targetDevice: device,
+          currentDevice: currentDevice,
+        ),
       ),
     );
   }
@@ -713,10 +1005,10 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
       ipAddress: '127.0.0.1',
       port: 0,
       status: 'online',
-      lastSeen: DateTime.now(),
+      lastSeen: DateTime.now().toIso8601String(),
       capabilities: {},
       metadata: {'device_type': 'mobile'},
-      createdAt: DateTime.now(),
+      deviceType: 'mobile',
     );
   }
 
@@ -743,6 +1035,216 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
         Text('• Screen sharing and remote input'),
         Text('• File transfer and system management'),
       ],
+    );
+  }
+
+  void _showBulkCommandDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send Command to All Devices'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'This will execute the command on all online devices.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Command',
+                  hintText: 'Enter command to execute...',
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (command) {
+                  if (command.isNotEmpty) {
+                    Navigator.of(context).pop();
+                    _executeBulkCommand(command);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCommandHistoryDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Command History'),
+        content: SizedBox(
+          width: 500,
+          height: 400,
+          child: FutureBuilder<List<DeviceCommand>>(
+            future: _dockService.getCommandHistory(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (snapshot.hasError) {
+                return Center(child: Text('Error: ${snapshot.error}'));
+              }
+
+              final commands = snapshot.data ?? [];
+              if (commands.isEmpty) {
+                return const Center(child: Text('No command history'));
+              }
+
+              return ListView.builder(
+                itemCount: commands.length,
+                itemBuilder: (context, index) {
+                  final command = commands[index];
+                  return Card(
+                    child: ListTile(
+                      title: Text(
+                        command.command,
+                        style: const TextStyle(fontFamily: 'monospace'),
+                      ),
+                      subtitle: Text(
+                        '${command.status} • ${command.commandType}',
+                      ),
+                      trailing: Icon(
+                        command.isCompleted
+                            ? Icons.check_circle
+                            : command.isFailed
+                            ? Icons.error
+                            : command.isRunning
+                            ? Icons.hourglass_empty
+                            : Icons.pending,
+                        color: command.isCompleted
+                            ? Colors.green
+                            : command.isFailed
+                            ? Colors.red
+                            : Colors.orange,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRemoteControlDialog(Device device) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remote Control - ${device.name}'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Control ${device.name} remotely'),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (device.capabilities['screen_share'] == true)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _startScreenShare(device);
+                      },
+                      icon: const Icon(Icons.screen_share),
+                      label: const Text('Screen Share'),
+                    ),
+                  if (device.capabilities['file_transfer'] == true)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _openFileTransfer(device);
+                      },
+                      icon: const Icon(Icons.file_copy),
+                      label: const Text('File Transfer'),
+                    ),
+                  if (device.capabilities['input_control'] == true)
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _openRemoteControl(device);
+                      },
+                      icon: const Icon(Icons.mouse),
+                      label: const Text('Mouse/Keyboard'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeBulkCommand(String command) async {
+    final onlineDevices = _devices.where((d) => d.isOnline).toList();
+
+    if (onlineDevices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No online devices available')),
+      );
+      return;
+    }
+
+    for (final device in onlineDevices) {
+      try {
+        final request = CommandRequest(
+          deviceId: device.id,
+          commandType: 'system',
+          command: command,
+        );
+        await _dockService.executeCommand(request);
+      } catch (e) {
+        print('Error executing command on ${device.name}: $e');
+      }
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Command sent to ${onlineDevices.length} devices'),
+      ),
+    );
+  }
+
+  void _startScreenShare(Device device) {
+    // Navigate to screen share screen
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Screen sharing feature coming soon')),
+    );
+  }
+
+  void _openFileTransfer(Device device) {
+    // Navigate to file transfer screen
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('File transfer feature coming soon')),
     );
   }
 }

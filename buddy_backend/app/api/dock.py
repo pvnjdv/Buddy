@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional
 import json
@@ -172,6 +172,18 @@ def get_device_info() -> Dict[str, Any]:
             })
         except:
             pass
+
+        # Get power info
+        try:
+            battery = psutil.sensors_battery()
+            if battery:
+                system_info.update({
+                    "battery_percent": battery.percent,
+                    "battery_power_plugged": battery.power_plugged,
+                    "battery_secs_left": battery.secsleft,
+                })
+        except:
+            pass
             
         # Determine device type
         if platform.system() in ["Windows", "Linux", "Darwin"]:
@@ -209,17 +221,69 @@ def get_device_info() -> Dict[str, Any]:
 # Device Management Endpoints
 @router.post("/auto-register")
 async def auto_register_device(
+    request: Request,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     dock_service: DockService = Depends(get_dock_service)
 ):
     """Auto-register current device when user logs in"""
     try:
-        device_info = get_device_info()
+        print(f"🔧 Auto-register request for user: {current_user.mobile_number}")
         
-        # Check if device already exists for this user
-        existing_devices = await dock_service.get_user_devices(str(current_user.id))
-        device_id = f"{current_user.id}_{device_info['system_info'].get('hostname', 'unknown')}"
+        # Try to get device info from request body (for mobile devices)
+        try:
+            body = await request.json()
+            print(f"📱 Received device info from client: {body}")
+            
+            if body and 'device_info' in body:
+                # Use device info sent from client (Flutter app)
+                client_device_info = body['device_info']
+                client_capabilities = body.get('capabilities', {})
+                device_type = body.get('device_type', 'unknown')
+                platform = body.get('platform', 'Unknown')
+                
+                # Create system_info from client data
+                system_info = {
+                    'hostname': client_device_info.get('hostname', f'{platform.lower()}-device'),
+                    'ip_address': client_device_info.get('ip_address', '127.0.0.1'),
+                    'platform': platform,
+                    'device_type': device_type,
+                    **client_device_info
+                }
+                
+                # Create descriptive device name
+                model = client_device_info.get('model', '')
+                brand = client_device_info.get('brand', '')
+                if model and brand:
+                    device_name = f"{brand} {model}"
+                elif model:
+                    device_name = model
+                else:
+                    device_name = f'{platform} Device'
+                
+                device_info = {
+                    'name': device_name,
+                    'platform': platform,
+                    'device_type': device_type,
+                    'system_info': system_info,
+                    'capabilities': client_capabilities
+                }
+                print(f"✅ Using client device info: {device_name}")
+            else:
+                # Fall back to server-side detection (for desktop)
+                print("🖥️ Using server-side device detection")
+                device_info = get_device_info()
+        except Exception as client_error:
+            print(f"⚠️ Client device info parsing failed: {client_error}")
+            # Fall back to server-side detection
+            device_info = get_device_info()
+        
+        # Create unique device ID
+        device_hostname = device_info['system_info'].get('hostname', 'unknown')
+        device_platform = device_info.get('platform', 'unknown')
+        device_id = f"{current_user.id}_{device_platform}_{device_hostname}".lower().replace(' ', '_')
+        
+        print(f"🆔 Device ID: {device_id}")
         
         # Register or update device
         device = await dock_service.register_or_update_device(
@@ -228,13 +292,19 @@ async def auto_register_device(
             **device_info
         )
         
-        return {
+        response_data = {
             "success": True, 
             "device": device, 
             "message": "Device auto-registered successfully",
             "device_id": device_id
         }
+        print(f"🎉 Auto-registration successful: {device_info['name']}")
+        return response_data
+        
     except Exception as e:
+        print(f"❌ Auto-registration error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error auto-registering device: {str(e)}")
 
 @router.get("/devices", response_model=Dict[str, Any])
@@ -758,3 +828,21 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     except Exception as e:
         print(f"WebSocket error: {e}")
         manager.disconnect(client_id)
+
+@router.put("/devices/{device_id}/rename")
+async def rename_device(
+    device_id: str,
+    new_name: str,
+    current_user: User = Depends(get_current_user),
+    dock_service: DockService = Depends(get_dock_service)
+):
+    """Rename a device"""
+    try:
+        updated_device = await dock_service.rename_device(device_id, new_name, str(current_user.id))
+        return {
+            "success": True,
+            "device": updated_device,
+            "message": f"Device renamed to '{new_name}'"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to rename device: {str(e)}")

@@ -13,13 +13,13 @@ class Device {
   final int port;
   final String status;
   @JsonKey(name: 'last_seen')
-  final DateTime lastSeen;
+  final String lastSeen; // Keep as String for now, can parse later
   final Map<String, dynamic> capabilities;
   final Map<String, dynamic> metadata;
-  @JsonKey(name: 'created_at')
-  final DateTime createdAt;
-  @JsonKey(name: 'updated_at')
-  final DateTime? updatedAt;
+  @JsonKey(name: 'device_type')
+  final String? deviceType;
+  @JsonKey(name: 'is_online')
+  final bool? isOnlineFlag;
 
   Device({
     required this.id,
@@ -31,16 +31,17 @@ class Device {
     required this.lastSeen,
     required this.capabilities,
     required this.metadata,
-    required this.createdAt,
-    this.updatedAt,
+    this.deviceType,
+    this.isOnlineFlag,
   });
 
   factory Device.fromJson(Map<String, dynamic> json) => _$DeviceFromJson(json);
   Map<String, dynamic> toJson() => _$DeviceToJson(this);
 
-  bool get isOnline => status == 'online';
+  bool get isOnline => isOnlineFlag ?? (status == 'online');
 
-  String get deviceType => metadata['device_type'] ?? 'unknown';
+  String get deviceTypeDisplay =>
+      deviceType ?? metadata['device_type'] ?? 'unknown';
 
   String get displayStatus {
     switch (status) {
@@ -52,6 +53,14 @@ class Device {
         return 'Busy';
       default:
         return status.toUpperCase();
+    }
+  }
+
+  DateTime get lastSeenDateTime {
+    try {
+      return DateTime.parse(lastSeen);
+    } catch (e) {
+      return DateTime.now();
     }
   }
 }
