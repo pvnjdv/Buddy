@@ -5,8 +5,10 @@ import '../services/dock_service.dart';
 import '../services/device_discovery_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/dock_widgets.dart';
-import 'dock/device_detail_screen.dart';
-import 'dock/remote_control_screen.dart';
+import '../screens/dock/device_detail_screen.dart';
+import '../screens/dock/remote_control_screen.dart';
+import '../screens/dock/buddy_terminal_screen.dart';
+import '../screens/code_editor/buddy_code_editor_screen.dart';
 
 class DockScreen extends StatefulWidget {
   const DockScreen({super.key});
@@ -185,10 +187,24 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
                 _buildSettingsTab(),
               ],
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showDeviceActions,
-        icon: const Icon(Icons.devices),
-        label: const Text('Device'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(
+            heroTag: "code_editor",
+            onPressed: _openBuddyCodeEditor,
+            backgroundColor: Colors.blue,
+            child: const Icon(Icons.code, color: Colors.white),
+            tooltip: 'Buddy Code Editor',
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton.extended(
+            heroTag: "devices",
+            onPressed: _showDeviceActions,
+            icon: const Icon(Icons.devices),
+            label: const Text('Devices'),
+          ),
+        ],
       ),
     );
   }
@@ -645,6 +661,28 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
               onTap: () {
                 Navigator.pop(context);
                 _showRemoteAccessDialog();
+              },
+            ),
+
+            // Terminal Access
+            ListTile(
+              leading: const Icon(Icons.terminal),
+              title: const Text('Terminal Access'),
+              subtitle: const Text('Open terminal on devices'),
+              onTap: () {
+                Navigator.pop(context);
+                _showTerminalAccessDialog();
+              },
+            ),
+
+            // Code Editor
+            ListTile(
+              leading: const Icon(Icons.code),
+              title: const Text('Buddy Code Editor'),
+              subtitle: const Text('Cross-platform development environment'),
+              onTap: () {
+                Navigator.pop(context);
+                _openBuddyCodeEditor();
               },
             ),
           ],
@@ -1245,6 +1283,123 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
     // Navigate to file transfer screen
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('File transfer feature coming soon')),
+    );
+  }
+
+  // Show terminal access options
+  void _showTerminalAccessDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Terminal Access'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Local Terminal
+            ListTile(
+              leading: const Icon(Icons.computer, color: Colors.blue),
+              title: const Text('Local Terminal'),
+              subtitle: const Text('Open terminal on this device'),
+              onTap: () {
+                Navigator.pop(context);
+                _openLocalTerminal();
+              },
+            ),
+
+            const Divider(),
+
+            // Remote Device Terminals
+            if (_devices.isNotEmpty) ...[
+              const Text('Remote Devices:'),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 200,
+                width: double.maxFinite,
+                child: ListView.builder(
+                  itemCount: _devices.length,
+                  itemBuilder: (context, index) {
+                    final device = _devices[index];
+                    return ListTile(
+                      leading: Icon(
+                        device.isOnline ? Icons.circle : Icons.circle_outlined,
+                        color: device.isOnline ? Colors.green : Colors.grey,
+                      ),
+                      title: Text(device.name),
+                      subtitle: Text(
+                        '${device.platform} • ${device.deviceType}',
+                      ),
+                      onTap: device.isOnline
+                          ? () {
+                              Navigator.pop(context);
+                              _openRemoteTerminal(device);
+                            }
+                          : null,
+                    );
+                  },
+                ),
+              ),
+            ] else ...[
+              const Text(
+                'No devices available for remote terminal access',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Open local terminal
+  void _openLocalTerminal() {
+    // Create a local device representation
+    final localDevice = Device(
+      id: 'local_${DateTime.now().millisecondsSinceEpoch}',
+      name: 'Local Device',
+      platform: 'Local',
+      deviceType: 'desktop',
+      isOnlineFlag: true,
+      ipAddress: '127.0.0.1',
+      port: 0,
+      capabilities: {},
+      metadata: {},
+      status: 'online',
+      lastSeen: DateTime.now().toIso8601String(),
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            BuddyTerminalScreen(device: localDevice, isLocalTerminal: true),
+      ),
+    );
+  }
+
+  // Open remote terminal
+  void _openRemoteTerminal(Device device) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            BuddyTerminalScreen(device: device, isLocalTerminal: false),
+      ),
+    );
+  }
+
+  // Open Buddy Code Editor
+  void _openBuddyCodeEditor() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const BuddyCodeEditorScreen(isStandalone: true),
+      ),
     );
   }
 }

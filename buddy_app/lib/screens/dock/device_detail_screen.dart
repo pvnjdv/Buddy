@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/dock_models.dart';
 import '../../config/settings/theme_config.dart';
+import 'buddy_terminal_screen.dart';
 
 class DeviceDetailScreen extends StatefulWidget {
   final Device device;
@@ -154,9 +155,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: () => _showQuickCommands(),
+                              onPressed: () => _openBuddyTerminal(),
                               icon: const Icon(Icons.terminal),
-                              label: const Text('Terminal'),
+                              label: const Text('Buddy Terminal'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
                                 foregroundColor: Colors.white,
@@ -296,6 +297,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     } else {
       return '${difference.inDays}d ago';
     }
+  }
+
+  void _openBuddyTerminal() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            BuddyTerminalScreen(device: widget.device, isLocalTerminal: false),
+      ),
+    );
   }
 
   void _showQuickCommands() {

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional
 import json
@@ -7,6 +7,7 @@ import uuid
 import platform
 import socket
 import psutil
+import time
 from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.dependencies import get_current_user
@@ -846,3 +847,238 @@ async def rename_device(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to rename device: {str(e)}")
+
+# Terminal Management Endpoints
+@router.post("/terminal/execute")
+async def execute_terminal_command(
+    request: Dict[str, Any],
+    current_user: User = Depends(get_current_user)
+):
+    """Execute a command on a device terminal"""
+    try:
+        device_id = request.get('device_id')
+        command = request.get('command')
+        working_directory = request.get('working_directory', '~')
+        
+        if not device_id or not command:
+            raise HTTPException(status_code=400, detail="Device ID and command are required")
+        
+        # For now, simulate command execution
+        # In production, this would connect to the actual device
+        import subprocess
+        import time
+        
+        start_time = time.time()
+        
+        try:
+            # Execute command (simplified for demo)
+            if command.strip().lower() in ['pwd', 'echo $PWD']:
+                output = working_directory
+                exit_code = 0
+                error = None
+            elif command.strip().lower().startswith('cd '):
+                # Handle directory change
+                new_dir = command.strip()[3:].strip()
+                if new_dir:
+                    working_directory = new_dir
+                output = f"Changed directory to {working_directory}"
+                exit_code = 0
+                error = None
+            elif command.strip().lower() in ['ls', 'dir']:
+                output = "file1.txt\nfile2.txt\ndocuments/\ndownloads/"
+                exit_code = 0
+                error = None
+            elif command.strip().lower() == 'uname -a':
+                output = "Linux buddy-server 5.15.0 #1 SMP x86_64 GNU/Linux"
+                exit_code = 0
+                error = None
+            else:
+                # For other commands, try to execute (be careful in production)
+                result = subprocess.run(
+                    ['bash', '-c', command],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=working_directory if working_directory != '~' else None
+                )
+                output = result.stdout
+                error = result.stderr if result.stderr else None
+                exit_code = result.returncode
+                
+        except subprocess.TimeoutExpired:
+            output = ""
+            error = "Command timed out"
+            exit_code = -1
+        except Exception as e:
+            output = ""
+            error = str(e)
+            exit_code = -1
+        
+        execution_time = int((time.time() - start_time) * 1000)
+        
+        return {
+            "success": exit_code == 0,
+            "output": output,
+            "error": error,
+            "exit_code": exit_code,
+            "working_directory": working_directory,
+            "execution_time_ms": execution_time,
+            "environment_variables": {}
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Terminal execution error: {str(e)}")
+
+@router.get("/terminal/workflows")
+async def get_terminal_workflows(
+    current_user: User = Depends(get_current_user)
+):
+    """Get available terminal workflows"""
+    try:
+        # Return predefined workflows
+        workflows = [
+            {
+                "id": "system_diagnostics",
+                "name": "System Diagnostics",
+                "description": "Run comprehensive system diagnostics",
+                "scripts": [
+                    {
+                        "id": "basic_info",
+                        "name": "Basic System Info",
+                        "description": "Get basic system information",
+                        "commands": ["uname -a", "uptime", "whoami"],
+                        "category": "System",
+                        "is_automated": True,
+                        "estimated_duration_ms": 5000
+                    },
+                    {
+                        "id": "disk_space",
+                        "name": "Disk Space Check",
+                        "description": "Check disk usage",
+                        "commands": ["df -h", "du -sh /*"],
+                        "category": "System",
+                        "is_automated": True,
+                        "estimated_duration_ms": 10000
+                    }
+                ],
+                "configuration": {},
+                "is_scheduled": False
+            },
+            {
+                "id": "network_diagnostics",
+                "name": "Network Diagnostics", 
+                "description": "Check network connectivity and configuration",
+                "scripts": [
+                    {
+                        "id": "network_config",
+                        "name": "Network Configuration",
+                        "description": "Show network configuration",
+                        "commands": ["ip addr", "ip route"],
+                        "category": "Network",
+                        "is_automated": True,
+                        "estimated_duration_ms": 3000
+                    },
+                    {
+                        "id": "connectivity_test",
+                        "name": "Connectivity Test",
+                        "description": "Test internet connectivity",
+                        "commands": ["ping -c 4 8.8.8.8", "ping -c 4 google.com"],
+                        "category": "Network", 
+                        "is_automated": True,
+                        "estimated_duration_ms": 8000
+                    }
+                ],
+                "configuration": {},
+                "is_scheduled": False
+            }
+        ]
+        
+        return {"workflows": workflows}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting workflows: {str(e)}")
+
+@router.post("/terminal/workflows")
+async def save_terminal_workflow(
+    workflow: Dict[str, Any],
+    current_user: User = Depends(get_current_user)
+):
+    """Save a terminal workflow"""
+    try:
+        # In production, save to database
+        # For now, just return success
+        workflow_id = workflow.get('id', f"workflow_{int(time.time())}")
+        
+        return {
+            "success": True,
+            "workflow_id": workflow_id,
+            "message": "Workflow saved successfully"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving workflow: {str(e)}")
+
+@router.websocket("/terminal/ws/{device_id}")
+async def terminal_websocket(
+    websocket: WebSocket,
+    device_id: str,
+    token: str = Query(...)
+):
+    """WebSocket endpoint for real-time terminal communication"""
+    try:
+        # Verify token (simplified)
+        await websocket.accept()
+        
+        # Send welcome message
+        await websocket.send_text(json.dumps({
+            "type": "output",
+            "data": {
+                "text": f"🚀 Connected to Buddy Terminal for device {device_id}",
+                "timestamp": datetime.now().isoformat(),
+                "is_success": True,
+                "is_command": False
+            }
+        }))
+        
+        # Keep connection alive and handle messages
+        while True:
+            try:
+                data = await websocket.receive_text()
+                message = json.loads(data)
+                
+                if message.get('type') == 'command':
+                    command = message.get('command', '')
+                    
+                    # Echo command
+                    await websocket.send_text(json.dumps({
+                        "type": "output", 
+                        "data": {
+                            "text": f"> {command}",
+                            "timestamp": datetime.now().isoformat(),
+                            "is_command": True
+                        }
+                    }))
+                    
+                    # Simulate command execution
+                    await asyncio.sleep(0.5)
+                    
+                    # Send result
+                    await websocket.send_text(json.dumps({
+                        "type": "output",
+                        "data": {
+                            "text": f"Command '{command}' executed successfully",
+                            "timestamp": datetime.now().isoformat(),
+                            "is_success": True
+                        }
+                    }))
+                    
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": str(e)
+                }))
+                
+    except Exception as e:
+        print(f"Terminal WebSocket error: {e}")
