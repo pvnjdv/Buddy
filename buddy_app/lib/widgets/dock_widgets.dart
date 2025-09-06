@@ -21,6 +21,7 @@ class DeviceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      elevation: device.isOnline ? 2 : 1,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -29,100 +30,237 @@ class DeviceCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header with device info and status
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: device.isOnline
                           ? Colors.green.withOpacity(0.1)
                           : Colors.grey.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
                       _getPlatformIcon(device.platform),
                       color: device.isOnline ? Colors.green : Colors.grey,
+                      size: 24,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          device.name,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                device.name,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                              ),
+                            ),
+                            // Performance indicator
+                            if (device.systemMetrics?.isHighPerformance == true)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.speed,
+                                      size: 12,
+                                      color: Colors.orange[700],
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'HIGH',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.orange[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
-                        Text(
-                          '${device.platform} • ${device.displayStatus}',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: Colors.grey[600]),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              '${device.platform} • ${device.displayStatus}',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Colors.grey[600],
+                                    fontSize: 13,
+                                  ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (device.systemMetrics?.uptimeHours != null)
+                              Text(
+                                'Up: ${device.systemMetrics!.uptimeDisplay}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: device.isOnline ? Colors.green : Colors.grey,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      device.isOnline ? 'Online' : 'Offline',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                  // Status badge with additional indicators
+                  Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: device.isOnline ? Colors.green : Colors.grey,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          device.isOnline ? 'Online' : 'Offline',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                    ),
+                      // Warning indicators
+                      if (device.systemMetrics != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (device.systemMetrics!.isOverheating)
+                              Icon(
+                                Icons.thermostat,
+                                size: 14,
+                                color: Colors.red[600],
+                              ),
+                            if (device.systemMetrics!.isLowBattery)
+                              Icon(
+                                Icons.battery_alert,
+                                size: 14,
+                                color: Colors.red[600],
+                              ),
+                          ],
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+
+              // System metrics section (only if available and online)
+              if (device.isOnline && device.systemMetrics != null) ...[
+                const SizedBox(height: 16),
+                _buildSystemMetrics(context, device.systemMetrics!),
+              ],
+
+              // Network info section
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 6),
                   Text(
                     '${device.ipAddress}:${device.port}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[600],
+                      fontFamily: 'monospace',
+                    ),
                   ),
                   const Spacer(),
                   Text(
                     'Last seen: ${_formatDateTime(device.lastSeenDateTime)}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[600],
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
+
+              // Capabilities section
               if (device.capabilities.isNotEmpty) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Wrap(
-                  spacing: 4,
-                  children: device.capabilities.keys.take(3).map((capability) {
-                    return Chip(
-                      label: Text(capability),
-                      backgroundColor: Colors.blue.withOpacity(0.1),
-                      labelStyle: const TextStyle(fontSize: 10),
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: device.capabilities.keys.take(4).map((capability) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        capability,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     );
                   }).toList(),
                 ),
               ],
-              const SizedBox(height: 12),
+
+              // Action buttons
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.terminal),
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.terminal, size: 18),
                       label: const Text('Command'),
                       onPressed: device.isOnline ? onCommand : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: device.isOnline
+                            ? Colors.blue
+                            : Colors.grey[300],
+                        foregroundColor: device.isOnline
+                            ? Colors.white
+                            : Colors.grey[600],
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.info_outline, size: 18),
+                    label: const Text('Details'),
+                    onPressed: onTap,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 16,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -130,8 +268,12 @@ class DeviceCard extends StatelessWidget {
                     onPressed: onRemove,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 12,
+                      ),
                     ),
-                    child: const Icon(Icons.delete),
+                    child: const Icon(Icons.delete, size: 18),
                   ),
                 ],
               ),
@@ -139,6 +281,205 @@ class DeviceCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSystemMetrics(BuildContext context, SystemMetrics metrics) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        children: [
+          // Top row: CPU, Memory, Storage
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricItem(
+                  'CPU',
+                  '${metrics.cpuUsage.toStringAsFixed(1)}%',
+                  metrics.cpuUsage / 100,
+                  metrics.getCpuColor(),
+                  Icons.memory,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMetricItem(
+                  'RAM',
+                  '${metrics.memoryUsage.toStringAsFixed(1)}%',
+                  metrics.memoryUsage / 100,
+                  metrics.getMemoryColor(),
+                  Icons.storage,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildMetricItem(
+                  'Disk',
+                  '${metrics.storageUsage.toStringAsFixed(1)}%',
+                  metrics.storageUsage / 100,
+                  metrics.getStorageColor(),
+                  Icons.storage,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Bottom row: Temperature, Battery, Network
+          Row(
+            children: [
+              // Temperature
+              if (metrics.temperatureCpu != null)
+                Expanded(
+                  child: _buildMetricItem(
+                    'CPU°C',
+                    '${metrics.temperatureCpu!.toStringAsFixed(0)}°',
+                    (metrics.temperatureCpu! / 100).clamp(0.0, 1.0),
+                    metrics.getTemperatureColor(metrics.temperatureCpu),
+                    Icons.thermostat,
+                  ),
+                ),
+
+              // Battery (if available)
+              if (metrics.batteryLevel != null) ...[
+                if (metrics.temperatureCpu != null) const SizedBox(width: 12),
+                Expanded(
+                  child: _buildMetricItem(
+                    'Battery',
+                    '${metrics.batteryLevel}%',
+                    metrics.batteryLevel! / 100,
+                    metrics.batteryLevel! < 20
+                        ? Colors.red
+                        : metrics.batteryLevel! < 50
+                        ? Colors.orange
+                        : Colors.green,
+                    metrics.batteryCharging == true
+                        ? Icons.battery_charging_full
+                        : Icons.battery_std,
+                  ),
+                ),
+              ],
+
+              // Network speed
+              if (metrics.networkDownload > 0 || metrics.networkUpload > 0) ...[
+                if (metrics.temperatureCpu != null ||
+                    metrics.batteryLevel != null)
+                  const SizedBox(width: 12),
+                Expanded(child: _buildNetworkMetric(metrics)),
+              ],
+            ],
+          ),
+
+          // Additional info row
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Memory: ${metrics.memoryDisplay}',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+              Text(
+                'Processes: ${metrics.processCount}',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+              Text(
+                'Storage: ${metrics.storageDisplay}',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricItem(
+    String label,
+    String value,
+    double progress,
+    Color color,
+    IconData icon,
+  ) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        LinearProgressIndicator(
+          value: progress,
+          backgroundColor: Colors.grey[300],
+          valueColor: AlwaysStoppedAnimation<Color>(color),
+          minHeight: 3,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNetworkMetric(SystemMetrics metrics) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.network_check, size: 14, color: Colors.blue[600]),
+            const SizedBox(width: 4),
+            Text(
+              'Network',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '↓${metrics.networkDownload.toStringAsFixed(1)}',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Colors.green[600],
+          ),
+        ),
+        Text(
+          '↑${metrics.networkUpload.toStringAsFixed(1)}',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: Colors.blue[600],
+          ),
+        ),
+      ],
     );
   }
 

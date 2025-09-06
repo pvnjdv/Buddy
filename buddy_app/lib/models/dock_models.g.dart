@@ -6,6 +6,46 @@ part of 'dock_models.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+SystemMetrics _$SystemMetricsFromJson(Map<String, dynamic> json) =>
+    SystemMetrics(
+      cpuUsage: (json['cpu_usage'] as num).toDouble(),
+      memoryUsage: (json['memory_usage'] as num).toDouble(),
+      memoryTotal: (json['memory_total'] as num).toInt(),
+      memoryUsed: (json['memory_used'] as num).toInt(),
+      storageTotal: (json['storage_total'] as num).toInt(),
+      storageUsed: (json['storage_used'] as num).toInt(),
+      storageUsage: (json['storage_usage'] as num).toDouble(),
+      temperatureCpu: (json['temperature_cpu'] as num?)?.toDouble(),
+      temperatureGpu: (json['temperature_gpu'] as num?)?.toDouble(),
+      batteryLevel: (json['battery_level'] as num?)?.toInt(),
+      batteryCharging: json['battery_charging'] as bool?,
+      networkUpload: (json['network_upload'] as num).toDouble(),
+      networkDownload: (json['network_download'] as num).toDouble(),
+      processCount: (json['process_count'] as num).toInt(),
+      uptimeHours: (json['uptime_hours'] as num).toDouble(),
+      lastUpdated: DateTime.parse(json['last_updated'] as String),
+    );
+
+Map<String, dynamic> _$SystemMetricsToJson(SystemMetrics instance) =>
+    <String, dynamic>{
+      'cpu_usage': instance.cpuUsage,
+      'memory_usage': instance.memoryUsage,
+      'memory_total': instance.memoryTotal,
+      'memory_used': instance.memoryUsed,
+      'storage_total': instance.storageTotal,
+      'storage_used': instance.storageUsed,
+      'storage_usage': instance.storageUsage,
+      'temperature_cpu': instance.temperatureCpu,
+      'temperature_gpu': instance.temperatureGpu,
+      'battery_level': instance.batteryLevel,
+      'battery_charging': instance.batteryCharging,
+      'network_upload': instance.networkUpload,
+      'network_download': instance.networkDownload,
+      'process_count': instance.processCount,
+      'uptime_hours': instance.uptimeHours,
+      'last_updated': instance.lastUpdated.toIso8601String(),
+    };
+
 Device _$DeviceFromJson(Map<String, dynamic> json) => Device(
   id: json['id'] as String,
   name: json['name'] as String,
@@ -18,6 +58,9 @@ Device _$DeviceFromJson(Map<String, dynamic> json) => Device(
   metadata: json['metadata'] as Map<String, dynamic>,
   deviceType: json['device_type'] as String?,
   isOnlineFlag: json['is_online'] as bool?,
+  systemMetrics: json['system_metrics'] == null
+      ? null
+      : SystemMetrics.fromJson(json['system_metrics'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$DeviceToJson(Device instance) => <String, dynamic>{
@@ -32,6 +75,7 @@ Map<String, dynamic> _$DeviceToJson(Device instance) => <String, dynamic>{
   'metadata': instance.metadata,
   'device_type': instance.deviceType,
   'is_online': instance.isOnlineFlag,
+  'system_metrics': instance.systemMetrics,
 };
 
 DeviceCommand _$DeviceCommandFromJson(Map<String, dynamic> json) =>

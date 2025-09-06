@@ -145,6 +145,30 @@ class CodeFile {
     };
   }
 
+  CodeFile copyWith({
+    String? path,
+    String? name,
+    String? language,
+    String? content,
+    bool? isModified,
+    DateTime? lastModified,
+    int? line,
+    int? column,
+    Map<String, dynamic>? metadata,
+  }) {
+    return CodeFile(
+      path: path ?? this.path,
+      name: name ?? this.name,
+      language: language ?? this.language,
+      content: content ?? this.content,
+      isModified: isModified ?? this.isModified,
+      lastModified: lastModified ?? this.lastModified,
+      line: line ?? this.line,
+      column: column ?? this.column,
+      metadata: metadata ?? this.metadata,
+    );
+  }
+
   String get extension => name.split('.').last.toLowerCase();
 
   IconData get icon {

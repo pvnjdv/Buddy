@@ -144,6 +144,19 @@ class DockService {
     }
   }
 
+  Future<List<Device>> getDevices() async {
+    try {
+      final data = await getUserDevices();
+      final devices = (data['devices'] as List)
+          .map((json) => Device.fromJson(json))
+          .toList();
+      return devices;
+    } catch (e) {
+      print('❌ Get devices list error: $e');
+      return [];
+    }
+  }
+
   Future<Device> registerDevice(DeviceRegisterRequest request) async {
     try {
       final response = await _post(ApiConfig.dockRegister, request.toJson());

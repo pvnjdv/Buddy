@@ -20,6 +20,7 @@ from app.api.github import router as github_router
 from app.api.system import router as system_router
 from app.api.knowledge import router as knowledge_router
 from app.api.dock import router as dock_router
+from app.api.code_execution import router as code_execution_router
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -50,3 +51,4 @@ app.include_router(github_router, prefix="/api/github", tags=["github"])
 app.include_router(system_router, prefix="/api/system", tags=["system"])
 app.include_router(knowledge_router, prefix="/api/knowledge", tags=["knowledge"])
 app.include_router(dock_router, prefix="/api/dock", tags=["dock"])
+app.include_router(code_execution_router, prefix="/api/code", tags=["code-execution"])
