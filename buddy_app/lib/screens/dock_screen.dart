@@ -22,9 +22,9 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
   final DeviceDiscoveryService _discoveryService = DeviceDiscoveryService();
   late TabController _tabController;
 
+  // Device and Macro Management
   List<Device> _devices = [];
   List<DeviceMacro> _macros = [];
-  List<DeviceCommand> _commandHistory = [];
   bool _isLoading = false;
   String? _error;
 

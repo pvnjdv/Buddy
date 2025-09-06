@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/dock_models.dart';
 import '../services/dock_service.dart';
-import '../services/device_info_service.dart';
 import '../config/api_config.dart';
 
 class DeviceDiscoveryService {

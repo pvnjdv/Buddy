@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../services/user_service.dart';
-import '../../models/flow_models.dart';
 import '../../config/settings/theme_config.dart';
 
 class UserProfileScreen extends StatefulWidget {
