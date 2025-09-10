@@ -5,8 +5,8 @@ import 'appearance_settings_screen.dart';
 import '../contacts_screen.dart';
 import '../../config/settings/theme_config.dart';
 import '../../config/settings/settings_manager.dart';
-import '../../services/auth_service.dart';
-import '../../services/user_service.dart';
+import '../../services/auth/auth_service.dart';
+import '../../services/auth/user_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});

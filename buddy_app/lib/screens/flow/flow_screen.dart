@@ -5,7 +5,7 @@ import '../../services/flow_service.dart';
 import '../../services/code_editor_service.dart';
 import '../../config/settings/theme_config.dart';
 import '../settings/settings_screen.dart';
-import '../code_editor/buddy_code_editor_screen.dart';
+import '../code_editor/buddy_editor_screen.dart';
 import '../code_editor/project_templates_screen.dart';
 import 'flows/flow_detail_screen.dart';
 import 'notes/enhanced_notes_screen.dart';
@@ -66,7 +66,7 @@ class _FlowScreenState extends State<FlowScreen>
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: Text(
-          'Buddy',
+          'Flow',
           style: TextStyle(
             color: AppTheme.textPrimaryColor,
             fontWeight: FontWeight.w600,
@@ -787,9 +787,7 @@ class _FlowScreenState extends State<FlowScreen>
   void _openCodeEditor() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const BuddyCodeEditorScreen(isStandalone: true),
-      ),
+      MaterialPageRoute(builder: (context) => const BuddyEditorScreen()),
     );
   }
 
@@ -803,9 +801,7 @@ class _FlowScreenState extends State<FlowScreen>
   void _openProjectInEditor(CodeProject project) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const BuddyCodeEditorScreen(isStandalone: true),
-      ),
+      MaterialPageRoute(builder: (context) => const BuddyEditorScreen()),
     );
   }
 

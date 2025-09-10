@@ -4,6 +4,7 @@ import 'buddy/buddy_screen.dart';
 import 'flow/flow_screen.dart';
 import 'dock/dock_screen.dart';
 import 'settings/settings_screen.dart';
+import 'college/college_setup_screen.dart';
 import '../config/settings/theme_config.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -16,7 +17,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  List<Widget> get _screens => [
+  final List<Widget> _screens = [
     const ChatListScreen(),
     const BuddyScreen(),
     const FlowScreen(),
@@ -83,19 +84,32 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor,
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/icon/app_icon.jpg',
+                width: 32,
+                height: 32,
+                fit: BoxFit.cover,
+              ),
             ),
-            child: const Icon(Icons.smart_toy, color: Colors.white, size: 20),
           ),
           const SizedBox(width: 12),
-          Text(
-            'Buddy',
-            style: TextStyle(
-              color: AppTheme.textPrimaryColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
+          GestureDetector(
+            onTap: () {
+              // Single tap - do nothing or show info
+            },
+            onDoubleTap: () {
+              _showCollegeModeDialog();
+            },
+            child: Text(
+              'Buddy',
+              style: TextStyle(
+                color: AppTheme.textPrimaryColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
             ),
           ),
         ],
@@ -282,6 +296,76 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         );
       },
+    );
+  }
+
+  void _showCollegeModeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.school, color: AppTheme.primaryColor),
+            const SizedBox(width: 8),
+            const Text('College Mode'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Switch to College Mode?',
+              style: TextStyle(
+                color: AppTheme.textPrimaryColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'College Mode provides specialized features for students, teachers, and administrators including classrooms, assignments, results, and timetables.',
+              style: TextStyle(color: AppTheme.textSecondaryColor),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'To continue, you\'ll need to:',
+              style: TextStyle(
+                color: AppTheme.textPrimaryColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '• Complete your profile setup\n• Select your role (Student/Teacher/HOD/Principal)\n• Join your institution',
+              style: TextStyle(color: AppTheme.textSecondaryColor),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _navigateToCollegeSetup();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToCollegeSetup() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CollegeSetupScreen()),
     );
   }
 }

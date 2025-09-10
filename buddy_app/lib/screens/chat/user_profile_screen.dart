@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import '../../services/user_service.dart';
+import '../../services/auth/user_service.dart';
 import '../../config/settings/theme_config.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -24,16 +24,35 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   Future<void> _loadProfile() async {
     try {
-      final profile = await UserService.getCurrentUserProfile();
-      setState(() {
-        _userProfile = profile;
-        _loading = false;
-      });
+      // Force fetch from API to get latest data
+      final profile = await UserService.fetchUserProfileFromApi();
+      if (profile != null) {
+        setState(() {
+          _userProfile = profile;
+          _loading = false;
+        });
+      } else {
+        // If API fails, try cached profile
+        final cachedProfile = await UserService.getCurrentUserProfile();
+        setState(() {
+          _userProfile = cachedProfile;
+          _loading = false;
+        });
+      }
     } catch (e) {
       setState(() {
         _loading = false;
       });
       print('Error loading profile: $e');
+      // Show error message to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to load profile. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -92,6 +111,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         backgroundColor: AppTheme.surfaceColor,
         foregroundColor: AppTheme.textPrimaryColor,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loading
+                ? null
+                : () {
+                    setState(() {
+                      _loading = true;
+                    });
+                    _loadProfile();
+                  },
+            tooltip: 'Refresh Profile',
+          ),
+        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -227,11 +260,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
                             // Name
                             Text(
-                              _userProfile?.name ?? 'No Name',
-                              style: const TextStyle(
+                              (_userProfile?.name != null &&
+                                      _userProfile!.name.trim().isNotEmpty)
+                                  ? _userProfile!.name
+                                  : 'Name not set',
+                              style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF1E293B),
+                                color:
+                                    (_userProfile?.name != null &&
+                                        _userProfile!.name.trim().isNotEmpty)
+                                    ? const Color(0xFF1E293B)
+                                    : Colors.grey[600],
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -247,7 +287,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                '+91 ${_userProfile?.mobileNumber ?? 'Unknown'}',
+                                (_userProfile?.mobileNumber != null &&
+                                        _userProfile!.mobileNumber.isNotEmpty)
+                                    ? _userProfile!.mobileNumber
+                                    : 'Mobile not available',
                                 style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,

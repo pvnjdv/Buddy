@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/macro_models.dart';
 import '../models/dock_models.dart' hide DeviceMacro;
 import '../config/api_config.dart';
-import '../services/auth_service.dart';
+import '../services/auth/auth_service.dart';
 import '../services/device_info_service.dart';
 
 class MacroAutomationService {

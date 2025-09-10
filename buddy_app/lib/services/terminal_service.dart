@@ -8,7 +8,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/dock_models.dart';
 import '../models/terminal_models.dart';
 import '../config/api_config.dart';
-import '../services/auth_service.dart';
+import '../services/auth/auth_service.dart';
 
 class TerminalService {
   static final TerminalService _instance = TerminalService._internal();

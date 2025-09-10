@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../models/flow_models.dart';
-import '../../services/buddy_service.dart';
+import '../../services/ai/buddy_service.dart';
 import '../../config/settings/theme_config.dart';
 import '../../config/settings/settings_manager.dart';
 import '../settings/settings_screen.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import '../../services/buddy_service.dart';
+import '../../services/ai/buddy_service.dart';
 import '../../services/databases/buddy_chat_database.dart';
 
 class ChatHistoryScreen extends StatefulWidget {

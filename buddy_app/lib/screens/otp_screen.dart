@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
+import '../services/auth/auth_service.dart';
 
 class OtpScreen extends StatefulWidget {
   const OtpScreen({super.key});
@@ -23,7 +23,17 @@ class _OtpScreenState extends State<OtpScreen> {
       final result = await AuthService.verifyOtp(mobile, _controller.text);
       if (result != null) {
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
+          // Check if user profile is complete
+          final userProfile = await AuthService.getUserProfile();
+          if (userProfile != null &&
+              userProfile['name'] != null &&
+              userProfile['name'].toString().trim().isNotEmpty) {
+            // Profile is complete, go to home
+            Navigator.pushReplacementNamed(context, '/home');
+          } else {
+            // Profile is incomplete, go to profile setup
+            Navigator.pushReplacementNamed(context, '/profile_setup');
+          }
         }
       } else {
         setState(() {

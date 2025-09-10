@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/dock_models.dart';
 import '../config/api_config.dart';
-import '../services/auth_service.dart';
+import '../services/auth/auth_service.dart';
 import '../services/device_info_service.dart';
 
 class DockService {

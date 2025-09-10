@@ -1,7 +1,7 @@
 // lib/screens/buddy_overview_screen.dart
 import 'package:flutter/material.dart';
 import 'dock/dock_screen.dart';
-import 'code_editor/buddy_code_editor_screen.dart';
+import 'code_editor/buddy_code_editor_mobile.dart';
 import 'code_editor/project_templates_screen.dart';
 
 class BuddyOverviewScreen extends StatelessWidget {
@@ -186,8 +186,7 @@ class BuddyOverviewScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) =>
-                      const BuddyCodeEditorScreen(isStandalone: true),
+                  builder: (context) => const BuddyCodeEditorMobile(),
                 ),
               ),
             ),

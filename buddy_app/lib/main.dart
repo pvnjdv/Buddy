@@ -5,8 +5,8 @@ import 'screens/login_screen.dart';
 import 'screens/otp_screen.dart';
 import 'screens/buddy/buddy_screen.dart';
 import 'screens/flow/flow_screen.dart';
-import 'services/auth_service.dart';
-import 'services/buddy_service.dart';
+import 'services/auth/auth_service.dart';
+import 'services/ai/buddy_service.dart';
 import 'config/settings/theme_config.dart';
 import 'config/settings/settings_manager.dart';
 import 'services/databases/buddy_chat_database.dart';
@@ -88,8 +88,17 @@ class _AuthCheckerState extends State<AuthChecker> {
 
     if (mounted) {
       if (isLoggedIn) {
-        // User has valid refresh token, go to home
-        Navigator.of(context).pushReplacementNamed('/home');
+        // User has valid refresh token, check if profile is complete
+        final userProfile = await AuthService.getUserProfile();
+        if (userProfile != null &&
+            userProfile['name'] != null &&
+            userProfile['name'].toString().trim().isNotEmpty) {
+          // Profile is complete, go to home
+          Navigator.of(context).pushReplacementNamed('/home');
+        } else {
+          // Profile is incomplete, go to profile setup
+          Navigator.of(context).pushReplacementNamed('/profile_setup');
+        }
       } else {
         // No valid authentication, go to login
         Navigator.of(context).pushReplacementNamed('/login');

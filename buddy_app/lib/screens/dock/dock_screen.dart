@@ -4,13 +4,12 @@ import 'package:flutter/services.dart';
 import '../../models/dock_models.dart';
 import '../../services/dock_service.dart';
 import '../../services/device_discovery_service.dart';
-import '../../services/auth_service.dart';
+import '../../services/auth/auth_service.dart';
 import '../../services/system_metrics_service.dart';
 import '../../widgets/dock_widgets.dart';
 import 'device_detail_screen.dart';
 import 'remote_control_screen.dart';
 import 'buddy_terminal_screen.dart';
-import '../code_editor/buddy_code_editor_screen.dart';
 import 'macro_management_screen.dart';
 
 // Terminal Block Model for Warp-like terminal blocks
@@ -303,24 +302,11 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
                 _buildTerminalTab(),
               ],
             ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton(
-            heroTag: "code_editor",
-            onPressed: _openBuddyCodeEditor,
-            backgroundColor: Colors.blue,
-            child: const Icon(Icons.code, color: Colors.white),
-            tooltip: 'Buddy Code Editor',
-          ),
-          const SizedBox(height: 8),
-          FloatingActionButton.extended(
-            heroTag: "devices",
-            onPressed: _showDeviceActions,
-            icon: const Icon(Icons.devices),
-            label: const Text('Devices'),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: "devices",
+        onPressed: _showDeviceActions,
+        icon: const Icon(Icons.devices),
+        label: const Text('Devices'),
       ),
     );
   }
@@ -835,17 +821,6 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
               onTap: () {
                 Navigator.pop(context);
                 _showTerminalAccessDialog();
-              },
-            ),
-
-            // Code Editor
-            ListTile(
-              leading: const Icon(Icons.code),
-              title: const Text('Buddy Code Editor'),
-              subtitle: const Text('Cross-platform development environment'),
-              onTap: () {
-                Navigator.pop(context);
-                _openBuddyCodeEditor();
               },
             ),
 
@@ -1532,16 +1507,6 @@ class _DockScreenState extends State<DockScreen> with TickerProviderStateMixin {
       MaterialPageRoute(
         builder: (context) =>
             BuddyTerminalScreen(device: device, isLocalTerminal: false),
-      ),
-    );
-  }
-
-  // Open Buddy Code Editor
-  void _openBuddyCodeEditor() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const BuddyCodeEditorScreen(isStandalone: true),
       ),
     );
   }

@@ -8,7 +8,7 @@ import 'skills/contacts_skill.dart';
 import 'skills/github_skill.dart';
 import 'skills/system_skill.dart';
 import 'skills/app_control_skill.dart';
-import '../ai_thinking_service.dart';
+import '../ai/ai_thinking_service.dart';
 
 class AgentResult {
   final bool handled;

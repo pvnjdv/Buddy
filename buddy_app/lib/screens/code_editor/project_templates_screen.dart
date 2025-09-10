@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import '../../models/code_editor_models.dart';
 import '../../services/code_editor_service.dart';
-import 'buddy_code_editor_screen.dart';
+import 'buddy_editor_screen.dart';
 
 class ProjectTemplatesScreen extends StatefulWidget {
   const ProjectTemplatesScreen({super.key});
@@ -279,9 +279,7 @@ class _ProjectTemplatesScreenState extends State<ProjectTemplatesScreen> {
           Navigator.pop(context); // Close dialog
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(
-              builder: (context) => BuddyCodeEditorScreen(project: project),
-            ),
+            MaterialPageRoute(builder: (context) => const BuddyEditorScreen()),
           );
         },
       ),

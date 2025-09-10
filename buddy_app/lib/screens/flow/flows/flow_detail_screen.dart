@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../models/flow_models.dart';
 import '../../../services/flow_service.dart';
-import '../../../services/buddy_service.dart';
+import '../../../services/ai/buddy_service.dart';
 
 class FlowDetailScreen extends StatefulWidget {
   final ProjectFlow flow;

@@ -1,9 +1,9 @@
 # Email Configuration for OTP Service
 # 
-# CURRENT SETUP: Terminal-based OTP (Working Now!)
-# When user requests OTP, you'll see it in the backend terminal
+# CURRENT SETUP: Terminal-based OTP + Email notification
+# When user requests OTP, you'll see it in the backend terminal AND receive email
 #
-# TARGET EMAIL: p8975306526@gmail.com
+# TARGET EMAIL: mynoteswithme@gmail.com
 # 
 # ========================================
 # OPTION 1: Use Terminal (Current Setup)
@@ -16,7 +16,7 @@
 # ========================================
 # OPTION 2: Enable Real Email (Optional)
 # ========================================
-# To get emails at p8975306526@gmail.com:
+# To get emails at mynoteswithme@gmail.com:
 # 
 # 1. Get Gmail App Password:
 #    - Go to: https://myaccount.google.com/apppasswords
@@ -30,7 +30,7 @@
 # 
 # 3. Test:
 #    - python3 test_otp.py
-#    - Check p8975306526@gmail.com for email
+#    - Check mynoteswithme@gmail.com for email
 # 
 # ========================================
 # CURRENT STATUS: ✅ WORKING (Terminal Mode)

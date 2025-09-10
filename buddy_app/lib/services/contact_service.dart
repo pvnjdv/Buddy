@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'auth_service.dart';
+import 'auth/auth_service.dart';
 import '../config/api_config.dart';
 
 class ContactService {
