@@ -9,6 +9,7 @@ class UserProfile {
   final String name;
   final String mobileNumber;
   final String? profilePhoto;
+  final String? profession;
   final DateTime? lastSeen;
   final bool isOnline;
 
@@ -17,6 +18,7 @@ class UserProfile {
     required this.name,
     required this.mobileNumber,
     this.profilePhoto,
+    this.profession,
     this.lastSeen,
     this.isOnline = false,
   });
@@ -27,6 +29,7 @@ class UserProfile {
       name: json['name'] ?? '',
       mobileNumber: json['mobile_number'] ?? '',
       profilePhoto: json['profile_photo'],
+      profession: json['profession'],
       lastSeen: json['last_seen'] != null
           ? DateTime.tryParse(json['last_seen'])
           : null,
@@ -40,6 +43,7 @@ class UserProfile {
       'name': name,
       'mobile_number': mobileNumber,
       'profile_photo': profilePhoto,
+      'profession': profession,
       'last_seen': lastSeen?.toIso8601String(),
       'is_online': isOnline,
     };
@@ -124,6 +128,7 @@ class UserService {
   static Future<bool> updateUserProfile({
     String? name,
     File? profileImage,
+    String? profession,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -136,13 +141,17 @@ class UserService {
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('${ApiConfig.baseUrl}/users/details'),
+        Uri.parse('${ApiConfig.baseUrl}/users/profile'),
       );
 
       request.headers['Authorization'] = 'Bearer $accessToken';
 
       if (name != null) {
         request.fields['name'] = name;
+      }
+
+      if (profession != null) {
+        request.fields['profession'] = profession;
       }
 
       if (profileImage != null) {
@@ -274,6 +283,7 @@ class UserService {
     String? name,
     String? bio,
     File? profilePhoto,
+    String? profession,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();

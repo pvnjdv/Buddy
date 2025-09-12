@@ -44,14 +44,30 @@ async def update_user_refresh_token(db: AsyncSession, mobile_number: str, refres
         await db.refresh(user)
     return user
 
-async def update_user_details(db: AsyncSession, user_id: int, name: str, profile_photo: str | None = None):
-    user = await db.get(User, user_id)
-    if user:
-        user.name = name
-        user.profile_photo = profile_photo
-        await db.commit()
-        await db.refresh(user)
-    return user
+async def update_user_details(db: AsyncSession, user_id: int, name: str, profile_photo: str | None = None, profession: str | None = None):
+    try:
+        print(f"CRUD: Updating user {user_id} with name='{name}', profile_photo='{profile_photo}', profession='{profession}'")
+        user = await db.get(User, user_id)
+        if user:
+            print(f"CRUD: Found user {user_id}: {user.mobile_number}")
+            user.name = name
+            user.profile_photo = profile_photo
+            user.profession = profession
+            print(f"CRUD: Updated user fields, committing...")
+            await db.commit()
+            print(f"CRUD: Committed, refreshing...")
+            await db.refresh(user)
+            print(f"CRUD: Successfully updated user: {user.name}, {user.profession}")
+        else:
+            print(f"CRUD: User {user_id} not found")
+        return user
+    except Exception as e:
+        print(f"CRUD Error: {e}")
+        print(f"CRUD Error type: {type(e)}")
+        import traceback
+        traceback.print_exc()
+        await db.rollback()
+        raise e
 
 async def get_all_users(db: AsyncSession) -> List[User]:
     """Get all users for contact list (include users even if name is null)"""

@@ -19,7 +19,7 @@ class Device(Base):
     last_seen = Column(DateTime(timezone=True), server_default=func.now())
     capabilities = Column(JSON, default=lambda: {})  # What the device can do
     device_metadata = Column(JSON, default=lambda: {})  # Additional device info
-    owner_id = Column(String, ForeignKey("users.id"), nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

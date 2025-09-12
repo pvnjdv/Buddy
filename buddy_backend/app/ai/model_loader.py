@@ -1,12 +1,23 @@
 
-from llama_cpp import Llama
 import os
 from typing import List, Dict
 from app.core.config import settings
 from app.ai.groq_client import GroqClient
 
+# Only import llama_cpp if we're using local mode to avoid Railway deployment issues
+try:
+    if settings.AI_MODE == "local":
+        from llama_cpp import Llama
+    else:
+        Llama = None
+except ImportError:
+    Llama = None
+    print("Warning: llama_cpp not available, local model mode disabled")
+
 class LlamaModelWrapper:
     def __init__(self, model_path: str):
+        if Llama is None:
+            raise ImportError("llama_cpp not available for local model")
         self.llm = Llama(
             model_path=model_path,
             n_ctx=1024,
@@ -43,6 +54,11 @@ class UnifiedAIClient:
     def _init_local_model(self):
         """Initialize local Llama model"""
         try:
+            if Llama is None:
+                print("llama_cpp not available, cannot use local model")
+                self.local_model = None
+                return
+                
             if not self.local_model:
                 print(f"Loading local model: {settings.MODEL_NAME} from {settings.MODEL_PATH}")
                 self.local_model = LlamaModelWrapper(settings.MODEL_PATH)

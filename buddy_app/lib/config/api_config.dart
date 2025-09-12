@@ -8,9 +8,7 @@ class ApiConfig {
   static const String _localUrl = 'http://$_localIp:$_localPort';
 
   // Production Railway URL
-  static const String _productionUrl =
-      'https://buddy-production-b5dd.up.railway.app';
-
+  static const String _productionUrl = 'https://buddy-kofo.onrender.com';
   // WebSocket URLs
   static const String _localWsUrl = 'ws://$_localIp:$_localPort';
   static const String _productionWsUrl =

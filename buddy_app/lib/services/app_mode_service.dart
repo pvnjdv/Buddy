@@ -146,18 +146,49 @@ class AppModeService extends ChangeNotifier {
     return false;
   }
 
+  Future<void> updateModeBasedOnProfession(String? profession) async {
+    if (profession == null) return;
+
+    UserRole role;
+    switch (profession.toLowerCase()) {
+      case 'student':
+        role = UserRole.student;
+        break;
+      case 'teacher':
+        role = UserRole.teacher;
+        break;
+      case 'hod':
+        role = UserRole.hod;
+        break;
+      case 'principal':
+        role = UserRole.principal;
+        break;
+      default:
+        role = UserRole.normal;
+    }
+
+    // If user has an educational role, automatically enable college mode
+    if (role != UserRole.normal) {
+      // For now, just set the role. College mode will be enabled when user joins an institution
+      _currentRole = role;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_role', role.toString().split('.').last);
+      notifyListeners();
+    }
+  }
+
   String getRoleDisplayName() {
     switch (_currentRole) {
+      case UserRole.normal:
+        return 'General User';
       case UserRole.student:
         return 'Student';
       case UserRole.teacher:
         return 'Teacher';
       case UserRole.hod:
-        return 'HOD';
+        return 'Head of Department';
       case UserRole.principal:
         return 'Principal';
-      default:
-        return 'User';
     }
   }
 

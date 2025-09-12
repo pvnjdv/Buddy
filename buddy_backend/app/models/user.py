@@ -9,9 +9,12 @@ class User(Base):
     mobile_number = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=True)
     profile_photo = Column(String, nullable=True)  # Added for profile photo
+    profession = Column(String, nullable=True)  # Added for profession/role
     otp = Column(String, nullable=True)  # Store OTP temporarily
     refresh_token = Column(String, nullable=True)  # Store refresh token
     refresh_token_expires = Column(DateTime, nullable=True)  # Refresh token expiry
+    
+    # Relationships (only include existing models)
     tasks = relationship("Task", back_populates="owner")
     ai_personas = relationship("AIPersona", back_populates="user")
     devices = relationship("Device", back_populates="owner")

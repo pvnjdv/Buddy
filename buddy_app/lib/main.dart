@@ -92,7 +92,8 @@ class _AuthCheckerState extends State<AuthChecker> {
         final userProfile = await AuthService.getUserProfile();
         if (userProfile != null &&
             userProfile['name'] != null &&
-            userProfile['name'].toString().trim().isNotEmpty) {
+            userProfile['name'].toString().trim().isNotEmpty &&
+            userProfile['profession'] != null) {
           // Profile is complete, go to home
           Navigator.of(context).pushReplacementNamed('/home');
         } else {

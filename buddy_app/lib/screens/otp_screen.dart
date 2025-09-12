@@ -27,7 +27,8 @@ class _OtpScreenState extends State<OtpScreen> {
           final userProfile = await AuthService.getUserProfile();
           if (userProfile != null &&
               userProfile['name'] != null &&
-              userProfile['name'].toString().trim().isNotEmpty) {
+              userProfile['name'].toString().trim().isNotEmpty &&
+              userProfile['profession'] != null) {
             // Profile is complete, go to home
             Navigator.pushReplacementNamed(context, '/home');
           } else {
