@@ -1,6 +1,7 @@
 import 'screens/profile_setup_screen.dart';
 import 'screens/home_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/login_screen.dart';
 import 'screens/otp_screen.dart';
 import 'screens/buddy/buddy_screen.dart';
@@ -28,7 +29,7 @@ void main() async {
   await AppTheme.loadTheme();
   await SettingsManager.initialize();
 
-  runApp(const BuddyApp());
+  runApp(const ProviderScope(child: BuddyApp()));
 }
 
 class BuddyApp extends StatefulWidget {

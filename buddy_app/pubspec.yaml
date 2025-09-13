@@ -48,10 +48,16 @@ dependencies:
   json_serializable: ^6.11.0
   json_annotation: ^4.9.0
   device_info_plus: ^10.1.2
+  webview_flutter: ^4.4.2
   network_info_plus: ^6.1.4
   path: ^1.8.3
   sqflite: ^2.3.3
   sqflite_common_ffi: ^2.3.2
+  file_picker: ^8.0.5
+  # Buddy Code Editor dependencies
+  flutter_highlight: ^0.7.0
+  google_fonts: ^6.2.1
+  flutter_riverpod: ^2.5.1
   # table_calendar: ^3.1.1  # optional, uncomment to enable calendar UI
 
 dev_dependencies:

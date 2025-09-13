@@ -8,11 +8,12 @@ class ApiConfig {
   static const String _localUrl = 'http://$_localIp:$_localPort';
 
   // Production Railway URL
-  static const String _productionUrl = 'https://buddy-kofo.onrender.com';
+  static const String _productionUrl =
+      'https://buddy-production-11a1.up.railway.app';
   // WebSocket URLs
   static const String _localWsUrl = 'ws://$_localIp:$_localPort';
   static const String _productionWsUrl =
-      'wss://buddy-production-b5dd.up.railway.app';
+      'wss://buddy-production-11a1.up.railway.app';
 
   // Current base URL based on environment
   static String get baseUrl => useProduction ? _productionUrl : _localUrl;

@@ -1,8 +1,8 @@
 // lib/screens/buddy_overview_screen.dart
 import 'package:flutter/material.dart';
 import 'dock/dock_screen.dart';
-import 'code_editor/buddy_code_editor_mobile.dart';
-import 'code_editor/project_templates_screen.dart';
+import 'buddy_code_editor/editor_selector.dart';
+import '../models/flow_models.dart';
 
 class BuddyOverviewScreen extends StatelessWidget {
   const BuddyOverviewScreen({super.key});
@@ -179,16 +179,11 @@ class BuddyOverviewScreen extends StatelessWidget {
             ),
             _buildFeatureCard(
               icon: Icons.code,
-              title: 'Code Editor',
+              title: 'VS Code Integration',
               description:
-                  'Full-featured IDE with syntax highlighting, project templates, and build tools',
+                  'Open projects in VS Code with seamless sync across all devices',
               color: Colors.green,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const BuddyCodeEditorMobile(),
-                ),
-              ),
+              onTap: () => _openVSCodeIntegration(context),
             ),
             _buildFeatureCard(
               icon: Icons.sync,
@@ -480,12 +475,7 @@ class BuddyOverviewScreen extends StatelessWidget {
             const SizedBox(width: 16),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ProjectTemplatesScreen(),
-                  ),
-                ),
+                onPressed: () => _openVSCodeIntegration(context),
                 icon: const Icon(Icons.code),
                 label: const Text('Start Coding'),
                 style: ElevatedButton.styleFrom(
@@ -684,6 +674,28 @@ class BuddyOverviewScreen extends StatelessWidget {
             child: const Text('Amazing!'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _openVSCodeIntegration(BuildContext context) {
+    // Create a basic VS Code session
+    final basicFlow = ProjectFlow(
+      id: 'overview_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'Welcome to VS Code',
+      description: 'Start your coding journey with VS Code integration',
+      estimatedDuration: '1 hour',
+      difficulty: FlowDifficulty.easy,
+      checkpoints: [],
+      tags: ['vscode', 'welcome'],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditorSelector(projectFlow: basicFlow),
       ),
     );
   }

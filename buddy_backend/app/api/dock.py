@@ -653,182 +653,49 @@ async def discover_network_devices(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error discovering devices: {str(e)}")
 
-# Command Execution
-@router.post("/execute")
-async def execute_command(
-    request: CommandRequest,
-    current_user: User = Depends(get_current_user)
-):
-    """Execute a command on a remote device"""
-    try:
-        result = await dock_service.execute_command(
-            device_id=request.device_id,
-            command_type=request.command_type,
-            command=request.command,
-            parameters=request.parameters,
-            user_id=current_user.id
-        )
-        return {"success": True, "result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error executing command: {str(e)}")
-
-# File Management
-@router.get("/devices/{device_id}/files")
-async def browse_device_files(
-    device_id: str,
-    path: str = "/",
-    current_user: User = Depends(get_current_user)
-):
-    """Browse files on a remote device"""
-    try:
-        files = await dock_service.browse_files(device_id, path, current_user.id)
-        return {"success": True, "files": files, "current_path": path}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error browsing files: {str(e)}")
-
-@router.post("/devices/{device_id}/files/transfer")
-async def transfer_file(
-    device_id: str,
-    source_path: str,
-    destination_path: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Transfer files between devices"""
-    try:
-        result = await dock_service.transfer_file(
-            device_id, source_path, destination_path, current_user.id
-        )
-        return {"success": True, "result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error transferring file: {str(e)}")
-
-# System Control
-@router.post("/devices/{device_id}/system/{action}")
-async def system_control(
-    device_id: str,
-    action: str,  # shutdown, restart, sleep, wake, lock, unlock
-    current_user: User = Depends(get_current_user)
-):
-    """Control system functions on remote device"""
-    try:
-        result = await dock_service.system_control(device_id, action, current_user.id)
-        return {"success": True, "result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error executing system action: {str(e)}")
-
-# Application Management
-@router.get("/devices/{device_id}/apps")
-async def get_device_apps(
-    device_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Get list of installed applications on device"""
-    try:
-        apps = await dock_service.get_device_apps(device_id, current_user.id)
-        return {"success": True, "apps": apps}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching apps: {str(e)}")
-
-@router.post("/devices/{device_id}/apps/{app_id}/launch")
-async def launch_app(
-    device_id: str,
-    app_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Launch an application on remote device"""
-    try:
-        result = await dock_service.launch_app(device_id, app_id, current_user.id)
-        return {"success": True, "result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error launching app: {str(e)}")
-
-# Macro Management
-@router.get("/macros")
-async def get_macros(current_user: User = Depends(get_current_user)):
-    """Get all user macros"""
-    try:
-        macros = await dock_service.get_user_macros(current_user.id)
-        return {"success": True, "macros": macros}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching macros: {str(e)}")
-
-@router.post("/macros")
-async def create_macro(
-    request: MacroRequest,
-    current_user: User = Depends(get_current_user)
-):
-    """Create a new automation macro"""
-    try:
-        macro = await dock_service.create_macro(
-            user_id=current_user.id,
-            name=request.name,
-            description=request.description,
-            commands=request.commands,
-            target_devices=request.target_devices,
-            trigger_conditions=request.trigger_conditions
-        )
-        return {"success": True, "macro": macro}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating macro: {str(e)}")
-
-@router.post("/macros/{macro_id}/execute")
-async def execute_macro(
-    macro_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Execute a macro across multiple devices"""
-    try:
-        result = await dock_service.execute_macro(macro_id, current_user.id)
-        return {"success": True, "result": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error executing macro: {str(e)}")
-
-# Network Discovery
-@router.post("/discover")
-async def discover_devices(current_user: User = Depends(get_current_user)):
-    """Discover available devices on the network"""
-    try:
-        devices = await dock_service.discover_network_devices()
-        return {"success": True, "discovered_devices": devices}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error discovering devices: {str(e)}")
-
 # Real-time WebSocket endpoint
 @router.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    await manager.connect(websocket, client_id)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            message = json.loads(data)
-            
-            # Handle different message types
-            if message.get("type") == "device_status_request":
-                # Send device status updates
-                devices = await dock_service.get_real_time_status()
-                await manager.send_personal_message(
-                    json.dumps({"type": "device_status", "devices": devices}),
-                    client_id
-                )
-            elif message.get("type") == "command":
-                # Execute real-time command
-                result = await dock_service.execute_command(
-                    device_id=message.get("device_id"),
-                    command_type=message.get("command_type"),
-                    command=message.get("command"),
-                    parameters=message.get("parameters", {}),
-                    user_id=message.get("user_id")
-                )
-                await manager.send_personal_message(
-                    json.dumps({"type": "command_result", "result": result}),
-                    client_id
-                )
+    await websocket.accept()
+    
+    # Create dock service instance for WebSocket operations
+    from app.core.database import get_async_session
+    async with get_async_session() as db:
+        dock_service = DockService(db)
+        
+        try:
+            while True:
+                data = await websocket.receive_text()
+                message = json.loads(data)
                 
-    except WebSocketDisconnect:
-        manager.disconnect(client_id)
-    except Exception as e:
-        print(f"WebSocket error: {e}")
-        manager.disconnect(client_id)
+                # Handle different message types
+                if message.get("type") == "device_status_request":
+                    # Send device status updates
+                    devices = await dock_service.get_real_time_status()
+                    await websocket.send_text(
+                        json.dumps({"type": "device_status", "devices": devices})
+                    )
+                elif message.get("type") == "command":
+                    # Execute real-time command
+                    result = await dock_service.execute_command(
+                        device_id=message.get("device_id"),
+                        command_type=message.get("command_type"),
+                        command=message.get("command"),
+                        parameters=message.get("parameters", {}),
+                        user_id=message.get("user_id")
+                    )
+                    await websocket.send_text(
+                        json.dumps({"type": "command_result", "result": result})
+                    )
+                    
+        except WebSocketDisconnect:
+            print(f"WebSocket client {client_id} disconnected")
+        except Exception as e:
+            print(f"WebSocket error: {e}")
+            try:
+                await websocket.close()
+            except:
+                pass
 
 @router.put("/devices/{device_id}/rename")
 async def rename_device(

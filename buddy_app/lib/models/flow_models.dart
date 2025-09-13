@@ -1,3 +1,5 @@
+import 'collaboration_models.dart';
+
 class Note {
   final String id;
   final String title;
@@ -172,6 +174,8 @@ class ChatMessage {
   final MessageStatus status;
   final String? mediaUrl;
   final String? replyToId;
+  final CollaborationData?
+  collaborationData; // New field for collaboration requests
 
   ChatMessage({
     required this.id,
@@ -183,6 +187,7 @@ class ChatMessage {
     this.status = MessageStatus.sent,
     this.mediaUrl,
     this.replyToId,
+    this.collaborationData,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -204,6 +209,9 @@ class ChatMessage {
       ),
       mediaUrl: json['media_url']?.toString(),
       replyToId: json['reply_to_id']?.toString(),
+      collaborationData: json['collaboration_data'] != null
+          ? CollaborationData.fromJson(json['collaboration_data'])
+          : null,
     );
   }
 
@@ -218,13 +226,127 @@ class ChatMessage {
       'status': status.name,
       'media_url': mediaUrl,
       'reply_to_id': replyToId,
+      'collaboration_data': collaborationData?.toJson(),
     };
   }
 }
 
-enum MessageType { text, image, video, audio, document }
+enum MessageType {
+  text,
+  image,
+  video,
+  audio,
+  document,
+  collaboration_request, // New type for collaboration invitations
+  collaboration_response, // New type for collaboration responses
+}
 
 enum MessageStatus { sent, delivered, read }
+
+// Collaboration data for chat messages
+class CollaborationData {
+  final String projectId;
+  final String projectTitle;
+  final String invitationId;
+  final CollaborationRole role;
+  final String? message;
+  final DateTime? expiresAt;
+  final String? response; // 'accepted', 'rejected', or null for pending
+
+  CollaborationData({
+    required this.projectId,
+    required this.projectTitle,
+    required this.invitationId,
+    required this.role,
+    this.message,
+    this.expiresAt,
+    this.response,
+  });
+
+  factory CollaborationData.fromJson(Map<String, dynamic> json) {
+    return CollaborationData(
+      projectId: json['project_id']?.toString() ?? '',
+      projectTitle: json['project_title']?.toString() ?? '',
+      invitationId: json['invitation_id']?.toString() ?? '',
+      role: CollaborationRole.values.firstWhere(
+        (r) => r.name == json['role'],
+        orElse: () => CollaborationRole.contributor,
+      ),
+      message: json['message']?.toString(),
+      expiresAt: json['expires_at'] != null
+          ? DateTime.parse(json['expires_at'])
+          : null,
+      response: json['response']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'project_id': projectId,
+      'project_title': projectTitle,
+      'invitation_id': invitationId,
+      'role': role.name,
+      'message': message,
+      'expires_at': expiresAt?.toIso8601String(),
+      'response': response,
+    };
+  }
+
+  bool get isPending => response == null;
+  bool get isAccepted => response == 'accepted';
+  bool get isRejected => response == 'rejected';
+  bool get isExpired => expiresAt != null && DateTime.now().isAfter(expiresAt!);
+}
+
+// Project collaboration information for flows
+class ProjectCollaborationInfo {
+  final String collaborationId;
+  final List<CollaborationMember> members;
+  final bool isOwner;
+  final CollaborationRole myRole;
+  final int totalMembers;
+  final DateTime? lastActivity;
+
+  ProjectCollaborationInfo({
+    required this.collaborationId,
+    required this.members,
+    required this.isOwner,
+    required this.myRole,
+    required this.totalMembers,
+    this.lastActivity,
+  });
+
+  factory ProjectCollaborationInfo.fromJson(Map<String, dynamic> json) {
+    return ProjectCollaborationInfo(
+      collaborationId: json['collaboration_id']?.toString() ?? '',
+      members:
+          (json['members'] as List<dynamic>?)
+              ?.map((m) => CollaborationMember.fromJson(m))
+              .toList() ??
+          [],
+      isOwner: json['is_owner'] ?? false,
+      myRole: CollaborationRole.values.firstWhere(
+        (r) => r.name == json['my_role'],
+        orElse: () => CollaborationRole.viewer,
+      ),
+      totalMembers: json['total_members'] ?? 0,
+      lastActivity: json['last_activity'] != null
+          ? DateTime.parse(json['last_activity'])
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'collaboration_id': collaborationId,
+      'members': members.map((m) => m.toJson()).toList(),
+      'is_owner': isOwner,
+      'my_role': myRole.name,
+      'total_members': totalMembers,
+      'last_activity': lastActivity?.toIso8601String(),
+    };
+  }
+}
 
 class ChatContact {
   final String id;
@@ -385,6 +507,8 @@ class ProjectFlow {
   final String estimatedDuration;
   final FlowDifficulty difficulty;
   final List<String> tags;
+  final ProjectCollaborationInfo?
+  collaboration; // New field for collaboration info
 
   ProjectFlow({
     required this.id,
@@ -398,6 +522,7 @@ class ProjectFlow {
     this.estimatedDuration = '1 week',
     this.difficulty = FlowDifficulty.medium,
     this.tags = const [],
+    this.collaboration,
   });
 
   factory ProjectFlow.fromJson(Map<String, dynamic> json) {
@@ -427,6 +552,9 @@ class ProjectFlow {
         orElse: () => FlowDifficulty.medium,
       ),
       tags: (json['tags'] as List<dynamic>?)?.cast<String>() ?? [],
+      collaboration: json['collaboration'] != null
+          ? ProjectCollaborationInfo.fromJson(json['collaboration'])
+          : null,
     );
   }
 
@@ -445,6 +573,7 @@ class ProjectFlow {
       'estimated_duration': estimatedDuration,
       'difficulty': difficulty.name,
       'tags': tags,
+      'collaboration': collaboration?.toJson(),
     };
   }
 
@@ -460,6 +589,7 @@ class ProjectFlow {
     String? estimatedDuration,
     FlowDifficulty? difficulty,
     List<String>? tags,
+    ProjectCollaborationInfo? collaboration,
   }) {
     return ProjectFlow(
       id: id ?? this.id,
@@ -474,6 +604,7 @@ class ProjectFlow {
       estimatedDuration: estimatedDuration ?? this.estimatedDuration,
       difficulty: difficulty ?? this.difficulty,
       tags: tags ?? this.tags,
+      collaboration: collaboration ?? this.collaboration,
     );
   }
 
@@ -497,6 +628,119 @@ class ProjectFlow {
   }
 }
 
+// Work contribution tracking
+class WorkContribution {
+  final String userId;
+  final String userName;
+  final double hoursWorked;
+  final String workDescription;
+  final DateTime contributedAt;
+  final ContributionType type;
+
+  WorkContribution({
+    required this.userId,
+    required this.userName,
+    required this.hoursWorked,
+    required this.workDescription,
+    required this.contributedAt,
+    this.type = ContributionType.development,
+  });
+
+  factory WorkContribution.fromJson(Map<String, dynamic> json) {
+    return WorkContribution(
+      userId: json['user_id'],
+      userName: json['user_name'],
+      hoursWorked: (json['hours_worked'] as num).toDouble(),
+      workDescription: json['work_description'],
+      contributedAt: DateTime.parse(json['contributed_at']),
+      type: ContributionType.values.firstWhere(
+        (e) => e.name == json['type'],
+        orElse: () => ContributionType.development,
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'user_id': userId,
+      'user_name': userName,
+      'hours_worked': hoursWorked,
+      'work_description': workDescription,
+      'contributed_at': contributedAt.toIso8601String(),
+      'type': type.name,
+    };
+  }
+}
+
+// AI Buddy assistance tracking
+class AIBuddyAssistance {
+  final String assistanceId;
+  final String query;
+  final String response;
+  final DateTime requestedAt;
+  final AIAssistanceType type;
+  final bool wasHelpful;
+  final String? feedback;
+
+  AIBuddyAssistance({
+    required this.assistanceId,
+    required this.query,
+    required this.response,
+    required this.requestedAt,
+    this.type = AIAssistanceType.guidance,
+    this.wasHelpful = false,
+    this.feedback,
+  });
+
+  factory AIBuddyAssistance.fromJson(Map<String, dynamic> json) {
+    return AIBuddyAssistance(
+      assistanceId: json['assistance_id'],
+      query: json['query'],
+      response: json['response'],
+      requestedAt: DateTime.parse(json['requested_at']),
+      type: AIAssistanceType.values.firstWhere(
+        (e) => e.name == json['type'],
+        orElse: () => AIAssistanceType.guidance,
+      ),
+      wasHelpful: json['was_helpful'] ?? false,
+      feedback: json['feedback'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'assistance_id': assistanceId,
+      'query': query,
+      'response': response,
+      'requested_at': requestedAt.toIso8601String(),
+      'type': type.name,
+      'was_helpful': wasHelpful,
+      'feedback': feedback,
+    };
+  }
+}
+
+// Enums for contribution and assistance types
+enum ContributionType {
+  development,
+  testing,
+  review,
+  documentation,
+  research,
+  design,
+  other,
+}
+
+enum AIAssistanceType {
+  guidance,
+  troubleshooting,
+  codeReview,
+  explanation,
+  optimization,
+  testing,
+  other,
+}
+
 class FlowCheckpoint {
   final String id;
   final String title;
@@ -509,6 +753,12 @@ class FlowCheckpoint {
   final List<FlowResource> resources;
   final CheckpointType type;
   final int order;
+  final List<WorkContribution>
+  workContributions; // New field for tracking who worked on this checkpoint
+  final List<String>
+  collaboratorComments; // New field for collaborator comments
+  final String? assignedTo; // New field for checkpoint assignment
+  final AIBuddyAssistance? aiAssistance; // New field for AI Buddy help
 
   FlowCheckpoint({
     required this.id,
@@ -522,6 +772,10 @@ class FlowCheckpoint {
     this.resources = const [],
     this.type = CheckpointType.task,
     required this.order,
+    this.workContributions = const [],
+    this.collaboratorComments = const [],
+    this.assignedTo,
+    this.aiAssistance,
   });
 
   factory FlowCheckpoint.fromJson(Map<String, dynamic> json) {
@@ -548,6 +802,18 @@ class FlowCheckpoint {
         orElse: () => CheckpointType.task,
       ),
       order: json['order'] ?? 0,
+      workContributions:
+          (json['work_contributions'] as List<dynamic>?)
+              ?.map((contrib) => WorkContribution.fromJson(contrib))
+              .toList() ??
+          [],
+      collaboratorComments:
+          (json['collaborator_comments'] as List<dynamic>?)?.cast<String>() ??
+          [],
+      assignedTo: json['assigned_to'],
+      aiAssistance: json['ai_assistance'] != null
+          ? AIBuddyAssistance.fromJson(json['ai_assistance'])
+          : null,
     );
   }
 
@@ -564,6 +830,12 @@ class FlowCheckpoint {
       'resources': resources.map((resource) => resource.toJson()).toList(),
       'type': type.name,
       'order': order,
+      'work_contributions': workContributions
+          .map((contrib) => contrib.toJson())
+          .toList(),
+      'collaborator_comments': collaboratorComments,
+      'assigned_to': assignedTo,
+      'ai_assistance': aiAssistance?.toJson(),
     };
   }
 
@@ -579,6 +851,10 @@ class FlowCheckpoint {
     List<FlowResource>? resources,
     CheckpointType? type,
     int? order,
+    List<WorkContribution>? workContributions,
+    List<String>? collaboratorComments,
+    String? assignedTo,
+    AIBuddyAssistance? aiAssistance,
   }) {
     return FlowCheckpoint(
       id: id ?? this.id,
@@ -592,6 +868,10 @@ class FlowCheckpoint {
       resources: resources ?? this.resources,
       type: type ?? this.type,
       order: order ?? this.order,
+      workContributions: workContributions ?? this.workContributions,
+      collaboratorComments: collaboratorComments ?? this.collaboratorComments,
+      assignedTo: assignedTo ?? this.assignedTo,
+      aiAssistance: aiAssistance ?? this.aiAssistance,
     );
   }
 }

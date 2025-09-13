@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/flow_models.dart';
 import '../../services/flow_service.dart';
+import '../../services/ai/chat_service.dart';
 import '../../widgets/chat/message_bubble.dart';
 import '../../widgets/chat/chat_input.dart';
 
@@ -268,6 +269,70 @@ class _EnhancedIndividualChatScreenState
     return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
+  Future<void> _handleCollaborationResponse(
+    ChatMessage message,
+    bool accept,
+  ) async {
+    if (message.collaborationData == null) return;
+
+    try {
+      final success = await ChatService.respondToCollaborationRequest(
+        messageId: message.id,
+        response: accept ? 'accepted' : 'rejected',
+      );
+
+      if (success) {
+        // Update the message in our local list
+        setState(() {
+          final index = _messages.indexOf(message);
+          if (index != -1) {
+            // Create a new message with updated collaboration data
+            final updatedCollabData = CollaborationData(
+              projectId: message.collaborationData!.projectId,
+              projectTitle: message.collaborationData!.projectTitle,
+              invitationId: message.collaborationData!.invitationId,
+              role: message.collaborationData!.role,
+              message: message.collaborationData!.message,
+              expiresAt: message.collaborationData!.expiresAt,
+              response: accept ? 'accepted' : 'rejected',
+            );
+
+            final updatedMessage = ChatMessage(
+              id: message.id,
+              senderId: message.senderId,
+              receiverId: message.receiverId,
+              content: message.content,
+              timestamp: message.timestamp,
+              type: MessageType.collaboration_request,
+              status: message.status,
+              collaborationData: updatedCollabData,
+            );
+
+            _messages[index] = updatedMessage;
+          }
+        });
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              accept
+                  ? 'Collaboration request accepted! You can now work together.'
+                  : 'Collaboration request declined.',
+            ),
+            backgroundColor: accept ? Colors.green : Colors.orange,
+          ),
+        );
+      } else {
+        throw Exception('Failed to respond to collaboration request');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -438,6 +503,8 @@ class _EnhancedIndividualChatScreenState
                           message: message,
                           isCurrentUser: isCurrentUser,
                           onLongPress: () => _onMessageLongPress(message),
+                          onCollaborationResponse: (accept) =>
+                              _handleCollaborationResponse(message, accept),
                         );
                       },
                     ),
