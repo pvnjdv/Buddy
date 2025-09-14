@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'auth/auth_service.dart';
 import '../models/flow_models.dart';
+import '../models/collaboration_models.dart';
 import '../config/api_config.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as ws_status;
@@ -964,7 +965,8 @@ class FlowService {
     } catch (_) {}
   }
 
-  static DateTimeComponents? _repeatToComponents(AlarmRepeat repeat) {
+  static DateTimeComponents? _repeatToComponents(AlarmRepeat? repeat) {
+    if (repeat == null) return null;
     switch (repeat) {
       case AlarmRepeat.daily:
         return DateTimeComponents.time;
@@ -1015,6 +1017,231 @@ class FlowService {
         // For other offsets, use UTC
         return 'UTC';
     }
+  }
+
+  // ---------- Flow WebSocket: live updates ----------
+  static WebSocketChannel? _flowWs;
+  static Stream<dynamic>? _flowStream;
+
+  static void connectFlowSocket({
+    required String token,
+    required String flowId,
+  }) {
+    try {
+      final base = ApiConfig.wsBaseUrl; // e.g. ws://host:port
+      final uri = Uri.parse('$base/flows/ws?token=$token&flow_id=$flowId');
+      _flowWs = WebSocketChannel.connect(uri);
+      _flowStream = _flowWs!.stream.asBroadcastStream();
+    } catch (e) {
+      print('Flow WS connect error: $e');
+    }
+  }
+
+  static Stream<dynamic>? get flowSocketStream => _flowStream;
+
+  static void disconnectFlowSocket() {
+    try {
+      _flowWs?.sink.close(ws_status.goingAway);
+    } catch (_) {}
+    _flowWs = null;
+    _flowStream = null;
+  }
+
+  // -------- Dashboard --------
+  static Future<Map<String, dynamic>> getFlowDashboard(String flowId) async {
+    final token = await AuthService.getToken();
+    final resp = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/flows/$flowId/dashboard'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    );
+    if (resp.statusCode == 200) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
+    throw Exception('HTTP ${resp.statusCode}');
+  }
+
+  // -------- Scaffold --------
+  static Future<void> scaffoldFlow(
+    String flowId, {
+    String? template,
+    String? language,
+  }) async {
+    final token = await AuthService.getToken();
+    final resp = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/flows/$flowId/scaffold'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        if (template != null) 'template': template,
+        if (language != null) 'language': language,
+      }),
+    );
+    if (resp.statusCode != 200) {
+      throw Exception('HTTP ${resp.statusCode}');
+    }
+  }
+
+  // -------- Notes --------
+  static Future<List<Map<String, dynamic>>> getCheckpointNotes(
+    String flowId,
+    String checkpointId,
+  ) async {
+    final token = await AuthService.getToken();
+    final resp = await http.get(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId/notes',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    );
+    if (resp.statusCode == 200) {
+      final List<dynamic> list = jsonDecode(resp.body);
+      return list.cast<Map<String, dynamic>>();
+    }
+    throw Exception('HTTP ${resp.statusCode}');
+  }
+
+  static Future<Map<String, dynamic>> createCheckpointNote(
+    String flowId,
+    String checkpointId, {
+    required String title,
+    required String content,
+  }) async {
+    final token = await AuthService.getToken();
+    final resp = await http.post(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId/notes',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'title': title, 'content': content}),
+    );
+    if (resp.statusCode == 200 || resp.statusCode == 201) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
+    throw Exception('HTTP ${resp.statusCode}');
+  }
+
+  // -------- Assignments --------
+  static Future<List<Map<String, dynamic>>> getCheckpointAssignments(
+    String flowId,
+    String checkpointId,
+  ) async {
+    final token = await AuthService.getToken();
+    final resp = await http.get(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId/assignments',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    );
+    if (resp.statusCode == 200) {
+      final List<dynamic> list = jsonDecode(resp.body);
+      return list.cast<Map<String, dynamic>>();
+    }
+    throw Exception('HTTP ${resp.statusCode}');
+  }
+
+  static Future<Map<String, dynamic>> assignCheckpoint(
+    String flowId,
+    String checkpointId, {
+    required String assigneeId,
+    String? assigneeName,
+  }) async {
+    final token = await AuthService.getToken();
+    final resp = await http.post(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId/assignments',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'assignee_id': assigneeId,
+        if (assigneeName != null) 'assignee_name': assigneeName,
+      }),
+    );
+    if (resp.statusCode == 200 || resp.statusCode == 201) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
+    throw Exception('HTTP ${resp.statusCode}');
+  }
+
+  // -------- Alarms --------
+  static Future<List<Map<String, dynamic>>> getCheckpointAlarms(
+    String flowId,
+    String checkpointId,
+  ) async {
+    final token = await AuthService.getToken();
+    final resp = await http.get(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId/alarms',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    );
+    if (resp.statusCode == 200) {
+      final List<dynamic> list = jsonDecode(resp.body);
+      return list.cast<Map<String, dynamic>>();
+    }
+    throw Exception('HTTP ${resp.statusCode}');
+  }
+
+  static Future<Map<String, dynamic>> createCheckpointAlarm(
+    String flowId,
+    String checkpointId, {
+    required String title,
+    required DateTime scheduledTime,
+  }) async {
+    final token = await AuthService.getToken();
+    final resp = await http.post(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/flows/$flowId/checkpoints/$checkpointId/alarms',
+      ),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'title': title,
+        'description': '',
+        'scheduled_time': scheduledTime.toIso8601String(),
+        'type': 'task',
+        'repeat': 'none',
+      }),
+    );
+    if (resp.statusCode == 200 || resp.statusCode == 201) {
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    }
+    throw Exception('HTTP ${resp.statusCode}');
+  }
+
+  static Future<void> sendCodeEvent(String flowId, CodeEvent event) async {
+    try {
+      final token = await AuthService.getToken();
+      await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/flows/$flowId/code-events'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(event.toJson()),
+      );
+    } catch (_) {}
   }
 }
 
@@ -1760,5 +1987,69 @@ class EnhancedChatService {
     );
 
     return await FlowService.createAlarm(alarm);
+  }
+
+  // ================= COLLABORATION METHODS =================
+
+  /// Send a flow collaboration invite via chat message
+  static Future<ChatMessage> sendFlowInvite({
+    required String receiverId,
+    required String flowId,
+    required String flowTitle,
+    required CollaborationRole role,
+    String? message,
+  }) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/flows/$flowId/invite'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'receiver_id': receiverId,
+          'role': role.name,
+          'message': message,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return ChatMessage.fromJson(data['chat_message']);
+      } else {
+        throw Exception('Failed to send flow invite: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error sending flow invite: $e');
+      rethrow;
+    }
+  }
+
+  /// Respond to a flow collaboration invite
+  static Future<void> respondToFlowInvite({
+    required String invitationId,
+    required bool accept,
+  }) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.post(
+        Uri.parse(
+          '${ApiConfig.baseUrl}/flows/invitations/$invitationId/respond',
+        ),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'action': accept ? 'accept' : 'reject'}),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to respond to invite: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error responding to flow invite: $e');
+      rethrow;
+    }
   }
 }

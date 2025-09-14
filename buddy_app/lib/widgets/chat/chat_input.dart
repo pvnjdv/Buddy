@@ -49,6 +49,7 @@ class _ChatInputState extends State<ChatInput> {
   Future<void> _showAttachmentOptions() async {
     await showModalBottomSheet(
       context: context,
+      backgroundColor: const Color(0xFF1A202C),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -59,7 +60,11 @@ class _ChatInputState extends State<ChatInput> {
           children: [
             const Text(
               'Send media',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 20),
             Row(
@@ -113,7 +118,11 @@ class _ChatInputState extends State<ChatInput> {
           const SizedBox(height: 8),
           Text(
             label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.white,
+            ),
           ),
         ],
       ),
@@ -146,32 +155,40 @@ class _ChatInputState extends State<ChatInput> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1B263B), Color(0xFF1B263B), Color(0xFF2D3748)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
           ),
-        ],
-      ),
-      child: SafeArea(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 4,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
         child: Row(
           children: [
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: const Color(0xFF2D3748).withOpacity(0.8),
                   borderRadius: BorderRadius.circular(25),
+                  border: Border.all(
+                    color: const Color(0xFF4A5568).withOpacity(0.3),
+                    width: 1,
+                  ),
                 ),
                 child: Row(
                   children: [
                     IconButton(
                       icon: const Icon(Icons.emoji_emotions_outlined),
-                      color: Colors.grey[600],
+                      color: Colors.white70,
                       onPressed: () {
                         // TODO: Implement emoji picker
                       },
@@ -180,11 +197,12 @@ class _ChatInputState extends State<ChatInput> {
                       child: TextField(
                         controller: _controller,
                         focusNode: _focusNode,
+                        style: const TextStyle(color: Colors.white),
                         decoration: const InputDecoration(
                           hintText: 'Type a message',
-                          hintStyle: TextStyle(color: Colors.grey),
+                          hintStyle: TextStyle(color: Colors.white54),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(vertical: 12),
+                          contentPadding: EdgeInsets.symmetric(vertical: 8),
                         ),
                         maxLines: null,
                         textCapitalization: TextCapitalization.sentences,
@@ -193,13 +211,13 @@ class _ChatInputState extends State<ChatInput> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.attach_file),
-                      color: Colors.grey[600],
+                      color: Colors.white70,
                       onPressed: _showAttachmentOptions,
                     ),
                     if (!_hasText)
                       IconButton(
                         icon: const Icon(Icons.camera_alt),
-                        color: Colors.grey[600],
+                        color: Colors.white70,
                         onPressed: () =>
                             _pickMedia(ImageSource.camera, MessageType.image),
                       ),

@@ -449,7 +449,7 @@ class BuddyService {
             .take(3)
             .any(
               (msg) =>
-                  msg.role == BuddyRole.assistant &&
+                  msg.role == 'assistant' &&
                   (msg.content.toLowerCase().contains('note') ||
                       msg.content.toLowerCase().contains('alarm') ||
                       msg.content.toLowerCase().contains('flow') ||
@@ -478,7 +478,7 @@ class BuddyService {
     final recentMessages = _chatHistory.reversed.take(5).toList();
 
     for (final message in recentMessages) {
-      if (message.role == BuddyRole.assistant) {
+      if (message.role == 'assistant') {
         final content = message.content.toLowerCase();
 
         // Check for note creation
@@ -561,7 +561,7 @@ class BuddyService {
     final userMessage = FlowBuddyMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       content: prompt,
-      role: BuddyRole.user,
+      role: 'user',
       timestamp: DateTime.now(),
     );
     _chatHistory.add(userMessage);
@@ -582,9 +582,9 @@ class BuddyService {
               ? agentResult.message
               : 'Done.';
           final assistantMessage = FlowBuddyMessage(
-            id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
             content: msg,
-            role: BuddyRole.assistant,
+            role: 'assistant',
             timestamp: DateTime.now(),
           );
           _chatHistory.add(assistantMessage);
@@ -658,7 +658,7 @@ class BuddyService {
       final requestBody = {
         'prompt': prompt,
         'chat_history': _chatHistory
-            .map((msg) => {'role': msg.role.name, 'content': msg.content})
+            .map((msg) => {'role': msg.role, 'content': msg.content})
             .toList(),
         'is_task_continuation': isTaskContinuation,
         'recent_context': recentContext,
@@ -686,7 +686,7 @@ class BuddyService {
         final assistantMessage = FlowBuddyMessage(
           id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
           content: aiResponse,
-          role: BuddyRole.assistant,
+          role: 'assistant',
           timestamp: DateTime.now(),
         );
         _chatHistory.add(assistantMessage);
@@ -715,7 +715,7 @@ class BuddyService {
       final assistantMessage = FlowBuddyMessage(
         id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
         content: fallbackResponse,
-        role: BuddyRole.assistant,
+        role: 'assistant',
         timestamp: DateTime.now(),
       );
       _chatHistory.add(assistantMessage);
@@ -892,7 +892,7 @@ class BuddyService {
     final message = FlowBuddyMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       content: content,
-      role: role == 'user' ? BuddyRole.user : BuddyRole.assistant,
+      role: role == 'user' ? 'user' : 'assistant',
       timestamp: DateTime.now(),
     );
 
@@ -911,7 +911,7 @@ class BuddyService {
 
     print('Memory messages:');
     for (int i = 0; i < _chatHistory.length; i++) {
-      print('  $i: [${_chatHistory[i].role.name}] ${_chatHistory[i].content}');
+      print('  $i: [${_chatHistory[i].role}] ${_chatHistory[i].content}');
     }
 
     print('Database messages:');
@@ -969,7 +969,7 @@ class BuddyService {
         : _chatHistory;
 
     final summary = recentMessages
-        .map((msg) => '${msg.role.name}: ${msg.content}')
+        .map((msg) => '${msg.role}: ${msg.content}')
         .join('\n');
 
     return 'Recent conversation context:\n$summary';

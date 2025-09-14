@@ -9,6 +9,7 @@ import '../buddy_code_editor/editor_selector.dart';
 import 'flows/flow_detail_screen.dart';
 import 'notes/enhanced_notes_screen.dart';
 import 'alarms/enhanced_alarms_screen.dart';
+import 'kanban/kanban_board_screen.dart';
 
 class FlowScreen extends StatefulWidget {
   const FlowScreen({super.key});
@@ -720,6 +721,16 @@ class _FlowScreenState extends State<FlowScreen>
                           ],
                         ),
                       ),
+                      const PopupMenuItem(
+                        value: 'kanban',
+                        child: Row(
+                          children: [
+                            Icon(Icons.view_kanban, size: 16),
+                            SizedBox(width: 8),
+                            Text('Kanban Board'),
+                          ],
+                        ),
+                      ),
                       if (isCollaborative) ...[
                         const PopupMenuItem(
                           value: 'collaborate',
@@ -768,6 +779,23 @@ class _FlowScreenState extends State<FlowScreen>
                       color: isDark ? Colors.grey[400] : Colors.grey[600],
                       size: 20,
                     ),
+                  ),
+                  // Quick Kanban Board Access Button
+                  IconButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => KanbanBoardScreen(
+                          flow: flow,
+                          onCheckpointStatusChanged:
+                              (flowId, checkpointId, newStatus) {
+                                _loadAllData();
+                              },
+                        ),
+                      ),
+                    ),
+                    icon: Icon(Icons.view_kanban, color: Colors.blue, size: 20),
+                    tooltip: 'Open Kanban Board',
                   ),
                 ],
               ),
@@ -1317,6 +1345,20 @@ class _FlowScreenState extends State<FlowScreen>
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => FlowDetailScreen(flow: flow)),
+        );
+        break;
+      case 'kanban':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => KanbanBoardScreen(
+              flow: flow,
+              onCheckpointStatusChanged: (flowId, checkpointId, newStatus) {
+                // Refresh the flow data after status change
+                _loadAllData();
+              },
+            ),
+          ),
         );
         break;
       case 'collaborate':

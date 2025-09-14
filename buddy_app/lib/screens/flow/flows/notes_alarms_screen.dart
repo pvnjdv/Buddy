@@ -347,7 +347,7 @@ class _NotesAlarmsScreenState extends State<NotesAlarmsScreen>
               Row(
                 children: [
                   Icon(
-                    _getAlarmTypeIcon(alarm.type),
+                    _getAlarmTypeIcon(alarm.type ?? AlarmType.reminder),
                     color: alarm.isActive ? Colors.blue : Colors.grey,
                   ),
                   const SizedBox(width: 8),
@@ -365,10 +365,10 @@ class _NotesAlarmsScreenState extends State<NotesAlarmsScreen>
                     const Icon(Icons.pause_circle_outline, color: Colors.grey),
                 ],
               ),
-              if (alarm.description.isNotEmpty) ...[
+              if (alarm.description?.isNotEmpty == true) ...[
                 const SizedBox(height: 4),
                 Text(
-                  alarm.description,
+                  alarm.description!,
                   style: TextStyle(
                     fontSize: 14,
                     color: alarm.isActive ? Colors.black54 : Colors.grey,
@@ -408,7 +408,7 @@ class _NotesAlarmsScreenState extends State<NotesAlarmsScreen>
                     const Icon(Icons.repeat, size: 16, color: Colors.grey),
                     const SizedBox(width: 4),
                     Text(
-                      _getRepeatText(alarm.repeat),
+                      _getRepeatText(alarm.repeat ?? AlarmRepeat.none),
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ],
@@ -558,7 +558,7 @@ class _NotesAlarmsScreenState extends State<NotesAlarmsScreen>
         return Icons.people;
       case AlarmType.task:
         return Icons.task_alt;
-      case AlarmType.custom:
+      default:
         return Icons.alarm;
     }
   }
@@ -602,7 +602,7 @@ class _NotesAlarmsScreenState extends State<NotesAlarmsScreen>
         return 'Weekly';
       case AlarmRepeat.monthly:
         return 'Monthly';
-      case AlarmRepeat.custom:
+      default:
         return 'Custom';
     }
   }

@@ -22,6 +22,7 @@ class StatusService {
         id: 'status_$i',
         userId: 'user_$i',
         userName: names[i],
+        name: names[i],
         mediaUrl: 'https://picsum.photos/seed/buddy_status_$i/240/240',
         type: StatusType.image,
         timestamp: now.subtract(Duration(hours: 3 * i)),

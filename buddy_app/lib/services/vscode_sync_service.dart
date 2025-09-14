@@ -1,9 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../config/api_config.dart';
+import '../models/project_model.dart';
 import '../models/flow_models.dart';
-import '../services/vscode_integration_service.dart';
+import 'flow_service.dart';
+import 'vscode_integration_service.dart';
 
 /// Service for synchronizing VS Code changes across all platforms
 class VSCodeSyncService {
@@ -344,6 +350,12 @@ class VSCodeSyncService {
             '',
           );
           final content = await entity.readAsString();
+
+          // Notify backend about this file change
+          await FlowService.sendCodeEvent(
+            session.projectId,
+            CodeEvent(path: relativePath, event: 'modified', editor: 'vscode'),
+          );
 
           await _uploadFileToGitHub(repoFullName, relativePath, content);
         }

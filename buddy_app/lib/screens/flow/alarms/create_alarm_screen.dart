@@ -44,15 +44,15 @@ class _CreateAlarmScreenState extends State<CreateAlarmScreen> {
 
   void _initializeFromAlarm(FlowAlarm alarm) {
     _titleController.text = alarm.title;
-    _descriptionController.text = alarm.description;
+    _descriptionController.text = alarm.description ?? '';
     _selectedDate = DateTime(
       alarm.scheduledTime.year,
       alarm.scheduledTime.month,
       alarm.scheduledTime.day,
     );
     _selectedTime = TimeOfDay.fromDateTime(alarm.scheduledTime);
-    _alarmType = alarm.type;
-    _repeatType = alarm.repeat;
+    _alarmType = alarm.type ?? AlarmType.reminder;
+    _repeatType = alarm.repeat ?? AlarmRepeat.none;
     _isActive = alarm.isActive;
   }
 
@@ -417,9 +417,9 @@ class _CreateAlarmScreenState extends State<CreateAlarmScreen> {
         return 'Meeting';
       case AlarmType.task:
         return 'Task';
-      case AlarmType.custom:
-        return 'Custom';
     }
+    // Optionally, handle unknown types
+    return 'Unknown';
   }
 
   String _getRepeatLabel(AlarmRepeat repeat) {

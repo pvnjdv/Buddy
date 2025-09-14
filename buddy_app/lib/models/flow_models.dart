@@ -1,4 +1,5 @@
 import 'collaboration_models.dart';
+import 'package:flutter/material.dart';
 
 class Note {
   final String id;
@@ -494,6 +495,382 @@ class BuddyMessage {
 
 enum BuddyRole { user, assistant }
 
+// FlowBuddyMessage - specialized message for flow-based buddy conversations
+class FlowBuddyMessage {
+  final String id;
+  final String content;
+  final String role;
+  final DateTime timestamp;
+  final String? flowId;
+  final String? checkpointId;
+
+  FlowBuddyMessage({
+    required this.id,
+    required this.content,
+    required this.role,
+    required this.timestamp,
+    this.flowId,
+    this.checkpointId,
+  });
+
+  factory FlowBuddyMessage.fromJson(Map<String, dynamic> json) {
+    return FlowBuddyMessage(
+      id: json['id']?.toString() ?? '',
+      content: json['content']?.toString() ?? '',
+      role: json['role']?.toString() ?? 'user',
+      timestamp: DateTime.parse(
+        json['timestamp'] ?? DateTime.now().toIso8601String(),
+      ),
+      flowId: json['flow_id']?.toString(),
+      checkpointId: json['checkpoint_id']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'content': content,
+      'role': role,
+      'timestamp': timestamp.toIso8601String(),
+      if (flowId != null) 'flow_id': flowId,
+      if (checkpointId != null) 'checkpoint_id': checkpointId,
+    };
+  }
+}
+
+// Status models for sync service
+enum StatusType { image, video, text, document }
+
+class StatusItem {
+  final String id;
+  final String name;
+  final String? content;
+  final StatusType type;
+  final DateTime? timestamp;
+  final String? userId;
+  final String? userName;
+  final String? mediaUrl;
+  bool seen;
+
+  StatusItem({
+    required this.id,
+    required this.name,
+    this.content,
+    required this.type,
+    this.timestamp,
+    this.userId,
+    this.userName,
+    this.mediaUrl,
+    this.seen = false,
+  });
+
+  factory StatusItem.fromJson(Map<String, dynamic> json) {
+    return StatusItem(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      content: json['content']?.toString(),
+      type: StatusType.values.firstWhere(
+        (e) => e.name == json['type'],
+        orElse: () => StatusType.text,
+      ),
+      timestamp: json['timestamp'] != null
+          ? DateTime.parse(json['timestamp'])
+          : null,
+      userId: json['user_id']?.toString(),
+      userName: json['user_name']?.toString(),
+      mediaUrl: json['media_url']?.toString(),
+      seen: json['seen'] ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      if (content != null) 'content': content,
+      'type': type.name,
+      if (timestamp != null) 'timestamp': timestamp!.toIso8601String(),
+      if (userId != null) 'user_id': userId,
+      if (userName != null) 'user_name': userName,
+      if (mediaUrl != null) 'media_url': mediaUrl,
+      'seen': seen,
+    };
+  }
+}
+
+// Flow domain enums and resource model
+enum FlowStatus { active, completed, paused, cancelled }
+
+enum FlowDifficulty { easy, medium, hard, expert }
+
+// Enhanced Jira-like issue types
+enum CheckpointType {
+  epic, // Large user story that can be broken down
+  story, // User story with acceptance criteria
+  task, // General work item
+  bug, // Bug report/fix
+  subtask, // Sub-item of another checkpoint
+  milestone, // Project milestone
+  review, // Code/design review
+  testing, // Testing task
+}
+
+// Jira-like status workflow
+enum CheckpointStatus {
+  todo, // To Do
+  inProgress, // In Progress
+  codeReview, // Code Review
+  testing, // Testing
+  done, // Done
+  blocked, // Blocked
+  cancelled, // Cancelled
+}
+
+// Priority levels (Jira-style)
+enum CheckpointPriority {
+  highest, // Highest
+  high, // High
+  medium, // Medium
+  low, // Low
+  lowest, // Lowest
+}
+
+// Sprint information
+enum SprintStatus { planning, active, completed, cancelled }
+
+enum ResourceType { link, document, video, tutorial, tool }
+
+// Jira-like Sprint model
+class FlowSprint {
+  final String id;
+  final String name;
+  final String? goal;
+  final DateTime startDate;
+  final DateTime endDate;
+  final SprintStatus status;
+  final List<String> checkpointIds;
+  final int capacity; // Story points capacity
+  final int? burndownHours;
+
+  const FlowSprint({
+    required this.id,
+    required this.name,
+    this.goal,
+    required this.startDate,
+    required this.endDate,
+    required this.status,
+    this.checkpointIds = const [],
+    this.capacity = 40,
+    this.burndownHours,
+  });
+
+  factory FlowSprint.fromJson(Map<String, dynamic> json) => FlowSprint(
+    id: json['id']?.toString() ?? '',
+    name: json['name']?.toString() ?? '',
+    goal: json['goal']?.toString(),
+    startDate: DateTime.parse(
+      json['start_date'] ?? DateTime.now().toIso8601String(),
+    ),
+    endDate: DateTime.parse(
+      json['end_date'] ??
+          DateTime.now().add(const Duration(days: 14)).toIso8601String(),
+    ),
+    status: SprintStatus.values.firstWhere(
+      (e) => e.name == json['status'],
+      orElse: () => SprintStatus.planning,
+    ),
+    checkpointIds:
+        (json['checkpoint_ids'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        [],
+    capacity: json['capacity'] ?? 40,
+    burndownHours: json['burndown_hours'],
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'goal': goal,
+    'start_date': startDate.toIso8601String(),
+    'end_date': endDate.toIso8601String(),
+    'status': status.name,
+    'checkpoint_ids': checkpointIds,
+    'capacity': capacity,
+    'burndown_hours': burndownHours,
+  };
+
+  Duration get duration => endDate.difference(startDate);
+  bool get isActive => status == SprintStatus.active;
+  bool get isCompleted => status == SprintStatus.completed;
+}
+
+// Enhanced time tracking
+class TimeTracking {
+  final Duration? originalEstimate;
+  final Duration? remainingEstimate;
+  final Duration timeSpent;
+  final List<WorkLog> workLogs;
+
+  const TimeTracking({
+    this.originalEstimate,
+    this.remainingEstimate,
+    this.timeSpent = Duration.zero,
+    this.workLogs = const [],
+  });
+
+  factory TimeTracking.fromJson(Map<String, dynamic> json) => TimeTracking(
+    originalEstimate: json['original_estimate'] != null
+        ? Duration(minutes: json['original_estimate'])
+        : null,
+    remainingEstimate: json['remaining_estimate'] != null
+        ? Duration(minutes: json['remaining_estimate'])
+        : null,
+    timeSpent: Duration(minutes: json['time_spent'] ?? 0),
+    workLogs:
+        (json['work_logs'] as List<dynamic>?)
+            ?.map((e) => WorkLog.fromJson(e))
+            .toList() ??
+        [],
+  );
+
+  Map<String, dynamic> toJson() => {
+    'original_estimate': originalEstimate?.inMinutes,
+    'remaining_estimate': remainingEstimate?.inMinutes,
+    'time_spent': timeSpent.inMinutes,
+    'work_logs': workLogs.map((e) => e.toJson()).toList(),
+  };
+
+  double get progressPercentage {
+    if (originalEstimate == null || originalEstimate!.inMinutes == 0) return 0;
+    return (timeSpent.inMinutes / originalEstimate!.inMinutes * 100).clamp(
+      0,
+      100,
+    );
+  }
+}
+
+class WorkLog {
+  final String id;
+  final String userId;
+  final String userName;
+  final Duration timeSpent;
+  final String? description;
+  final DateTime loggedAt;
+
+  const WorkLog({
+    required this.id,
+    required this.userId,
+    required this.userName,
+    required this.timeSpent,
+    this.description,
+    required this.loggedAt,
+  });
+
+  factory WorkLog.fromJson(Map<String, dynamic> json) => WorkLog(
+    id: json['id']?.toString() ?? '',
+    userId: json['user_id']?.toString() ?? '',
+    userName: json['user_name']?.toString() ?? '',
+    timeSpent: Duration(minutes: json['time_spent'] ?? 0),
+    description: json['description']?.toString(),
+    loggedAt: DateTime.parse(
+      json['logged_at'] ?? DateTime.now().toIso8601String(),
+    ),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'user_id': userId,
+    'user_name': userName,
+    'time_spent': timeSpent.inMinutes,
+    'description': description,
+    'logged_at': loggedAt.toIso8601String(),
+  };
+}
+
+// Enhanced issue linking
+class IssueLink {
+  final String id;
+  final String targetId;
+  final IssueLinkType type;
+  final String? description;
+
+  const IssueLink({
+    required this.id,
+    required this.targetId,
+    required this.type,
+    this.description,
+  });
+
+  factory IssueLink.fromJson(Map<String, dynamic> json) => IssueLink(
+    id: json['id']?.toString() ?? '',
+    targetId: json['target_id']?.toString() ?? '',
+    type: IssueLinkType.values.firstWhere(
+      (e) => e.name == json['type'],
+      orElse: () => IssueLinkType.relates,
+    ),
+    description: json['description']?.toString(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'target_id': targetId,
+    'type': type.name,
+    'description': description,
+  };
+}
+
+enum IssueLinkType {
+  blocks, // This issue blocks the linked issue
+  blockedBy, // This issue is blocked by the linked issue
+  relates, // General relation
+  duplicates, // This issue duplicates the linked issue
+  duplicatedBy, // This issue is duplicated by the linked issue
+  parentOf, // This issue is parent of the linked issue
+  childOf, // This issue is child of the linked issue
+}
+
+class FlowResource {
+  final String id;
+  final String title;
+  final String description;
+  final String url;
+  final ResourceType type;
+  final DateTime? createdAt;
+
+  const FlowResource({
+    this.id = '',
+    required this.title,
+    required this.description,
+    required this.url,
+    this.type = ResourceType.link,
+    this.createdAt,
+  });
+
+  factory FlowResource.fromJson(Map<String, dynamic> json) => FlowResource(
+    id: json['id']?.toString() ?? '',
+    title: json['title']?.toString() ?? '',
+    description: json['description']?.toString() ?? '',
+    url: json['url']?.toString() ?? '',
+    type: ResourceType.values.firstWhere(
+      (e) => e.name == (json['type']?.toString() ?? ''),
+      orElse: () => ResourceType.link,
+    ),
+    createdAt: json['created_at'] != null
+        ? DateTime.tryParse(json['created_at'].toString())
+        : null,
+  );
+
+  Map<String, dynamic> toJson() => {
+    if (id.isNotEmpty) 'id': id,
+    'title': title,
+    'description': description,
+    'url': url,
+    'type': type.name,
+    if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
+  };
+}
+
 // Flow models for project management
 class ProjectFlow {
   final String id;
@@ -753,12 +1130,32 @@ class FlowCheckpoint {
   final List<FlowResource> resources;
   final CheckpointType type;
   final int order;
-  final List<WorkContribution>
-  workContributions; // New field for tracking who worked on this checkpoint
-  final List<String>
-  collaboratorComments; // New field for collaborator comments
-  final String? assignedTo; // New field for checkpoint assignment
-  final AIBuddyAssistance? aiAssistance; // New field for AI Buddy help
+  final List<WorkContribution> workContributions;
+  final List<String> collaboratorComments;
+  final String? assignedTo;
+  final AIBuddyAssistance? aiAssistance;
+  // Added for nested checkpoints and auto-marking
+  final List<FlowCheckpoint> children;
+  final List<String> filePatterns;
+  final List<String> filePaths;
+  final List<String> rules;
+
+  // New Jira-like fields
+  final CheckpointStatus status;
+  final CheckpointPriority priority;
+  final List<String> labels;
+  final String? reporterId;
+  final String? reporterName;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String? sprintId;
+  final int? storyPoints;
+  final TimeTracking? timeTracking;
+  final List<IssueLink> issueLinks;
+  final String? parentId; // For epic/story relationships
+  final List<String> acceptanceCriteria;
+  final String? epicId; // Link to epic
+  final int? epicRank; // Order within epic
 
   FlowCheckpoint({
     required this.id,
@@ -776,7 +1173,28 @@ class FlowCheckpoint {
     this.collaboratorComments = const [],
     this.assignedTo,
     this.aiAssistance,
-  });
+    this.children = const [],
+    this.filePatterns = const [],
+    this.filePaths = const [],
+    this.rules = const [],
+    // New Jira-like parameters
+    this.status = CheckpointStatus.todo,
+    this.priority = CheckpointPriority.medium,
+    this.labels = const [],
+    this.reporterId,
+    this.reporterName,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    this.sprintId,
+    this.storyPoints,
+    this.timeTracking,
+    this.issueLinks = const [],
+    this.parentId,
+    this.acceptanceCriteria = const [],
+    this.epicId,
+    this.epicRank,
+  }) : createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   factory FlowCheckpoint.fromJson(Map<String, dynamic> json) {
     return FlowCheckpoint(
@@ -784,36 +1202,104 @@ class FlowCheckpoint {
       title: json['title']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
       requirements:
-          (json['requirements'] as List<dynamic>?)?.cast<String>() ?? [],
+          (json['requirements'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
       deliverables:
-          (json['deliverables'] as List<dynamic>?)?.cast<String>() ?? [],
-      estimatedTime: json['estimated_time'] ?? '1 day',
-      isCompleted: json['is_completed'] ?? false,
+          (json['deliverables'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      estimatedTime: json['estimated_time']?.toString() ?? '1 day',
+      isCompleted: json['is_completed'] == true,
       completedAt: json['completed_at'] != null
-          ? DateTime.parse(json['completed_at'])
+          ? DateTime.tryParse(json['completed_at'].toString())
           : null,
       resources:
           (json['resources'] as List<dynamic>?)
-              ?.map((resource) => FlowResource.fromJson(resource))
+              ?.map((e) => FlowResource.fromJson(e))
               .toList() ??
-          [],
+          const [],
       type: CheckpointType.values.firstWhere(
-        (e) => e.name == json['type'],
+        (e) => e.name == (json['type']?.toString() ?? ''),
         orElse: () => CheckpointType.task,
       ),
-      order: json['order'] ?? 0,
+      order: (json['order'] as num?)?.toInt() ?? 0,
       workContributions:
           (json['work_contributions'] as List<dynamic>?)
-              ?.map((contrib) => WorkContribution.fromJson(contrib))
+              ?.map((e) => WorkContribution.fromJson(e))
               .toList() ??
-          [],
+          const [],
       collaboratorComments:
-          (json['collaborator_comments'] as List<dynamic>?)?.cast<String>() ??
-          [],
-      assignedTo: json['assigned_to'],
+          (json['collaborator_comments'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      assignedTo: json['assigned_to']?.toString(),
       aiAssistance: json['ai_assistance'] != null
           ? AIBuddyAssistance.fromJson(json['ai_assistance'])
           : null,
+      children:
+          (json['children'] as List<dynamic>?)
+              ?.map((e) => FlowCheckpoint.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      filePatterns:
+          (json['file_patterns'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      filePaths:
+          (json['file_paths'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      rules:
+          (json['rules'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      // New Jira-like fields
+      status: CheckpointStatus.values.firstWhere(
+        (e) => e.name == (json['status']?.toString() ?? 'todo'),
+        orElse: () => CheckpointStatus.todo,
+      ),
+      priority: CheckpointPriority.values.firstWhere(
+        (e) => e.name == (json['priority']?.toString() ?? 'medium'),
+        orElse: () => CheckpointPriority.medium,
+      ),
+      labels:
+          (json['labels'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      reporterId: json['reporter_id']?.toString(),
+      reporterName: json['reporter_name']?.toString(),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.tryParse(json['updated_at'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      sprintId: json['sprint_id']?.toString(),
+      storyPoints: json['story_points'],
+      timeTracking: json['time_tracking'] != null
+          ? TimeTracking.fromJson(json['time_tracking'])
+          : null,
+      issueLinks:
+          (json['issue_links'] as List<dynamic>?)
+              ?.map((e) => IssueLink.fromJson(e))
+              .toList() ??
+          const [],
+      parentId: json['parent_id']?.toString(),
+      acceptanceCriteria:
+          (json['acceptance_criteria'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      epicId: json['epic_id']?.toString(),
+      epicRank: json['epic_rank'],
     );
   }
 
@@ -827,15 +1313,33 @@ class FlowCheckpoint {
       'estimated_time': estimatedTime,
       'is_completed': isCompleted,
       'completed_at': completedAt?.toIso8601String(),
-      'resources': resources.map((resource) => resource.toJson()).toList(),
+      'resources': resources.map((e) => e.toJson()).toList(),
       'type': type.name,
       'order': order,
-      'work_contributions': workContributions
-          .map((contrib) => contrib.toJson())
-          .toList(),
+      'work_contributions': workContributions.map((e) => e.toJson()).toList(),
       'collaborator_comments': collaboratorComments,
       'assigned_to': assignedTo,
       'ai_assistance': aiAssistance?.toJson(),
+      'children': children.map((e) => e.toJson()).toList(),
+      'file_patterns': filePatterns,
+      'file_paths': filePaths,
+      'rules': rules,
+      // New Jira-like fields
+      'status': status.name,
+      'priority': priority.name,
+      'labels': labels,
+      'reporter_id': reporterId,
+      'reporter_name': reporterName,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+      'sprint_id': sprintId,
+      'story_points': storyPoints,
+      'time_tracking': timeTracking?.toJson(),
+      'issue_links': issueLinks.map((e) => e.toJson()).toList(),
+      'parent_id': parentId,
+      'acceptance_criteria': acceptanceCriteria,
+      'epic_id': epicId,
+      'epic_rank': epicRank,
     };
   }
 
@@ -855,6 +1359,26 @@ class FlowCheckpoint {
     List<String>? collaboratorComments,
     String? assignedTo,
     AIBuddyAssistance? aiAssistance,
+    List<FlowCheckpoint>? children,
+    List<String>? filePatterns,
+    List<String>? filePaths,
+    List<String>? rules,
+    // New Jira-like fields
+    CheckpointStatus? status,
+    CheckpointPriority? priority,
+    List<String>? labels,
+    String? reporterId,
+    String? reporterName,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    String? sprintId,
+    int? storyPoints,
+    TimeTracking? timeTracking,
+    List<IssueLink>? issueLinks,
+    String? parentId,
+    List<String>? acceptanceCriteria,
+    String? epicId,
+    int? epicRank,
   }) {
     return FlowCheckpoint(
       id: id ?? this.id,
@@ -872,188 +1396,234 @@ class FlowCheckpoint {
       collaboratorComments: collaboratorComments ?? this.collaboratorComments,
       assignedTo: assignedTo ?? this.assignedTo,
       aiAssistance: aiAssistance ?? this.aiAssistance,
+      children: children ?? this.children,
+      filePatterns: filePatterns ?? this.filePatterns,
+      filePaths: filePaths ?? this.filePaths,
+      rules: rules ?? this.rules,
+      // New Jira-like fields
+      status: status ?? this.status,
+      priority: priority ?? this.priority,
+      labels: labels ?? this.labels,
+      reporterId: reporterId ?? this.reporterId,
+      reporterName: reporterName ?? this.reporterName,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      sprintId: sprintId ?? this.sprintId,
+      storyPoints: storyPoints ?? this.storyPoints,
+      timeTracking: timeTracking ?? this.timeTracking,
+      issueLinks: issueLinks ?? this.issueLinks,
+      parentId: parentId ?? this.parentId,
+      acceptanceCriteria: acceptanceCriteria ?? this.acceptanceCriteria,
+      epicId: epicId ?? this.epicId,
+      epicRank: epicRank ?? this.epicRank,
     );
+  }
+
+  // Jira-like helper methods
+  bool get isStory => type == CheckpointType.story;
+  bool get isEpic => type == CheckpointType.epic;
+  bool get isBug => type == CheckpointType.bug;
+  bool get isSubtask => type == CheckpointType.subtask;
+
+  bool get isDone => status == CheckpointStatus.done;
+  bool get isInProgress => status == CheckpointStatus.inProgress;
+  bool get isBlocked => status == CheckpointStatus.blocked;
+
+  bool get isHighPriority =>
+      priority == CheckpointPriority.highest ||
+      priority == CheckpointPriority.high;
+
+  String get statusDisplay {
+    switch (status) {
+      case CheckpointStatus.todo:
+        return 'To Do';
+      case CheckpointStatus.inProgress:
+        return 'In Progress';
+      case CheckpointStatus.codeReview:
+        return 'Code Review';
+      case CheckpointStatus.testing:
+        return 'Testing';
+      case CheckpointStatus.done:
+        return 'Done';
+      case CheckpointStatus.blocked:
+        return 'Blocked';
+      case CheckpointStatus.cancelled:
+        return 'Cancelled';
+    }
+  }
+
+  String get priorityDisplay {
+    switch (priority) {
+      case CheckpointPriority.highest:
+        return 'Highest';
+      case CheckpointPriority.high:
+        return 'High';
+      case CheckpointPriority.medium:
+        return 'Medium';
+      case CheckpointPriority.low:
+        return 'Low';
+      case CheckpointPriority.lowest:
+        return 'Lowest';
+    }
+  }
+
+  String get typeDisplay {
+    switch (type) {
+      case CheckpointType.epic:
+        return 'Epic';
+      case CheckpointType.story:
+        return 'Story';
+      case CheckpointType.task:
+        return 'Task';
+      case CheckpointType.bug:
+        return 'Bug';
+      case CheckpointType.subtask:
+        return 'Subtask';
+      case CheckpointType.milestone:
+        return 'Milestone';
+      case CheckpointType.review:
+        return 'Review';
+      case CheckpointType.testing:
+        return 'Testing';
+    }
   }
 }
 
-class FlowResource {
+// Config written to repo root (buddy.json) when scaffolding a project
+class BuddyScaffoldCheckpointMap {
   final String id;
   final String title;
-  final String description;
-  final String url;
-  final ResourceType type;
+  final List<String> filePatterns;
+  final List<String> rules; // e.g. ['exists', 'tests_pass']
 
-  FlowResource({
+  BuddyScaffoldCheckpointMap({
     required this.id,
     required this.title,
-    required this.description,
-    required this.url,
-    this.type = ResourceType.link,
+    this.filePatterns = const [],
+    this.rules = const [],
   });
 
-  factory FlowResource.fromJson(Map<String, dynamic> json) {
-    return FlowResource(
-      id: json['id']?.toString() ?? '',
-      title: json['title']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
-      url: json['url']?.toString() ?? '',
-      type: ResourceType.values.firstWhere(
-        (e) => e.name == json['type'],
-        orElse: () => ResourceType.link,
-      ),
-    );
-  }
+  factory BuddyScaffoldCheckpointMap.fromJson(Map<String, dynamic> json) =>
+      BuddyScaffoldCheckpointMap(
+        id: json['id']?.toString() ?? '',
+        title: json['title']?.toString() ?? '',
+        filePatterns:
+            (json['file_patterns'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const [],
+        rules:
+            (json['rules'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const [],
+      );
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'description': description,
-      'url': url,
-      'type': type.name,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'file_patterns': filePatterns,
+    'rules': rules,
+  };
 }
 
-enum FlowStatus { active, completed, paused, cancelled }
+class BuddyScaffoldConfig {
+  final String? template;
+  final String? language;
+  final List<BuddyScaffoldCheckpointMap> checkpoints;
 
-enum FlowDifficulty { easy, medium, hard, expert }
-
-enum CheckpointType { task, milestone, review, testing }
-
-enum ResourceType { link, document, video, tutorial, tool }
-
-// Enhanced BuddyMessage for flow context
-class FlowBuddyMessage extends BuddyMessage {
-  final String? flowId;
-  final String? checkpointId;
-  final MessageContext context;
-  final Map<String, dynamic>? flowData; // For storing flow preview data
-
-  FlowBuddyMessage({
-    required super.id,
-    required super.content,
-    required super.role,
-    required super.timestamp,
-    this.flowId,
-    this.checkpointId,
-    this.context = MessageContext.general,
-    this.flowData,
+  BuddyScaffoldConfig({
+    this.template,
+    this.language,
+    this.checkpoints = const [],
   });
 
-  factory FlowBuddyMessage.fromJson(Map<String, dynamic> json) {
-    return FlowBuddyMessage(
-      id: json['id']?.toString() ?? '',
-      content: json['content']?.toString() ?? '',
-      role: BuddyRole.values.firstWhere(
-        (e) => e.name == json['role'],
-        orElse: () => BuddyRole.user,
-      ),
-      timestamp: DateTime.parse(
-        json['timestamp'] ?? DateTime.now().toIso8601String(),
-      ),
-      flowId: json['flow_id']?.toString(),
-      checkpointId: json['checkpoint_id']?.toString(),
-      context: MessageContext.values.firstWhere(
-        (e) => e.name == json['context'],
-        orElse: () => MessageContext.general,
-      ),
-      flowData: json['flow_data'] as Map<String, dynamic>?,
-    );
-  }
+  factory BuddyScaffoldConfig.fromJson(Map<String, dynamic> json) =>
+      BuddyScaffoldConfig(
+        template: json['template']?.toString(),
+        language: json['language']?.toString(),
+        checkpoints:
+            (json['checkpoints'] as List<dynamic>?)
+                ?.map(
+                  (e) => BuddyScaffoldCheckpointMap.fromJson(
+                    e as Map<String, dynamic>,
+                  ),
+                )
+                .toList() ??
+            const [],
+      );
 
-  @override
-  Map<String, dynamic> toJson() {
-    final json = super.toJson();
-    json.addAll({
-      'flow_id': flowId,
-      'checkpoint_id': checkpointId,
-      'context': context.name,
-      'flow_data': flowData,
-    });
-    return json;
-  }
+  Map<String, dynamic> toJson() => {
+    if (template != null) 'template': template,
+    if (language != null) 'language': language,
+    'checkpoints': checkpoints.map((c) => c.toJson()).toList(),
+  };
 }
 
-enum MessageContext {
-  general,
-  flowCreation,
-  flowConfirmation,
-  checkpointHelp,
-  flowProgress,
+// File change events coming from editors (VS Code or Buddy Editor)
+class CodeEvent {
+  final String path;
+  final String event; // created|modified|deleted
+  final String? sha; // optional commit/file hash when available
+  final String editor; // 'vscode' | 'buddy'
+  final DateTime timestamp;
+
+  CodeEvent({
+    required this.path,
+    required this.event,
+    this.sha,
+    required this.editor,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
+
+  factory CodeEvent.fromJson(Map<String, dynamic> json) => CodeEvent(
+    path: json['path']?.toString() ?? '',
+    event: json['event']?.toString() ?? 'modified',
+    sha: json['sha']?.toString(),
+    editor: json['editor']?.toString() ?? 'vscode',
+    timestamp:
+        DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
+        DateTime.now(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'path': path,
+    'event': event,
+    'sha': sha,
+    'editor': editor,
+    'timestamp': timestamp.toIso8601String(),
+  };
 }
 
-// Alarm and Reminder Models
+// ---------------- Alarms ----------------
+enum AlarmType { task, deadline, reminder, meeting }
+
+enum AlarmRepeat { none, daily, weekly, monthly, custom }
+
 class FlowAlarm {
   final String id;
   final String title;
-  final String description;
+  final String? description;
   final DateTime scheduledTime;
   final bool isActive;
-  final AlarmType type;
-  final AlarmRepeat repeat;
+  final AlarmType? type;
+  final AlarmRepeat? repeat;
   final String? flowId;
   final String? checkpointId;
-  final DateTime createdAt;
-  final DateTime? lastTriggered;
+  final DateTime? createdAt;
 
   FlowAlarm({
     required this.id,
     required this.title,
-    this.description = '',
+    this.description,
     required this.scheduledTime,
     this.isActive = true,
-    this.type = AlarmType.reminder,
-    this.repeat = AlarmRepeat.none,
+    this.type,
+    this.repeat,
     this.flowId,
     this.checkpointId,
-    required this.createdAt,
-    this.lastTriggered,
+    this.createdAt,
   });
-
-  factory FlowAlarm.fromJson(Map<String, dynamic> json) {
-    return FlowAlarm(
-      id: json['id']?.toString() ?? '',
-      title: json['title']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
-      scheduledTime: DateTime.parse(
-        json['scheduled_time'] ?? DateTime.now().toIso8601String(),
-      ),
-      isActive: json['is_active'] ?? true,
-      type: AlarmType.values.firstWhere(
-        (e) => e.name == json['type'],
-        orElse: () => AlarmType.reminder,
-      ),
-      repeat: AlarmRepeat.values.firstWhere(
-        (e) => e.name == json['repeat'],
-        orElse: () => AlarmRepeat.none,
-      ),
-      flowId: json['flow_id']?.toString(),
-      checkpointId: json['checkpoint_id']?.toString(),
-      createdAt: DateTime.parse(
-        json['created_at'] ?? DateTime.now().toIso8601String(),
-      ),
-      lastTriggered: json['last_triggered'] != null
-          ? DateTime.parse(json['last_triggered'])
-          : null,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'description': description,
-      'scheduled_time': scheduledTime.toIso8601String(),
-      'is_active': isActive,
-      'type': type.name,
-      'repeat': repeat.name,
-      'flow_id': flowId,
-      'checkpoint_id': checkpointId,
-      'created_at': createdAt.toIso8601String(),
-      'last_triggered': lastTriggered?.toIso8601String(),
-    };
-  }
 
   FlowAlarm copyWith({
     String? id,
@@ -1066,29 +1636,61 @@ class FlowAlarm {
     String? flowId,
     String? checkpointId,
     DateTime? createdAt,
-    DateTime? lastTriggered,
-  }) {
-    return FlowAlarm(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      description: description ?? this.description,
-      scheduledTime: scheduledTime ?? this.scheduledTime,
-      isActive: isActive ?? this.isActive,
-      type: type ?? this.type,
-      repeat: repeat ?? this.repeat,
-      flowId: flowId ?? this.flowId,
-      checkpointId: checkpointId ?? this.checkpointId,
-      createdAt: createdAt ?? this.createdAt,
-      lastTriggered: lastTriggered ?? this.lastTriggered,
-    );
-  }
+  }) => FlowAlarm(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    description: description ?? this.description,
+    scheduledTime: scheduledTime ?? this.scheduledTime,
+    isActive: isActive ?? this.isActive,
+    type: type ?? this.type,
+    repeat: repeat ?? this.repeat,
+    flowId: flowId ?? this.flowId,
+    checkpointId: checkpointId ?? this.checkpointId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+
+  factory FlowAlarm.fromJson(Map<String, dynamic> json) => FlowAlarm(
+    id: json['id']?.toString() ?? '',
+    title: json['title']?.toString() ?? '',
+    description: json['description']?.toString(),
+    scheduledTime:
+        DateTime.tryParse(json['scheduled_time']?.toString() ?? '') ??
+        DateTime.now(),
+    isActive: json['is_active'] == true || json['isActive'] == true,
+    type: json['type'] != null
+        ? AlarmType.values.firstWhere(
+            (e) => e.name == json['type'].toString(),
+            orElse: () => AlarmType.task,
+          )
+        : null,
+    repeat: json['repeat'] != null
+        ? AlarmRepeat.values.firstWhere(
+            (e) => e.name == json['repeat'].toString(),
+            orElse: () => AlarmRepeat.none,
+          )
+        : null,
+    flowId: json['flow_id']?.toString(),
+    checkpointId: json['checkpoint_id']?.toString(),
+    createdAt: json['created_at'] != null
+        ? DateTime.tryParse(json['created_at'].toString())
+        : null,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    if (description != null) 'description': description,
+    'scheduled_time': scheduledTime.toIso8601String(),
+    'is_active': isActive,
+    if (type != null) 'type': type!.name,
+    if (repeat != null) 'repeat': repeat!.name,
+    if (flowId != null) 'flow_id': flowId,
+    if (checkpointId != null) 'checkpoint_id': checkpointId,
+    if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
+  };
 }
 
-enum AlarmType { reminder, deadline, meeting, task, custom }
-
-enum AlarmRepeat { none, daily, weekly, monthly, custom }
-
-// Task models for Flow automation
+// ---------------- Tasks ----------------
 enum TaskPriority { low, normal, high, urgent }
 
 enum TaskStatus { todo, inProgress, done, blocked }
@@ -1102,9 +1704,9 @@ class FlowTask {
   final TaskStatus status;
   final String? flowId;
   final String? checkpointId;
-  final DateTime createdAt;
-  final DateTime updatedAt;
   final List<String> labels;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   FlowTask({
     required this.id,
@@ -1115,59 +1717,10 @@ class FlowTask {
     this.status = TaskStatus.todo,
     this.flowId,
     this.checkpointId,
-    DateTime? createdAt,
-    DateTime? updatedAt,
     this.labels = const [],
-  }) : createdAt = createdAt ?? DateTime.now(),
-       updatedAt = updatedAt ?? DateTime.now();
-
-  factory FlowTask.fromJson(Map<String, dynamic> json) {
-    return FlowTask(
-      id:
-          json['id']?.toString() ??
-          DateTime.now().millisecondsSinceEpoch.toString(),
-      title: json['title']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
-      dueDate: json['due_date'] != null
-          ? DateTime.tryParse(json['due_date'].toString())
-          : null,
-      priority: TaskPriority.values.firstWhere(
-        (e) => e.name == (json['priority']?.toString() ?? 'normal'),
-        orElse: () => TaskPriority.normal,
-      ),
-      status: TaskStatus.values.firstWhere(
-        (e) => e.name == (json['status']?.toString() ?? 'todo'),
-        orElse: () => TaskStatus.todo,
-      ),
-      flowId: json['flow_id']?.toString(),
-      checkpointId: json['checkpoint_id']?.toString(),
-      createdAt:
-          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
-          DateTime.now(),
-      updatedAt:
-          DateTime.tryParse(json['updated_at']?.toString() ?? '') ??
-          DateTime.now(),
-      labels:
-          (json['labels'] as List?)?.map((e) => e.toString()).toList() ??
-          const [],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'description': description,
-      'due_date': dueDate?.toIso8601String(),
-      'priority': priority.name,
-      'status': status.name,
-      'flow_id': flowId,
-      'checkpoint_id': checkpointId,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
-      'labels': labels,
-    };
-  }
+    this.createdAt,
+    this.updatedAt,
+  });
 
   FlowTask copyWith({
     String? id,
@@ -1178,45 +1731,329 @@ class FlowTask {
     TaskStatus? status,
     String? flowId,
     String? checkpointId,
+    List<String>? labels,
     DateTime? createdAt,
     DateTime? updatedAt,
-    List<String>? labels,
-  }) {
-    return FlowTask(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      description: description ?? this.description,
-      dueDate: dueDate ?? this.dueDate,
-      priority: priority ?? this.priority,
-      status: status ?? this.status,
-      flowId: flowId ?? this.flowId,
-      checkpointId: checkpointId ?? this.checkpointId,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      labels: labels ?? this.labels,
-    );
+  }) => FlowTask(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    description: description ?? this.description,
+    dueDate: dueDate ?? this.dueDate,
+    priority: priority ?? this.priority,
+    status: status ?? this.status,
+    flowId: flowId ?? this.flowId,
+    checkpointId: checkpointId ?? this.checkpointId,
+    labels: labels ?? this.labels,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+
+  factory FlowTask.fromJson(Map<String, dynamic> json) => FlowTask(
+    id: json['id']?.toString() ?? '',
+    title: json['title']?.toString() ?? '',
+    description: json['description']?.toString() ?? '',
+    dueDate: json['due_date'] != null
+        ? DateTime.tryParse(json['due_date'].toString())
+        : null,
+    priority: TaskPriority.values.firstWhere(
+      (e) => e.name == (json['priority']?.toString().toLowerCase() ?? 'normal'),
+      orElse: () => TaskPriority.normal,
+    ),
+    status: TaskStatus.values.firstWhere(
+      (e) => e.name == (json['status']?.toString() ?? 'todo'),
+      orElse: () => TaskStatus.todo,
+    ),
+    flowId: json['flow_id']?.toString(),
+    checkpointId: json['checkpoint_id']?.toString(),
+    labels:
+        (json['labels'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+        const [],
+    createdAt: json['created_at'] != null
+        ? DateTime.tryParse(json['created_at'].toString())
+        : null,
+    updatedAt: json['updated_at'] != null
+        ? DateTime.tryParse(json['updated_at'].toString())
+        : null,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'description': description,
+    if (dueDate != null) 'due_date': dueDate!.toIso8601String(),
+    'priority': priority.name,
+    'status': status.name,
+    if (flowId != null) 'flow_id': flowId,
+    if (checkpointId != null) 'checkpoint_id': checkpointId,
+    'labels': labels,
+    if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
+    if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
+  };
+}
+
+// ---------------- Dashboard ----------------
+class FlowDashboard {
+  final _FlowDashFlow flow;
+  final _FlowDashProgress progress;
+  final List<String> participants;
+  final int notesCount;
+  final int assignmentsCount;
+  final List<_FlowDashAlarm> upcomingAlarms;
+  final List<String> insights;
+
+  FlowDashboard({
+    required this.flow,
+    required this.progress,
+    this.participants = const [],
+    this.notesCount = 0,
+    this.assignmentsCount = 0,
+    this.upcomingAlarms = const [],
+    this.insights = const [],
+  });
+
+  factory FlowDashboard.fromJson(Map<String, dynamic> json) => FlowDashboard(
+    flow: _FlowDashFlow.fromJson(json['flow'] as Map<String, dynamic>),
+    progress: _FlowDashProgress.fromJson(
+      json['progress'] as Map<String, dynamic>,
+    ),
+    participants:
+        (json['participants'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        const [],
+    notesCount: (json['notes_count'] as num?)?.toInt() ?? 0,
+    assignmentsCount: (json['assignments_count'] as num?)?.toInt() ?? 0,
+    upcomingAlarms:
+        (json['upcoming_alarms'] as List<dynamic>?)
+            ?.map((e) => _FlowDashAlarm.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        const [],
+    insights:
+        (json['insights'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        const [],
+  );
+}
+
+class _FlowDashFlow {
+  final String id;
+  final String title;
+  final FlowStatus? status;
+  final FlowDifficulty? difficulty;
+  final String? estimatedDuration;
+  final int currentCheckpointIndex;
+  final List<String> tags;
+
+  _FlowDashFlow({
+    required this.id,
+    required this.title,
+    this.status,
+    this.difficulty,
+    this.estimatedDuration,
+    this.currentCheckpointIndex = 0,
+    this.tags = const [],
+  });
+
+  factory _FlowDashFlow.fromJson(Map<String, dynamic> json) => _FlowDashFlow(
+    id: json['id']?.toString() ?? '',
+    title: json['title']?.toString() ?? '',
+    status: (json['status'] != null)
+        ? FlowStatus.values.firstWhere(
+            (e) => e.name == json['status'].toString(),
+            orElse: () => FlowStatus.active,
+          )
+        : null,
+    difficulty: (json['difficulty'] != null)
+        ? FlowDifficulty.values.firstWhere(
+            (e) => e.name == json['difficulty'].toString(),
+            orElse: () => FlowDifficulty.medium,
+          )
+        : null,
+    estimatedDuration: json['estimated_duration']?.toString(),
+    currentCheckpointIndex:
+        (json['current_checkpoint_index'] as num?)?.toInt() ?? 0,
+    tags:
+        (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+        const [],
+  );
+}
+
+class _FlowDashProgress {
+  final int total;
+  final int completed;
+  final double percentage;
+
+  _FlowDashProgress({
+    this.total = 0,
+    this.completed = 0,
+    this.percentage = 0.0,
+  });
+
+  factory _FlowDashProgress.fromJson(Map<String, dynamic> json) =>
+      _FlowDashProgress(
+        total: (json['total'] as num?)?.toInt() ?? 0,
+        completed: (json['completed'] as num?)?.toInt() ?? 0,
+        percentage: (json['percentage'] as num?)?.toDouble() ?? 0.0,
+      );
+}
+
+class _FlowDashAlarm {
+  final String id;
+  final String title;
+  final DateTime at;
+  final String? checkpointId;
+
+  _FlowDashAlarm({
+    required this.id,
+    required this.title,
+    required this.at,
+    this.checkpointId,
+  });
+
+  factory _FlowDashAlarm.fromJson(Map<String, dynamic> json) => _FlowDashAlarm(
+    id: json['id']?.toString() ?? '',
+    title: json['title']?.toString() ?? '',
+    at: DateTime.tryParse(json['at']?.toString() ?? '') ?? DateTime.now(),
+    checkpointId: json['checkpoint_id']?.toString(),
+  );
+}
+
+// Extension methods for enum display names and colors
+
+extension CheckpointTypeExtension on CheckpointType {
+  String get displayName {
+    switch (this) {
+      case CheckpointType.epic:
+        return 'Epic';
+      case CheckpointType.story:
+        return 'Story';
+      case CheckpointType.task:
+        return 'Task';
+      case CheckpointType.bug:
+        return 'Bug';
+      case CheckpointType.subtask:
+        return 'Subtask';
+      case CheckpointType.milestone:
+        return 'Milestone';
+      case CheckpointType.review:
+        return 'Review';
+      case CheckpointType.testing:
+        return 'Testing';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case CheckpointType.epic:
+        return Icons.rocket_launch;
+      case CheckpointType.story:
+        return Icons.library_books;
+      case CheckpointType.task:
+        return Icons.task;
+      case CheckpointType.bug:
+        return Icons.bug_report;
+      case CheckpointType.subtask:
+        return Icons.subdirectory_arrow_right;
+      case CheckpointType.milestone:
+        return Icons.flag;
+      case CheckpointType.review:
+        return Icons.rate_review;
+      case CheckpointType.testing:
+        return Icons.science;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case CheckpointType.epic:
+        return Colors.purple;
+      case CheckpointType.story:
+        return Colors.green;
+      case CheckpointType.task:
+        return Colors.blue;
+      case CheckpointType.bug:
+        return Colors.red;
+      case CheckpointType.subtask:
+        return Colors.grey;
+      case CheckpointType.milestone:
+        return Colors.orange;
+      case CheckpointType.review:
+        return Colors.teal;
+      case CheckpointType.testing:
+        return Colors.indigo;
+    }
   }
 }
 
-// Status (Stories) models
-enum StatusType { image, video }
+extension CheckpointStatusExtension on CheckpointStatus {
+  String get displayName {
+    switch (this) {
+      case CheckpointStatus.todo:
+        return 'To Do';
+      case CheckpointStatus.inProgress:
+        return 'In Progress';
+      case CheckpointStatus.codeReview:
+        return 'Code Review';
+      case CheckpointStatus.testing:
+        return 'Testing';
+      case CheckpointStatus.done:
+        return 'Done';
+      case CheckpointStatus.blocked:
+        return 'Blocked';
+      case CheckpointStatus.cancelled:
+        return 'Cancelled';
+    }
+  }
 
-class StatusItem {
-  final String id;
-  final String userId;
-  final String userName;
-  final String mediaUrl; // network image/video url
-  final StatusType type;
-  final DateTime timestamp;
-  bool seen;
+  Color get color {
+    switch (this) {
+      case CheckpointStatus.todo:
+        return Colors.grey.shade400;
+      case CheckpointStatus.inProgress:
+        return Colors.blue;
+      case CheckpointStatus.codeReview:
+        return Colors.orange;
+      case CheckpointStatus.testing:
+        return Colors.purple;
+      case CheckpointStatus.done:
+        return Colors.green;
+      case CheckpointStatus.blocked:
+        return Colors.red;
+      case CheckpointStatus.cancelled:
+        return Colors.grey.shade600;
+    }
+  }
+}
 
-  StatusItem({
-    required this.id,
-    required this.userId,
-    required this.userName,
-    required this.mediaUrl,
-    this.type = StatusType.image,
-    required this.timestamp,
-    this.seen = false,
-  });
+extension CheckpointPriorityExtension on CheckpointPriority {
+  String get displayName {
+    switch (this) {
+      case CheckpointPriority.highest:
+        return 'Highest';
+      case CheckpointPriority.high:
+        return 'High';
+      case CheckpointPriority.medium:
+        return 'Medium';
+      case CheckpointPriority.low:
+        return 'Low';
+      case CheckpointPriority.lowest:
+        return 'Lowest';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case CheckpointPriority.highest:
+        return Colors.red.shade700;
+      case CheckpointPriority.high:
+        return Colors.red.shade400;
+      case CheckpointPriority.medium:
+        return Colors.orange;
+      case CheckpointPriority.low:
+        return Colors.green.shade400;
+      case CheckpointPriority.lowest:
+        return Colors.green.shade700;
+    }
+  }
 }

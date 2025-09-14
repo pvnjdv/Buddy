@@ -179,3 +179,52 @@ class ChatContactResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+# New: Checkpoint Note Schemas
+class FlowCheckpointNoteCreate(BaseModel):
+    title: str
+    content: str
+    tags: Optional[List[str]] = []
+
+class FlowCheckpointNoteUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+class FlowCheckpointNoteResponse(BaseModel):
+    id: int
+    flow_id: int
+    checkpoint_id: int
+    user_id: int
+    title: str
+    content: str
+    tags: List[str] = []
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+# New: Checkpoint Assignment Schemas
+class FlowCheckpointAssignmentCreate(BaseModel):
+    assignee_id: int
+    assignee_name: Optional[str] = None
+
+class FlowCheckpointAssignmentResponse(BaseModel):
+    id: int
+    flow_id: int
+    checkpoint_id: int
+    assignee_id: int
+    assignee_name: Optional[str] = None
+    assigned_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+# New: Checkpoint Alarm creation
+class FlowCheckpointAlarmCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    scheduled_time: datetime
+    type: Optional[str] = "task"  # aligns with AlarmType
+    repeat: Optional[str] = "none"  # aligns with AlarmRepeat

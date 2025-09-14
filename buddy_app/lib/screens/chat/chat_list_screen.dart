@@ -5,11 +5,8 @@ import '../../models/flow_models.dart';
 import '../../services/flow_service.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/user_service.dart';
-import '../../services/contacts_service.dart';
 import '../../services/sync/status_service.dart';
-import '../../config/settings/theme_config.dart';
 import '../../widgets/new_chat_bottom_sheet.dart';
-import '../contacts_screen.dart';
 import 'enhanced_individual_chat_screen.dart';
 import 'status_viewer_screen.dart';
 
@@ -23,7 +20,6 @@ class ChatListScreen extends StatefulWidget {
 class _ChatListScreenState extends State<ChatListScreen> {
   List<ChatContact> _contacts = [];
   bool _loading = true;
-  String _searchQuery = '';
   List<StatusItem> _statuses = [];
   String? _currentUserId;
   StreamSubscription? _wsSub;
@@ -127,7 +123,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error loading contacts: $e'),
-            backgroundColor: AppTheme.errorColor,
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -146,31 +142,40 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   List<ChatContact> get _filteredContacts {
-    if (_searchQuery.isEmpty) return _contacts;
-    return _contacts
-        .where(
-          (contact) =>
-              contact.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-              (contact.phoneNumber?.contains(_searchQuery) ?? false),
-        )
-        .toList();
+    return _contacts;
   }
 
   @override
   Widget build(BuildContext context) {
-    final statusBarHeight = 96.0;
+    final statusBarHeight = 90.0; // Reduced height to bring closer to app bar
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        bottom: false,
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D1B2A), Color(0xFF1B263B), Color(0xFF2D3748)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
         child: Column(
           children: [
-            SizedBox(
+            // Status bar section - removed extra spacing
+            Container(
               height: statusBarHeight,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A202C).withOpacity(0.7),
+                border: Border(
+                  bottom: BorderSide(
+                    color: const Color(0xFF4A5568).withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+              ),
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
-                  vertical: 6,
+                  vertical: 4, // Reduced vertical padding for tighter spacing
                 ),
                 scrollDirection: Axis.horizontal,
                 itemBuilder: (context, index) {
@@ -184,14 +189,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           height: 56,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                            ),
                             border: Border.all(
-                              color: AppTheme.primaryColor,
+                              color: const Color(0xFF667EEA),
                               width: 2,
                             ),
                           ),
-                          child: CircleAvatar(
-                            backgroundColor: Colors.grey[300],
-                            child: Icon(Icons.add, color: Colors.grey[800]),
+                          child: const CircleAvatar(
+                            backgroundColor: Colors.transparent,
+                            child: Icon(Icons.add, color: Colors.white),
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -202,7 +210,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 11, height: 1.1),
+                            style: TextStyle(
+                              fontSize: 11,
+                              height: 1.1,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ],
@@ -283,10 +295,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 11,
                               height: 1.1,
-                              color: Colors.grey[700],
+                              color: Colors.white70,
                             ),
                           ),
                         ),
@@ -298,57 +310,23 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 itemCount: 1 + (_statuses.isEmpty ? 6 : _statuses.length),
               ),
             ),
-            // Search bar
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.borderColor),
-                ),
-                child: TextField(
-                  onChanged: (value) => setState(() => _searchQuery = value),
-                  style: TextStyle(color: AppTheme.textPrimaryColor),
-                  decoration: InputDecoration(
-                    hintText: 'Search chats...',
-                    hintStyle: TextStyle(color: AppTheme.textSecondaryColor),
-                    prefixIcon: Icon(
-                      Icons.search,
-                      color: AppTheme.textSecondaryColor,
-                    ),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: Icon(
-                              Icons.clear,
-                              color: AppTheme.textSecondaryColor,
-                            ),
-                            onPressed: () => setState(() => _searchQuery = ''),
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            const SizedBox(
+              height: 8,
+            ), // Reduced space between status and chat list for tighter layout
             // Chat list
             Expanded(
               child: _loading
-                  ? Center(
+                  ? const Center(
                       child: CircularProgressIndicator(
-                        color: AppTheme.primaryColor,
+                        color: Color(0xFF667EEA),
                       ),
                     )
                   : _filteredContacts.isEmpty
                   ? _buildEmptyState()
                   : RefreshIndicator(
                       onRefresh: _loadContacts,
-                      color: AppTheme.primaryColor,
-                      backgroundColor: AppTheme.surfaceColor,
+                      color: const Color(0xFF667EEA),
+                      backgroundColor: const Color(0xFF1A202C),
                       child: ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: _filteredContacts.length,
@@ -365,9 +343,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
       floatingActionButton: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+          ),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.primaryColor.withOpacity(0.3),
+              color: const Color(0xFF667EEA).withOpacity(0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -375,7 +356,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ),
         child: FloatingActionButton(
           onPressed: _showNewChatSheet,
-          backgroundColor: AppTheme.primaryColor,
+          backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
           elevation: 0,
           child: const Icon(Icons.add_comment_outlined),
@@ -388,196 +369,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: const Color(0xFF1A202C),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) => NewChatBottomSheet(currentUserId: _currentUserId),
     );
-  }
-
-  Widget _buildPhoneNumberTab() {
-    final controller = TextEditingController();
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        children: [
-          TextField(
-            controller: controller,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Phone number',
-              hintText: 'e.g. 9579348057',
-              prefixIcon: Icon(Icons.phone),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    final phone = controller.text.trim();
-                    if (phone.isEmpty) return;
-                    ChatContact? contact = _contacts.firstWhere(
-                      (c) => (c.phoneNumber ?? '') == phone,
-                      orElse: () => ChatContact(id: '', name: ''),
-                    );
-                    if (contact.id.isEmpty) {
-                      final resolved =
-                          await EnhancedChatService.resolveContactByPhone(
-                            phone,
-                          );
-                      if (resolved != null) {
-                        contact = resolved;
-                      } else {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('User not found for phone'),
-                            ),
-                          );
-                        }
-                        return;
-                      }
-                    }
-                    if (!mounted) return;
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EnhancedIndividualChatScreen(
-                          contactId: contact!.id,
-                          contactName: contact.name.isNotEmpty
-                              ? contact.name
-                              : contact.phoneNumber ?? 'Unknown',
-                          currentUserId: _currentUserId ?? '',
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.chat),
-                  label: const Text('Start Chat'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQuickContactsTab() {
-    return FutureBuilder<List<ChatContact>>(
-      future: _getQuickContacts(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final quickContacts = snapshot.data ?? [];
-        if (quickContacts.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.contacts_outlined,
-                  size: 48,
-                  color: AppTheme.textSecondaryColor,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No Buddy contacts found',
-                  style: TextStyle(color: AppTheme.textSecondaryColor),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _openContacts();
-                  },
-                  child: const Text('View all contacts'),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.only(top: 16),
-          itemCount: quickContacts.length,
-          itemBuilder: (context, index) {
-            final contact = quickContacts[index];
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundColor: AppTheme.primaryColor,
-                backgroundImage: contact.profileImageUrl?.isNotEmpty == true
-                    ? NetworkImage(contact.profileImageUrl!)
-                    : null,
-                child: contact.profileImageUrl?.isEmpty != false
-                    ? Text(
-                        contact.name.isNotEmpty
-                            ? contact.name[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(color: Colors.white),
-                      )
-                    : null,
-              ),
-              title: Text(
-                contact.name,
-                style: TextStyle(
-                  color: AppTheme.textPrimaryColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              subtitle: Text(
-                contact.phoneNumber ?? '',
-                style: TextStyle(color: AppTheme.textSecondaryColor),
-              ),
-              trailing: Icon(Icons.chat_outlined, color: AppTheme.primaryColor),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => EnhancedIndividualChatScreen(
-                      contactId: contact.id,
-                      contactName: contact.name,
-                      currentUserId: _currentUserId ?? '',
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<List<ChatContact>> _getQuickContacts() async {
-    try {
-      return await ContactsService.getBuddyContacts();
-    } catch (e) {
-      return [];
-    }
-  }
-
-  void _openContacts() async {
-    final user = await UserService.getCurrentUserProfile();
-    if (mounted && user != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ContactsScreen(currentUserId: user.id),
-        ),
-      );
-    }
   }
 
   Widget _buildEmptyState() {
@@ -589,40 +386,50 @@ class _ChatListScreenState extends State<ChatListScreen> {
             width: 120,
             height: 120,
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.1),
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF667EEA).withOpacity(0.2),
+                  const Color(0xFF764BA2).withOpacity(0.2),
+                ],
+              ),
               borderRadius: BorderRadius.circular(60),
             ),
-            child: Icon(
+            child: const Icon(
               Icons.chat_bubble_outline,
               size: 48,
-              color: AppTheme.primaryColor,
+              color: Color(0xFF667EEA),
             ),
           ),
           const SizedBox(height: 24),
           Text(
-            _searchQuery.isNotEmpty ? 'No contacts found' : 'No chats yet',
-            style: TextStyle(
+            'No chats yet',
+            style: const TextStyle(
               fontSize: 20,
-              color: AppTheme.textPrimaryColor,
+              color: Colors.white,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            _searchQuery.isNotEmpty
-                ? 'Try a different search term'
-                : 'Start a conversation with someone',
-            style: TextStyle(color: AppTheme.textSecondaryColor, fontSize: 14),
+            'Start a conversation with someone',
+            style: TextStyle(color: Colors.grey[400], fontSize: 14),
           ),
-          if (_searchQuery.isEmpty) ...[
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
+          const SizedBox(height: 32),
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ElevatedButton.icon(
               onPressed: _showNewChatSheet,
               icon: const Icon(Icons.add),
               label: const Text('Start New Chat'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
+                backgroundColor: Colors.transparent,
                 foregroundColor: Colors.white,
+                elevation: 0,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 12,
@@ -632,7 +439,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 ),
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -644,12 +451,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        color: const Color(0xFF1A202C),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.borderColor),
+        border: Border.all(color: const Color(0xFF4A5568).withOpacity(0.3)),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.shadowColor,
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -670,8 +477,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
-                        gradient: LinearGradient(
-                          colors: [AppTheme.primaryColor, AppTheme.accentColor],
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -702,10 +509,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           width: 16,
                           height: 16,
                           decoration: BoxDecoration(
-                            color: AppTheme.successColor,
+                            color: const Color(0xFF10B981),
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: AppTheme.surfaceColor,
+                              color: const Color(0xFF1A202C),
                               width: 2,
                             ),
                           ),
@@ -731,7 +538,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                 fontWeight: hasUnread
                                     ? FontWeight.w600
                                     : FontWeight.w500,
-                                color: AppTheme.textPrimaryColor,
+                                color: Colors.white,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -743,8 +550,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               style: TextStyle(
                                 fontSize: 12,
                                 color: hasUnread
-                                    ? AppTheme.primaryColor
-                                    : AppTheme.textSecondaryColor,
+                                    ? const Color(0xFF667EEA)
+                                    : Colors.grey[400],
                                 fontWeight: hasUnread
                                     ? FontWeight.w600
                                     : FontWeight.normal,
@@ -761,8 +568,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 color: hasUnread
-                                    ? AppTheme.textPrimaryColor
-                                    : AppTheme.textSecondaryColor,
+                                    ? Colors.white
+                                    : Colors.grey[400],
                                 fontWeight: hasUnread
                                     ? FontWeight.w500
                                     : FontWeight.normal,
@@ -778,7 +585,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.primaryColor,
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF667EEA),
+                                    Color(0xFF764BA2),
+                                  ],
+                                ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(

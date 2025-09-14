@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:convert';
 import '../../../models/flow_models.dart';
 import '../../../models/collaboration_models.dart';
 import '../../../services/flow_service.dart';
 import '../../../services/ai/buddy_service.dart';
 import '../../../services/collaboration/team_collaboration_service.dart';
+import '../../../services/auth/auth_service.dart';
 
 class FlowDetailScreen extends StatefulWidget {
   final ProjectFlow flow;
@@ -17,11 +20,71 @@ class FlowDetailScreen extends StatefulWidget {
 class _FlowDetailScreenState extends State<FlowDetailScreen> {
   late ProjectFlow _flow;
   bool _isLoading = false;
+  StreamSubscription? _flowWsSub;
 
   @override
   void initState() {
     super.initState();
     _flow = widget.flow;
+    _initFlowSocket();
+  }
+
+  Future<void> _initFlowSocket() async {
+    try {
+      final token = await AuthService.getToken();
+      if (token == null) return;
+      FlowService.connectFlowSocket(token: token, flowId: _flow.id.toString());
+      _flowWsSub = FlowService.flowSocketStream?.listen(_onFlowWsEvent);
+    } catch (_) {}
+  }
+
+  void _onFlowWsEvent(dynamic event) {
+    try {
+      final payload = event is String ? jsonDecode(event) : event;
+      if (payload is Map && payload['type'] == 'flow_update') {
+        final data = payload['data'] as Map?;
+        if (data == null) return;
+        final updatedIds =
+            (data['updated_checkpoint_ids'] as List<dynamic>? ?? [])
+                .map((e) => e.toString())
+                .toSet();
+        final newIndex = data['current_checkpoint_index'] as int?;
+        final statusStr = data['status']?.toString();
+        FlowStatus? newStatus;
+        if (statusStr != null) {
+          newStatus = FlowStatus.values.firstWhere(
+            (e) =>
+                e.name == statusStr ||
+                e.toString().split('.').last == statusStr,
+            orElse: () => _flow.status,
+          );
+        }
+        // Build updated checkpoints list
+        final updatedCps = _flow.checkpoints.map((cp) {
+          if (updatedIds.contains(cp.id)) {
+            return cp.copyWith(isCompleted: true, completedAt: DateTime.now());
+          }
+          return cp;
+        }).toList();
+
+        setState(() {
+          _flow = _flow.copyWith(
+            checkpoints: updatedCps,
+            currentCheckpointIndex: newIndex ?? _flow.currentCheckpointIndex,
+            status: newStatus ?? _flow.status,
+          );
+        });
+      }
+    } catch (e) {
+      // ignore malformed events
+    }
+  }
+
+  @override
+  void dispose() {
+    _flowWsSub?.cancel();
+    FlowService.disconnectFlowSocket();
+    super.dispose();
   }
 
   Future<void> _toggleCheckpoint(FlowCheckpoint checkpoint) async {
@@ -849,6 +912,555 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
     );
   }
 
+  // --- Dashboard & Scaffold ---
+  Future<void> _openDashboard() async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      final data = await FlowService.getFlowDashboard(_flow.id);
+      Navigator.of(context).pop();
+      final dashboard = FlowDashboard.fromJson(data);
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (_) => _buildDashboardSheet(dashboard),
+      );
+    } catch (e) {
+      Navigator.of(context).maybePop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load dashboard: $e')));
+    }
+  }
+
+  Future<void> _scaffoldProject() async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      await FlowService.scaffoldFlow(_flow.id);
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Scaffold request queued.')));
+    } catch (e) {
+      Navigator.of(context).maybePop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to scaffold: $e')));
+    }
+  }
+
+  Widget _buildDashboardSheet(FlowDashboard d) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.analytics, color: Colors.blue),
+                const SizedBox(width: 8),
+                Text(
+                  d.flow.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(value: d.progress.percentage / 100.0),
+            const SizedBox(height: 8),
+            Text(
+              'Progress: ${d.progress.completed}/${d.progress.total} (${d.progress.percentage.toStringAsFixed(1)}%)',
+            ),
+            const SizedBox(height: 12),
+            if (d.participants.isNotEmpty) ...[
+              const Text(
+                'Participants',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                children: d.participants
+                    .map((p) => Chip(label: Text(p)))
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Row(
+              children: [
+                _metric('Notes', d.notesCount, Icons.note_alt, Colors.indigo),
+                const SizedBox(width: 12),
+                _metric(
+                  'Assignments',
+                  d.assignmentsCount,
+                  Icons.assignment_ind,
+                  Colors.teal,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Upcoming',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            if (d.upcomingAlarms.isEmpty)
+              const Text('No upcoming alarms')
+            else
+              ...d.upcomingAlarms.map(
+                (a) => ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.alarm),
+                  title: Text(a.title),
+                  subtitle: Text(a.at.toLocal().toString()),
+                ),
+              ),
+            const SizedBox(height: 12),
+            const Text(
+              'Insights',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 6),
+            ...d.insights.map(
+              (i) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.lightbulb, size: 16, color: Colors.amber),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(i)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _metric(String label, int value, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey[300]!),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 8),
+            Text(
+              '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            Text('$value'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- Checkpoint Notes / Assignments / Alarms ---
+  Future<void> _showCheckpointNotes(FlowCheckpoint cp) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      final items = await FlowService.getCheckpointNotes(_flow.id, cp.id);
+      Navigator.of(context).pop();
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (_) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Notes'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _addCheckpointNote(cp);
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              if (items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No notes yet'),
+                )
+              else
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: items.length,
+                    itemBuilder: (_, i) => ListTile(
+                      leading: const Icon(Icons.note),
+                      title: Text(items[i]['title']?.toString() ?? ''),
+                      subtitle: Text(
+                        (items[i]['content']?.toString() ?? '')
+                            .split('\n')
+                            .first,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      Navigator.of(context).maybePop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load notes: $e')));
+    }
+  }
+
+  Future<void> _addCheckpointNote(FlowCheckpoint cp) async {
+    final titleCtrl = TextEditingController();
+    final contentCtrl = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Add Note'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleCtrl,
+              decoration: const InputDecoration(labelText: 'Title'),
+            ),
+            TextField(
+              controller: contentCtrl,
+              decoration: const InputDecoration(labelText: 'Content'),
+              maxLines: 4,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await FlowService.createCheckpointNote(
+                  _flow.id,
+                  cp.id,
+                  title: titleCtrl.text.trim(),
+                  content: contentCtrl.text.trim(),
+                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Note added')));
+              } catch (e) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAssignments(FlowCheckpoint cp) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      final items = await FlowService.getCheckpointAssignments(_flow.id, cp.id);
+      Navigator.of(context).pop();
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (_) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Assignments'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _assignCheckpoint(cp);
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              if (items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No assignments'),
+                )
+              else
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: items.length,
+                    itemBuilder: (_, i) => ListTile(
+                      leading: const Icon(Icons.assignment_ind),
+                      title: Text(
+                        items[i]['assignee_name']?.toString() ??
+                            items[i]['assignee_id']?.toString() ??
+                            '',
+                      ),
+                      subtitle: Text(
+                        'Assigned at: ' +
+                            (items[i]['assigned_at']?.toString() ?? ''),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      Navigator.of(context).maybePop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load assignments: $e')));
+    }
+  }
+
+  Future<void> _assignCheckpoint(FlowCheckpoint cp) async {
+    final idCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Assign Checkpoint'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: idCtrl,
+              decoration: const InputDecoration(labelText: 'Assignee ID'),
+            ),
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Assignee Name (optional)',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await FlowService.assignCheckpoint(
+                  _flow.id,
+                  cp.id,
+                  assigneeId: idCtrl.text.trim(),
+                  assigneeName: nameCtrl.text.trim().isEmpty
+                      ? null
+                      : nameCtrl.text.trim(),
+                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Assigned')));
+              } catch (e) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+              }
+            },
+            child: const Text('Assign'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCheckpointAlarms(FlowCheckpoint cp) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      final items = await FlowService.getCheckpointAlarms(_flow.id, cp.id);
+      Navigator.of(context).pop();
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (_) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Alarms'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.add_alarm),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _addCheckpointAlarm(cp);
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              if (items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No alarms'),
+                )
+              else
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: items.length,
+                    itemBuilder: (_, i) => ListTile(
+                      leading: const Icon(Icons.alarm),
+                      title: Text(items[i]['title']?.toString() ?? ''),
+                      subtitle: Text(
+                        items[i]['scheduled_time']?.toString() ?? '',
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      Navigator.of(context).maybePop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load alarms: $e')));
+    }
+  }
+
+  Future<void> _addCheckpointAlarm(FlowCheckpoint cp) async {
+    final titleCtrl = TextEditingController();
+    DateTime? picked;
+    await showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Add Alarm'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      picked == null
+                          ? 'No time selected'
+                          : picked!.toLocal().toString(),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final d = await showDatePicker(
+                        context: context,
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                        initialDate: DateTime.now(),
+                      );
+                      if (d == null) return;
+                      final t = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.now(),
+                      );
+                      final dt = DateTime(
+                        d.year,
+                        d.month,
+                        d.day,
+                        t?.hour ?? 9,
+                        t?.minute ?? 0,
+                      );
+                      setState(() => picked = dt);
+                    },
+                    child: const Text('Pick time'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                if (picked == null) return;
+                try {
+                  await FlowService.createCheckpointAlarm(
+                    _flow.id,
+                    cp.id,
+                    title: titleCtrl.text.trim().isEmpty
+                        ? 'Reminder'
+                        : titleCtrl.text.trim(),
+                    scheduledTime: picked!,
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Alarm created')),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final progressPercentage = _flow.progressPercentage;
@@ -861,7 +1473,17 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
         foregroundColor: Colors.black,
         elevation: 1,
         actions: [
-          // Add Team Member - Always available
+          IconButton(
+            icon: const Icon(Icons.analytics_outlined),
+            onPressed: _openDashboard,
+            tooltip: 'Dashboard',
+          ),
+          IconButton(
+            icon: const Icon(Icons.build),
+            onPressed: _scaffoldProject,
+            tooltip: 'Scaffold Project',
+          ),
+          // Add Team Member
           IconButton(
             icon: const Icon(Icons.person_add),
             onPressed: _showInviteCollaboratorDialog,
@@ -1123,7 +1745,11 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
             itemBuilder: (context, index) {
               final checkpoint = _flow.checkpoints[index];
               final isCurrentCheckpoint = index == _flow.currentCheckpointIndex;
-              return _buildCheckpointCard(checkpoint, isCurrentCheckpoint);
+              return _buildCheckpointCard(
+                checkpoint,
+                isCurrentCheckpoint,
+                depth: 0,
+              );
             },
           ),
         ],
@@ -1131,311 +1757,426 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
     );
   }
 
-  Widget _buildCheckpointCard(FlowCheckpoint checkpoint, bool isCurrent) {
+  Widget _buildCheckpointCard(
+    FlowCheckpoint checkpoint,
+    bool isCurrent, {
+    int depth = 0,
+  }) {
     final isCompleted = checkpoint.isCompleted;
+    final hasChildren = checkpoint.children.isNotEmpty;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: isCurrent ? 4 : 1,
+      margin: EdgeInsets.only(
+        bottom: 12,
+        left: depth * 16.0, // Indent nested checkpoints
+      ),
+      elevation: isCurrent ? 4 : (depth > 0 ? 0.5 : 1),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: isCurrent
             ? const BorderSide(color: Colors.blue, width: 2)
+            : depth > 0
+            ? BorderSide(color: Colors.grey.shade300, width: 1)
             : BorderSide.none,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Checkbox
-                GestureDetector(
-                  onTap: _isLoading
-                      ? null
-                      : () => _toggleCheckpoint(checkpoint),
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isCompleted ? Colors.green : Colors.grey,
-                        width: 2,
-                      ),
-                      color: isCompleted ? Colors.green : Colors.transparent,
-                    ),
-                    child: isCompleted
-                        ? const Icon(Icons.check, color: Colors.white, size: 16)
-                        : null,
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                // Title and type
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              checkpoint.title,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                decoration: isCompleted
-                                    ? TextDecoration.lineThrough
-                                    : TextDecoration.none,
-                                color: isCompleted
-                                    ? Colors.grey[600]
-                                    : Colors.black,
-                              ),
-                            ),
-                          ),
-                          _buildCheckpointTypeChip(checkpoint.type),
-                        ],
-                      ),
-                      if (isCurrent) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue[50],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text(
-                            'CURRENT',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                // Help button
                 Row(
                   children: [
-                    IconButton(
-                      onPressed: () => _getCheckpointHelp(checkpoint),
-                      icon: const Icon(Icons.help_outline, color: Colors.blue),
-                      tooltip: 'Get basic help from Buddy',
+                    // Depth indicator
+                    if (depth > 0) ...[
+                      SizedBox(width: (depth - 1) * 12.0),
+                      Icon(
+                        Icons.subdirectory_arrow_right,
+                        size: 16,
+                        color: Colors.grey.shade600,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+
+                    // Checkbox
+                    GestureDetector(
+                      onTap: _isLoading
+                          ? null
+                          : () => _toggleCheckpoint(checkpoint),
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isCompleted ? Colors.green : Colors.grey,
+                            width: 2,
+                          ),
+                          color: isCompleted
+                              ? Colors.green
+                              : Colors.transparent,
+                        ),
+                        child: isCompleted
+                            ? const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 16,
+                              )
+                            : hasChildren
+                            ? Icon(
+                                Icons.folder,
+                                color: Colors.grey.shade600,
+                                size: 12,
+                              )
+                            : null,
+                      ),
                     ),
-                    IconButton(
-                      onPressed: () => _getEnhancedCheckpointHelp(checkpoint),
-                      icon: const Icon(Icons.smart_toy, color: Colors.purple),
-                      tooltip: 'Ask Buddy anything',
+
+                    const SizedBox(width: 12),
+
+                    // Title and type
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  checkpoint.title,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    decoration: isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : TextDecoration.none,
+                                    color: isCompleted
+                                        ? Colors.grey[600]
+                                        : Colors.black,
+                                  ),
+                                ),
+                              ),
+                              _buildCheckpointTypeChip(checkpoint.type),
+                            ],
+                          ),
+                          if (isCurrent) ...[
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[50],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Text(
+                                'CURRENT',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                    // Help button
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => _getCheckpointHelp(checkpoint),
+                          icon: const Icon(
+                            Icons.help_outline,
+                            color: Colors.blue,
+                          ),
+                          tooltip: 'Get basic help from Buddy',
+                        ),
+                        IconButton(
+                          onPressed: () =>
+                              _getEnhancedCheckpointHelp(checkpoint),
+                          icon: const Icon(
+                            Icons.smart_toy,
+                            color: Colors.purple,
+                          ),
+                          tooltip: 'Ask Buddy anything',
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
 
-            const SizedBox(height: 12),
+                const SizedBox(height: 12),
 
-            // Description
-            Text(
-              checkpoint.description,
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Requirements and Deliverables
-            if (checkpoint.requirements.isNotEmpty) ...[
-              _buildListSection(
-                'Requirements',
-                checkpoint.requirements,
-                Icons.list,
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            if (checkpoint.deliverables.isNotEmpty) ...[
-              _buildListSection(
-                'Deliverables',
-                checkpoint.deliverables,
-                Icons.delivery_dining,
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            // Estimated time
-            Row(
-              children: [
-                Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
-                const SizedBox(width: 4),
+                // Description
                 Text(
-                  'Estimated: ${checkpoint.estimatedTime}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  checkpoint.description,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
                 ),
-                if (checkpoint.completedAt != null) ...[
-                  const SizedBox(width: 16),
-                  Icon(Icons.check_circle, size: 16, color: Colors.green[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Completed: ${_formatDate(checkpoint.completedAt!)}',
-                    style: TextStyle(fontSize: 12, color: Colors.green[600]),
+
+                const SizedBox(height: 12),
+
+                // Requirements and Deliverables
+                if (checkpoint.requirements.isNotEmpty) ...[
+                  _buildListSection(
+                    'Requirements',
+                    checkpoint.requirements,
+                    Icons.list,
                   ),
+                  const SizedBox(height: 8),
+                ],
+
+                if (checkpoint.deliverables.isNotEmpty) ...[
+                  _buildListSection(
+                    'Deliverables',
+                    checkpoint.deliverables,
+                    Icons.delivery_dining,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                // Estimated time
+                Row(
+                  children: [
+                    Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Estimated: ${checkpoint.estimatedTime}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                    if (checkpoint.completedAt != null) ...[
+                      const SizedBox(width: 16),
+                      Icon(
+                        Icons.check_circle,
+                        size: 16,
+                        color: Colors.green[600],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Completed: ${_formatDate(checkpoint.completedAt!)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green[600],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                // Collaboration Features Section
+                if (checkpoint.workContributions.isNotEmpty ||
+                    checkpoint.assignedTo != null ||
+                    checkpoint.aiAssistance != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.purple.withOpacity(0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.people_alt,
+                              size: 16,
+                              color: Colors.purple,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Collaboration',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.purple,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Assignment info
+                        if (checkpoint.assignedTo != null) ...[
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.assignment_ind,
+                                size: 14,
+                                color: Colors.blue,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Assigned to: ${checkpoint.assignedTo}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                        ],
+
+                        // Work contributions summary
+                        if (checkpoint.workContributions.isNotEmpty) ...[
+                          Row(
+                            children: [
+                              Icon(Icons.work, size: 14, color: Colors.green),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${checkpoint.workContributions.length} contributors, ',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              Text(
+                                '${checkpoint.workContributions.fold(0.0, (sum, c) => sum + c.hoursWorked)}h total',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                        ],
+
+                        // AI assistance indicator
+                        if (checkpoint.aiAssistance != null) ...[
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.smart_toy,
+                                size: 14,
+                                color: Colors.purple,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'AI assistance available',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                // Action buttons
+                Row(
+                  children: [
+                    if (checkpoint.workContributions.isNotEmpty)
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _showWorkContributions(checkpoint),
+                          icon: const Icon(Icons.visibility, size: 16),
+                          label: const Text(
+                            'View Work',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.green,
+                            side: BorderSide(
+                              color: Colors.green.withOpacity(0.5),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                        ),
+                      ),
+
+                    if (checkpoint.workContributions.isNotEmpty)
+                      const SizedBox(width: 8),
+
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _addWorkContribution(checkpoint),
+                        icon: const Icon(Icons.add_task, size: 16),
+                        label: const Text(
+                          'Add Work',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.blue,
+                          side: BorderSide(color: Colors.blue.withOpacity(0.5)),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 8),
+
+                // New: Notes / Assign / Alarms actions
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showCheckpointNotes(checkpoint),
+                        icon: const Icon(Icons.note_alt, size: 16),
+                        label: const Text(
+                          'Notes',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showAssignments(checkpoint),
+                        icon: const Icon(Icons.assignment_ind, size: 16),
+                        label: const Text(
+                          'Assign',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _showCheckpointAlarms(checkpoint),
+                        icon: const Icon(Icons.alarm, size: 16),
+                        label: const Text(
+                          'Alarms',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Render nested children if they exist
+                if (hasChildren) ...[
+                  const SizedBox(height: 8),
+                  ...checkpoint.children
+                      .map(
+                        (child) => _buildCheckpointCard(
+                          child,
+                          false,
+                          depth: depth + 1,
+                        ),
+                      )
+                      .toList(),
                 ],
               ],
             ),
-
-            const SizedBox(height: 12),
-
-            // Collaboration Features Section
-            if (checkpoint.workContributions.isNotEmpty ||
-                checkpoint.assignedTo != null ||
-                checkpoint.aiAssistance != null) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.purple.withOpacity(0.2)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.people_alt, size: 16, color: Colors.purple),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Collaboration',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.purple,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Assignment info
-                    if (checkpoint.assignedTo != null) ...[
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.assignment_ind,
-                            size: 14,
-                            color: Colors.blue,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Assigned to: ${checkpoint.assignedTo}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                    ],
-
-                    // Work contributions summary
-                    if (checkpoint.workContributions.isNotEmpty) ...[
-                      Row(
-                        children: [
-                          Icon(Icons.work, size: 14, color: Colors.green),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${checkpoint.workContributions.length} contributors, ',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          Text(
-                            '${checkpoint.workContributions.fold(0.0, (sum, c) => sum + c.hoursWorked)}h total',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.green[700],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                    ],
-
-                    // AI assistance indicator
-                    if (checkpoint.aiAssistance != null) ...[
-                      Row(
-                        children: [
-                          Icon(Icons.smart_toy, size: 14, color: Colors.purple),
-                          const SizedBox(width: 4),
-                          Text(
-                            'AI assistance available',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            // Action buttons
-            Row(
-              children: [
-                if (checkpoint.workContributions.isNotEmpty)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _showWorkContributions(checkpoint),
-                      icon: const Icon(Icons.visibility, size: 16),
-                      label: const Text(
-                        'View Work',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.green,
-                        side: BorderSide(color: Colors.green.withOpacity(0.5)),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                    ),
-                  ),
-
-                if (checkpoint.workContributions.isNotEmpty)
-                  const SizedBox(width: 8),
-
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _addWorkContribution(checkpoint),
-                    icon: const Icon(Icons.add_task, size: 16),
-                    label: const Text(
-                      'Add Work',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.blue,
-                      side: BorderSide(color: Colors.blue.withOpacity(0.5)),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1571,38 +2312,16 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
   }
 
   Widget _buildCheckpointTypeChip(CheckpointType type) {
-    Color color;
-    String label;
-
-    switch (type) {
-      case CheckpointType.task:
-        color = Colors.blue;
-        label = 'Task';
-        break;
-      case CheckpointType.milestone:
-        color = Colors.purple;
-        label = 'Milestone';
-        break;
-      case CheckpointType.review:
-        color = Colors.orange;
-        label = 'Review';
-        break;
-      case CheckpointType.testing:
-        color = Colors.green;
-        label = 'Testing';
-        break;
-    }
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: type.color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        label,
+        type.displayName,
         style: TextStyle(
-          color: color,
+          color: type.color,
           fontSize: 10,
           fontWeight: FontWeight.w500,
         ),

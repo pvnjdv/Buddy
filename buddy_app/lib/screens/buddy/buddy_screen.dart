@@ -125,7 +125,10 @@ class _BuddyScreenState extends State<BuddyScreen>
           (msg) => BuddyMessage(
             id: msg.id,
             content: msg.content,
-            role: msg.role,
+            role: BuddyRole.values.firstWhere(
+              (role) => role.name == msg.role,
+              orElse: () => BuddyRole.user,
+            ),
             timestamp: msg.timestamp,
           ),
         )
@@ -154,7 +157,10 @@ class _BuddyScreenState extends State<BuddyScreen>
                 (msg) => BuddyMessage(
                   id: msg.id,
                   content: msg.content,
-                  role: msg.role,
+                  role: BuddyRole.values.firstWhere(
+                    (role) => role.name == msg.role,
+                    orElse: () => BuddyRole.user,
+                  ),
                   timestamp: msg.timestamp,
                 ),
               )
@@ -181,7 +187,10 @@ class _BuddyScreenState extends State<BuddyScreen>
             (msg) => BuddyMessage(
               id: msg.id,
               content: msg.content,
-              role: msg.role,
+              role: BuddyRole.values.firstWhere(
+                (role) => role.name == msg.role,
+                orElse: () => BuddyRole.user,
+              ),
               timestamp: msg.timestamp,
             ),
           )

@@ -3,7 +3,6 @@ import 'screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/login_screen.dart';
-import 'screens/otp_screen.dart';
 import 'screens/buddy/buddy_screen.dart';
 import 'screens/flow/flow_screen.dart';
 import 'services/auth/auth_service.dart';
@@ -57,7 +56,6 @@ class _BuddyAppState extends State<BuddyApp> {
       home: const AuthChecker(),
       routes: {
         '/login': (context) => const LoginScreen(),
-        '/otp': (context) => const OtpScreen(),
         '/profile_setup': (context) => const ProfileSetupScreen(),
         '/home': (context) => const HomeScreen(),
         '/buddy': (context) => const BuddyScreen(),

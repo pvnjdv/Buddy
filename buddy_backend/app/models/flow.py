@@ -75,6 +75,9 @@ class FlowCheckpoint(Base):
     # Relationships
     flow = relationship("ProjectFlow", back_populates="checkpoints")
     resources = relationship("FlowResource", back_populates="checkpoint", cascade="all, delete-orphan")
+    # New relationships
+    notes = relationship("FlowCheckpointNote", back_populates="checkpoint", cascade="all, delete-orphan")
+    assignments = relationship("FlowCheckpointAssignment", back_populates="checkpoint", cascade="all, delete-orphan")
 
 class FlowResource(Base):
     __tablename__ = "flow_resources"
@@ -156,3 +159,35 @@ class FlowAlarm(Base):
     # Relationships
     user = relationship("User")
     flow = relationship("ProjectFlow", back_populates="alarms")
+
+# New: Per-checkpoint notes
+class FlowCheckpointNote(Base):
+    __tablename__ = "flow_checkpoint_notes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    flow_id = Column(Integer, ForeignKey("project_flows.id"), nullable=False)
+    checkpoint_id = Column(Integer, ForeignKey("flow_checkpoints.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    tags = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    checkpoint = relationship("FlowCheckpoint", back_populates="notes")
+
+# New: Checkpoint assignment
+class FlowCheckpointAssignment(Base):
+    __tablename__ = "flow_checkpoint_assignments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    flow_id = Column(Integer, ForeignKey("project_flows.id"), nullable=False)
+    checkpoint_id = Column(Integer, ForeignKey("flow_checkpoints.id"), nullable=False)
+    assignee_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    assignee_name = Column(String(255), nullable=True)
+    assigned_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    checkpoint = relationship("FlowCheckpoint", back_populates="assignments")

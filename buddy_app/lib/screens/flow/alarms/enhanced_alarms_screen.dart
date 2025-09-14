@@ -62,7 +62,11 @@ class _EnhancedAlarmsScreenState extends State<EnhancedAlarmsScreen> {
       // Sort alarms
       switch (_sortBy) {
         case 'created':
-          _filteredAlarms.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _filteredAlarms.sort(
+            (a, b) => (b.createdAt ?? DateTime.now()).compareTo(
+              a.createdAt ?? DateTime.now(),
+            ),
+          );
           break;
         case 'title':
           _filteredAlarms.sort((a, b) => a.title.compareTo(b.title));
@@ -345,9 +349,9 @@ class _EnhancedAlarmsScreenState extends State<EnhancedAlarmsScreen> {
                         ),
                         const SizedBox(height: 4),
                         // Description
-                        if (alarm.description.isNotEmpty) ...[
+                        if (alarm.description?.isNotEmpty == true) ...[
                           Text(
-                            alarm.description,
+                            alarm.description!,
                             style: TextStyle(
                               fontSize: 14,
                               color: AppTheme.textSecondaryColor,
@@ -404,7 +408,8 @@ class _EnhancedAlarmsScreenState extends State<EnhancedAlarmsScreen> {
                                 ),
                               ),
                             ],
-                            if (alarm.repeat != AlarmRepeat.none) ...[
+                            if (alarm.repeat != null &&
+                                alarm.repeat != AlarmRepeat.none) ...[
                               const SizedBox(width: 8),
                               Icon(
                                 Icons.repeat,
@@ -413,7 +418,7 @@ class _EnhancedAlarmsScreenState extends State<EnhancedAlarmsScreen> {
                               ),
                               const SizedBox(width: 2),
                               Text(
-                                alarm.repeat.name.toUpperCase(),
+                                alarm.repeat!.name.toUpperCase(),
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: AppTheme.textSecondaryColor,

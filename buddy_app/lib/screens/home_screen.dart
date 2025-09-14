@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'chat/chat_list_screen.dart';
 import 'buddy/buddy_screen.dart';
 import 'flow/flow_screen.dart';
 import 'dock/dock_screen.dart';
 import 'settings/settings_screen.dart';
 import 'college/college_setup_screen.dart';
-import '../config/settings/theme_config.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,150 +29,315 @@ class _HomeScreenState extends State<HomeScreen> {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        appBar: _selectedIndex == 0 ? _buildAppBar() : null,
-        body: _screens[_selectedIndex],
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceColor,
-            border: Border(
-              top: BorderSide(color: AppTheme.borderColor, width: 0.5),
+        backgroundColor: const Color(0xFF0D1B2A), // Deep dark blue
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color(0xFF0D1B2A), // Deep dark blue
+                Color(0xFF1B263B), // Dark slate
+                Color(0xFF2D3748), // Darker gray
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
           ),
-          child: BottomNavigationBar(
-            currentIndex: _selectedIndex,
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: AppTheme.surfaceColor,
-            selectedItemColor: AppTheme.primaryColor,
-            unselectedItemColor: AppTheme.textSecondaryColor,
-            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
-            unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400),
-            elevation: 0,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.chat_bubble_outline),
-                activeIcon: Icon(Icons.chat_bubble),
-                label: 'Chats',
+          child: Column(
+            children: [
+              // Custom App Bar
+              if (_selectedIndex == 0) _buildCustomAppBar(),
+
+              // Main Content
+              Expanded(child: _screens[_selectedIndex]),
+            ],
+          ),
+        ),
+        bottomNavigationBar: _buildCustomBottomNav(),
+      ),
+    );
+  }
+
+  Widget _buildCustomAppBar() {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          children: [
+            // App Icon with gradient background
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF667EEA).withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.smart_toy_outlined),
-                activeIcon: Icon(Icons.smart_toy),
-                label: 'Buddy',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/icon/app_icon.jpg',
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Icon(
+                      Icons.chat_bubble_outline,
+                      color: Colors.white,
+                      size: 24,
+                    );
+                  },
+                ),
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.lightbulb_outline),
-                activeIcon: Icon(Icons.lightbulb),
-                label: 'Flow',
+            ),
+            const SizedBox(width: 16),
+
+            // App Title with gradient text effect
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  // Single tap - do nothing or show info
+                },
+                onDoubleTap: () {
+                  _showCollegeModeDialog();
+                },
+                child: ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                  ).createShader(bounds),
+                  child: const Text(
+                    'Buddy',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.developer_board_outlined),
-                activeIcon: Icon(Icons.developer_board),
-                label: 'Dock',
+            ),
+
+            // Search Button
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A202C).withOpacity(0.8),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF4A5568).withOpacity(0.3),
+                ),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.search, color: Colors.white, size: 22),
+                onPressed: () {
+                  _showSearchDialog();
+                },
+                tooltip: 'Search',
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Menu Button
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A202C).withOpacity(0.8),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF4A5568).withOpacity(0.3),
+                ),
+              ),
+              child: PopupMenuButton<String>(
+                icon: const Icon(
+                  Icons.more_vert,
+                  color: Colors.white,
+                  size: 22,
+                ),
+                color: const Color(0xFF1A202C),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: const Color(0xFF4A5568).withOpacity(0.3),
+                  ),
+                ),
+                position: PopupMenuPosition.under,
+                itemBuilder: (BuildContext context) => [
+                  PopupMenuItem<String>(
+                    value: 'settings',
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF667EEA).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.settings_outlined,
+                            color: Color(0xFF667EEA),
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Settings',
+                          style: TextStyle(color: Colors.white, fontSize: 15),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'help',
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.help_outline,
+                            color: Color(0xFF10B981),
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Help',
+                          style: TextStyle(color: Colors.white, fontSize: 15),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                onSelected: (String value) {
+                  _handleMenuAction(value);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomBottomNav() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF1A202C).withOpacity(0.95),
+            const Color(0xFF2D3748).withOpacity(0.95),
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: const Color(0xFF4A5568).withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        child: Container(
+          height: 55,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(
+                0,
+                Icons.chat_bubble_outline,
+                Icons.chat_bubble,
+                'Chats',
+              ),
+              _buildNavItem(
+                1,
+                Icons.smart_toy_outlined,
+                Icons.smart_toy,
+                'Buddy',
+              ),
+              _buildNavItem(
+                2,
+                Icons.lightbulb_outline,
+                Icons.lightbulb,
+                'Flow',
+              ),
+              _buildNavItem(
+                3,
+                Icons.developer_board_outlined,
+                Icons.developer_board,
+                'Dock',
               ),
             ],
-            onTap: (index) => setState(() => _selectedIndex = index),
           ),
         ),
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      automaticallyImplyLeading: false,
-      title: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.asset(
-                'assets/icon/app_icon.jpg',
-                width: 32,
-                height: 32,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          GestureDetector(
-            onTap: () {
-              // Single tap - do nothing or show info
-            },
-            onDoubleTap: () {
-              _showCollegeModeDialog();
-            },
-            child: Text(
-              'Buddy',
-              style: TextStyle(
-                color: AppTheme.textPrimaryColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-              ),
-            ),
-          ),
-        ],
-      ),
-      backgroundColor: AppTheme.surfaceColor,
-      elevation: 0,
-      scrolledUnderElevation: 1,
-      actions: [
-        IconButton(
-          icon: Icon(Icons.search, color: AppTheme.textPrimaryColor),
-          onPressed: () {
-            _showSearchDialog();
-          },
+  Widget _buildNavItem(
+    int index,
+    IconData icon,
+    IconData activeIcon,
+    String label,
+  ) {
+    final isSelected = _selectedIndex == index;
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedIndex = index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          gradient: isSelected
+              ? const LinearGradient(
+                  colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF667EEA).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : null,
         ),
-        PopupMenuButton<String>(
-          icon: Icon(Icons.more_vert, color: AppTheme.textPrimaryColor),
-          color: AppTheme.surfaceColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: AppTheme.borderColor),
-          ),
-          position: PopupMenuPosition.under,
-          itemBuilder: (BuildContext context) => [
-            PopupMenuItem<String>(
-              value: 'settings',
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.settings_outlined,
-                    color: AppTheme.textPrimaryColor,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Settings',
-                    style: TextStyle(color: AppTheme.textPrimaryColor),
-                  ),
-                ],
-              ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isSelected ? activeIcon : icon,
+              color: isSelected ? Colors.white : Colors.grey[400],
+              size: 20,
             ),
-            PopupMenuItem<String>(
-              value: 'help',
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.help_outline,
-                    color: AppTheme.textPrimaryColor,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Help',
-                    style: TextStyle(color: AppTheme.textPrimaryColor),
-                  ),
-                ],
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey[400],
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
           ],
-          onSelected: (String value) {
-            _handleMenuAction(value);
-          },
         ),
-      ],
+      ),
     );
   }
 
@@ -199,50 +364,78 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: AppTheme.surfaceColor,
+          backgroundColor: const Color(0xFF1A202C),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: const Color(0xFF4A5568).withOpacity(0.3)),
           ),
-          title: Text(
-            'Search',
-            style: TextStyle(color: AppTheme.textPrimaryColor),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.search, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Search',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
           ),
-          content: TextField(
-            autofocus: true,
-            style: TextStyle(color: AppTheme.textPrimaryColor),
-            decoration: InputDecoration(
-              hintText: 'Search chats, flows, notes...',
-              hintStyle: TextStyle(color: AppTheme.textSecondaryColor),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppTheme.borderColor),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppTheme.primaryColor),
-              ),
-              prefixIcon: Icon(
-                Icons.search,
-                color: AppTheme.textSecondaryColor,
+          content: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF2D3748),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF4A5568)),
+            ),
+            child: TextField(
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Search chats, flows, notes...',
+                hintStyle: TextStyle(color: Colors.grey[400]),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+                prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
               ),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: AppTheme.textSecondaryColor),
-              ),
+              child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                // Implement search functionality
-              },
-              child: Text(
-                'Search',
-                style: TextStyle(color: AppTheme.primaryColor),
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // Implement search functionality
+                },
+                child: const Text(
+                  'Search',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ],
@@ -256,41 +449,98 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: AppTheme.surfaceColor,
+          backgroundColor: const Color(0xFF1A202C),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: const Color(0xFF4A5568).withOpacity(0.3)),
           ),
           title: Row(
             children: [
-              Icon(Icons.help_outline, color: AppTheme.primaryColor),
-              const SizedBox(width: 8),
-              Text('Help', style: TextStyle(color: AppTheme.textPrimaryColor)),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.help_outline,
+                  color: Color(0xFF10B981),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Help',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Welcome to Buddy!',
                 style: TextStyle(
-                  color: AppTheme.textPrimaryColor,
+                  color: Colors.white,
                   fontWeight: FontWeight.w600,
+                  fontSize: 16,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Text(
                 'Your AI-powered project management companion. Get help with flows, chat with AI, and manage your tasks efficiently.',
-                style: TextStyle(color: AppTheme.textSecondaryColor),
+                style: TextStyle(color: Colors.grey[300], height: 1.5),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF667EEA).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF667EEA).withOpacity(0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.lightbulb_outline,
+                      color: Color(0xFF667EEA),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Tip: Double-tap "Buddy" to enable College Mode',
+                        style: TextStyle(color: Colors.grey[300], fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Got it',
-                style: TextStyle(color: AppTheme.primaryColor),
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF10B981), Color(0xFF059669)],
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Got it',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ],
@@ -303,59 +553,100 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A202C),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: const Color(0xFF4A5568).withOpacity(0.3)),
+        ),
         title: Row(
           children: [
-            Icon(Icons.school, color: AppTheme.primaryColor),
-            const SizedBox(width: 8),
-            const Text('College Mode'),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.school, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'College Mode',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Switch to College Mode?',
               style: TextStyle(
-                color: AppTheme.textPrimaryColor,
+                color: Colors.white,
                 fontWeight: FontWeight.w600,
+                fontSize: 16,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               'College Mode provides specialized features for students, teachers, and administrators including classrooms, assignments, results, and timetables.',
-              style: TextStyle(color: AppTheme.textSecondaryColor),
+              style: TextStyle(color: Colors.grey[300], height: 1.5),
             ),
             const SizedBox(height: 16),
-            Text(
+            const Text(
               'To continue, you\'ll need to:',
               style: TextStyle(
-                color: AppTheme.textPrimaryColor,
+                color: Colors.white,
                 fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              '• Complete your profile setup\n• Select your role (Student/Teacher/HOD/Principal)\n• Join your institution',
-              style: TextStyle(color: AppTheme.textSecondaryColor),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2D3748),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFF4A5568).withOpacity(0.5),
+                ),
+              ),
+              child: Text(
+                '• Complete your profile setup\n• Select your role (Student/Teacher/HOD/Principal)\n• Join your institution',
+                style: TextStyle(color: Colors.grey[300], height: 1.5),
+              ),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _navigateToCollegeSetup();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+              ),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: const Text('Continue'),
+            child: TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _navigateToCollegeSetup();
+              },
+              child: const Text(
+                'Continue',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
         ],
       ),

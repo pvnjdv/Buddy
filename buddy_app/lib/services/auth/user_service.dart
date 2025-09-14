@@ -26,10 +26,10 @@ class UserProfile {
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
       id: json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
+      name: (json['name'] ?? '').toString().trim(),
       mobileNumber: json['mobile_number'] ?? '',
       profilePhoto: json['profile_photo'],
-      profession: json['profession'],
+      profession: json['profession']?.toString().trim(),
       lastSeen: json['last_seen'] != null
           ? DateTime.tryParse(json['last_seen'])
           : null,
@@ -96,9 +96,11 @@ class UserService {
       final accessToken = prefs.getString('jwt');
 
       if (accessToken == null) {
+        print('UserService: No access token found');
         throw Exception('No access token found');
       }
 
+      print('UserService: Fetching profile from API...');
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/users/me'),
         headers: {
@@ -107,6 +109,9 @@ class UserService {
         },
       );
 
+      print('UserService: API response status: ${response.statusCode}');
+      print('UserService: API response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final profile = UserProfile.fromJson(data);
@@ -114,8 +119,12 @@ class UserService {
         // Cache the profile locally
         await _cacheUserProfile(profile);
 
+        print(
+          'UserService: Successfully fetched and cached profile: ${profile.name}',
+        );
         return profile;
       } else {
+        print('UserService: Failed to fetch profile: ${response.statusCode}');
         throw Exception('Failed to fetch user profile: ${response.statusCode}');
       }
     } catch (e) {

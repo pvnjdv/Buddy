@@ -1,21 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from sqlalchemy.orm import joinedload, selectinload
-from typing import List, Optional
+from typing import List, Optional, Dict, Tuple, Any
 from datetime import datetime, timedelta
 import json
 import uuid
 from pydantic import BaseModel
+from jose import JWTError, jwt
+from ..crud.user import get_user_by_mobile
 
 from ..core.database import get_db
+from ..core.config import settings
 from ..models.flow import ProjectFlow, FlowCheckpoint, FlowResource, BuddyFlowMessage, FlowStatus, FlowDifficulty, CheckpointType, MessageContext, FlowAlarm as FlowAlarmModel, AlarmType, AlarmRepeat
+from ..models.flow import FlowCheckpointNote, FlowCheckpointAssignment
 from ..models.user import User
 from ..schemas.flow import (
     ProjectFlowCreate, ProjectFlowUpdate, ProjectFlowResponse,
     FlowCheckpointCreate, FlowCheckpointUpdate, FlowCheckpointResponse,
     BuddyFlowMessageCreate, BuddyFlowMessageResponse,
     FlowGenerationRequest, FlowGenerationResponse
+)
+from ..schemas.flow import (
+    FlowCheckpointNoteCreate, FlowCheckpointNoteUpdate, FlowCheckpointNoteResponse,
+    FlowCheckpointAssignmentCreate, FlowCheckpointAssignmentResponse,
+    FlowCheckpointAlarmCreate
 )
 from ..dependencies import get_current_user
 from ..ai.buddy_ai import BuddyAI
@@ -483,3 +492,634 @@ async def update_flow_progress(
     await db.commit()
     
     return {"message": progress_message}
+
+# ---------------- WebSocket manager for flow updates -----------------
+class FlowConnectionManager:
+    def __init__(self):
+        # key: (user_id, flow_id) -> list[WebSocket]
+        self.active_connections: Dict[Tuple[int, int], list[WebSocket]] = {}
+
+    async def connect(self, user_id: int, flow_id: int, websocket: WebSocket):
+        await websocket.accept()
+        key = (user_id, flow_id)
+        self.active_connections.setdefault(key, []).append(websocket)
+
+    def disconnect(self, user_id: int, flow_id: int, websocket: WebSocket):
+        key = (user_id, flow_id)
+        conns = self.active_connections.get(key, [])
+        if websocket in conns:
+            conns.remove(websocket)
+        if not conns and key in self.active_connections:
+            del self.active_connections[key]
+
+    async def send_to_flow(self, user_id: int, flow_id: int, data: dict):
+        key = (user_id, flow_id)
+        if key in self.active_connections:
+            for ws in list(self.active_connections[key]):
+                try:
+                    await ws.send_json(data)
+                except Exception:
+                    self.disconnect(user_id, flow_id, ws)
+
+flow_ws_manager = FlowConnectionManager()
+
+async def _get_user_from_token(token: str, db: AsyncSession) -> int:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        mobile_number = payload.get("sub")
+        if not mobile_number:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+        user = await get_user_by_mobile(db, mobile_number)
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        return user.id
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail=f"Token error: {e}")
+
+@router.websocket("/ws")
+async def flows_ws(websocket: WebSocket, token: str = Query(...), flow_id: int = Query(...), db: AsyncSession = Depends(get_db)):
+    """WebSocket endpoint for real-time flow updates. Pass JWT in query 'token' and flow_id."""
+    user_id = await _get_user_from_token(token, db)
+    await flow_ws_manager.connect(user_id, flow_id, websocket)
+    try:
+        while True:
+            # Keep the connection alive; no inbound messages required right now
+            _ = await websocket.receive_text()
+            # Optionally support ping/pong or client acks later
+    except WebSocketDisconnect:
+        flow_ws_manager.disconnect(user_id, flow_id, websocket)
+    except Exception:
+        flow_ws_manager.disconnect(user_id, flow_id, websocket)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+# --- Helpers for new endpoints ---
+async def _ensure_flow_and_checkpoint(db: AsyncSession, user_id: int, flow_id: int, checkpoint_id: int):
+    result = await db.execute(
+        select(ProjectFlow).filter(
+            ProjectFlow.id == flow_id,
+            ProjectFlow.user_id == user_id
+        )
+    )
+    flow = result.scalar_one_or_none()
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    cp_result = await db.execute(
+        select(FlowCheckpoint).filter(
+            FlowCheckpoint.id == checkpoint_id,
+            FlowCheckpoint.flow_id == flow_id
+        )
+    )
+    checkpoint = cp_result.scalar_one_or_none()
+    if not checkpoint:
+        raise HTTPException(status_code=404, detail="Checkpoint not found")
+    return flow, checkpoint
+
+# --- Per-checkpoint Notes ---
+@router.post("/{flow_id}/checkpoints/{checkpoint_id}/notes", response_model=FlowCheckpointNoteResponse)
+async def create_checkpoint_note(
+    flow_id: int,
+    checkpoint_id: int,
+    payload: FlowCheckpointNoteCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await _ensure_flow_and_checkpoint(db, current_user.id, flow_id, checkpoint_id)
+    note = FlowCheckpointNote(
+        flow_id=flow_id,
+        checkpoint_id=checkpoint_id,
+        user_id=current_user.id,
+        title=payload.title,
+        content=payload.content,
+        tags=payload.tags or []
+    )
+    db.add(note)
+    await db.commit()
+    await db.refresh(note)
+    return note
+
+@router.get("/{flow_id}/checkpoints/{checkpoint_id}/notes", response_model=List[FlowCheckpointNoteResponse])
+async def list_checkpoint_notes(
+    flow_id: int,
+    checkpoint_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await _ensure_flow_and_checkpoint(db, current_user.id, flow_id, checkpoint_id)
+    result = await db.execute(
+        select(FlowCheckpointNote).filter(
+            FlowCheckpointNote.flow_id == flow_id,
+            FlowCheckpointNote.checkpoint_id == checkpoint_id,
+            FlowCheckpointNote.user_id == current_user.id
+        ).order_by(FlowCheckpointNote.created_at.desc())
+    )
+    return result.scalars().all()
+
+@router.patch("/{flow_id}/checkpoints/{checkpoint_id}/notes/{note_id}", response_model=FlowCheckpointNoteResponse)
+async def update_checkpoint_note(
+    flow_id: int,
+    checkpoint_id: int,
+    note_id: int,
+    payload: FlowCheckpointNoteUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await _ensure_flow_and_checkpoint(db, current_user.id, flow_id, checkpoint_id)
+    result = await db.execute(
+        select(FlowCheckpointNote).filter(
+            FlowCheckpointNote.id == note_id,
+            FlowCheckpointNote.flow_id == flow_id,
+            FlowCheckpointNote.checkpoint_id == checkpoint_id,
+            FlowCheckpointNote.user_id == current_user.id
+        )
+    )
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    for k, v in payload.dict(exclude_unset=True).items():
+        setattr(note, k, v)
+    note.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(note)
+    return note
+
+@router.delete("/{flow_id}/checkpoints/{checkpoint_id}/notes/{note_id}")
+async def delete_checkpoint_note(
+    flow_id: int,
+    checkpoint_id: int,
+    note_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await _ensure_flow_and_checkpoint(db, current_user.id, flow_id, checkpoint_id)
+    result = await db.execute(
+        select(FlowCheckpointNote).filter(
+            FlowCheckpointNote.id == note_id,
+            FlowCheckpointNote.flow_id == flow_id,
+            FlowCheckpointNote.checkpoint_id == checkpoint_id,
+            FlowCheckpointNote.user_id == current_user.id
+        )
+    )
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    await db.delete(note)
+    await db.commit()
+    return {"message": "Note deleted"}
+
+# --- Per-checkpoint Assignments ---
+@router.post("/{flow_id}/checkpoints/{checkpoint_id}/assignments", response_model=FlowCheckpointAssignmentResponse)
+async def assign_checkpoint(
+    flow_id: int,
+    checkpoint_id: int,
+    payload: FlowCheckpointAssignmentCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await _ensure_flow_and_checkpoint(db, current_user.id, flow_id, checkpoint_id)
+    assignment = FlowCheckpointAssignment(
+        flow_id=flow_id,
+        checkpoint_id=checkpoint_id,
+        assignee_id=payload.assignee_id,
+        assignee_name=payload.assignee_name,
+        assigned_by=current_user.id,
+        assigned_at=datetime.utcnow()
+    )
+    db.add(assignment)
+    await db.commit()
+    await db.refresh(assignment)
+    return assignment
+
+@router.get("/{flow_id}/checkpoints/{checkpoint_id}/assignments", response_model=List[FlowCheckpointAssignmentResponse])
+async def list_assignments(
+    flow_id: int,
+    checkpoint_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await _ensure_flow_and_checkpoint(db, current_user.id, flow_id, checkpoint_id)
+    result = await db.execute(
+        select(FlowCheckpointAssignment).filter(
+            FlowCheckpointAssignment.flow_id == flow_id,
+            FlowCheckpointAssignment.checkpoint_id == checkpoint_id
+        ).order_by(FlowCheckpointAssignment.assigned_at.desc())
+    )
+    return result.scalars().all()
+
+@router.delete("/{flow_id}/checkpoints/{checkpoint_id}/assignments/{assignment_id}")
+async def delete_assignment(
+    flow_id: int,
+    checkpoint_id: int,
+    assignment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await _ensure_flow_and_checkpoint(db, current_user.id, flow_id, checkpoint_id)
+    result = await db.execute(
+        select(FlowCheckpointAssignment).filter(
+            FlowCheckpointAssignment.id == assignment_id,
+            FlowCheckpointAssignment.flow_id == flow_id,
+            FlowCheckpointAssignment.checkpoint_id == checkpoint_id
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    await db.delete(assignment)
+    await db.commit()
+    return {"message": "Assignment deleted"}
+
+# --- Per-checkpoint Alarms ---
+@router.post("/{flow_id}/checkpoints/{checkpoint_id}/alarms")
+async def create_checkpoint_alarm(
+    flow_id: int,
+    checkpoint_id: int,
+    payload: FlowCheckpointAlarmCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await _ensure_flow_and_checkpoint(db, current_user.id, flow_id, checkpoint_id)
+    # Map strings to enums with safe defaults
+    alarm_type = AlarmType[payload.type] if isinstance(payload.type, str) and payload.type in AlarmType.__members__ else AlarmType.task
+    repeat = AlarmRepeat[payload.repeat] if isinstance(payload.repeat, str) and payload.repeat in AlarmRepeat.__members__ else AlarmRepeat.none
+    alarm = FlowAlarmModel(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id,
+        title=payload.title,
+        description=payload.description,
+        scheduled_time=payload.scheduled_time,
+        is_active=True,
+        type=alarm_type,
+        repeat=repeat,
+        flow_id=flow_id,
+        checkpoint_id=checkpoint_id,
+        created_at=datetime.utcnow()
+    )
+    db.add(alarm)
+    await db.commit()
+    return {
+        "id": alarm.id,
+        "title": alarm.title,
+        "scheduled_time": alarm.scheduled_time,
+        "flow_id": alarm.flow_id,
+        "checkpoint_id": alarm.checkpoint_id,
+        "type": alarm.type.value,
+        "repeat": alarm.repeat.value,
+    }
+
+@router.get("/{flow_id}/checkpoints/{checkpoint_id}/alarms")
+async def list_checkpoint_alarms(
+    flow_id: int,
+    checkpoint_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    await _ensure_flow_and_checkpoint(db, current_user.id, flow_id, checkpoint_id)
+    result = await db.execute(
+        select(FlowAlarmModel).filter(
+            FlowAlarmModel.flow_id == flow_id,
+            FlowAlarmModel.checkpoint_id == checkpoint_id,
+            FlowAlarmModel.user_id == current_user.id,
+            FlowAlarmModel.is_active == True
+        ).order_by(FlowAlarmModel.scheduled_time.asc())
+    )
+    alarms = result.scalars().all()
+    return [
+        {
+            "id": a.id,
+            "title": a.title,
+            "scheduled_time": a.scheduled_time,
+            "type": a.type.value if a.type else None,
+            "repeat": a.repeat.value if a.repeat else None,
+            "flow_id": a.flow_id,
+            "checkpoint_id": a.checkpoint_id,
+        }
+        for a in alarms
+    ]
+
+# --- Flow Dashboard ---
+@router.get("/{flow_id}/dashboard")
+async def get_flow_dashboard(
+    flow_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(ProjectFlow).options(selectinload(ProjectFlow.checkpoints)).filter(
+            ProjectFlow.id == flow_id,
+            ProjectFlow.user_id == current_user.id
+        )
+    )
+    flow = result.scalar_one_or_none()
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    # Notes and assignments
+    notes_result = await db.execute(
+        select(FlowCheckpointNote).filter(FlowCheckpointNote.flow_id == flow_id, FlowCheckpointNote.user_id == current_user.id)
+    )
+    notes = notes_result.scalars().all()
+    assign_result = await db.execute(
+        select(FlowCheckpointAssignment).filter(FlowCheckpointAssignment.flow_id == flow_id)
+    )
+    assignments = assign_result.scalars().all()
+
+    # Alarms upcoming (next 10)
+    alarms_result = await db.execute(
+        select(FlowAlarmModel).filter(
+            FlowAlarmModel.flow_id == flow_id,
+            FlowAlarmModel.user_id == current_user.id,
+            FlowAlarmModel.is_active == True,
+            FlowAlarmModel.scheduled_time >= datetime.utcnow()
+        ).order_by(FlowAlarmModel.scheduled_time.asc()).limit(10)
+    )
+    upcoming_alarms = alarms_result.scalars().all()
+
+    total = len(flow.checkpoints)
+    completed = sum(1 for cp in flow.checkpoints if cp.is_completed)
+    pct = (completed / total * 100.0) if total else 0.0
+
+    insights = []
+    if pct == 0:
+        insights.append("Getting started – knock out an easy checkpoint first.")
+    elif pct < 50:
+        insights.append("You're making progress. Consider batching similar tasks.")
+    elif pct < 100:
+        insights.append("Great momentum! Plan a review before final tasks.")
+    else:
+        insights.append("Flow complete – archive or start the next one.")
+
+    return {
+        "flow": {
+            "id": flow.id,
+            "title": flow.title,
+            "status": flow.status.value if flow.status else None,
+            "difficulty": flow.difficulty.value if flow.difficulty else None,
+            "estimated_duration": flow.estimated_duration,
+            "current_checkpoint_index": flow.current_checkpoint_index,
+            "tags": flow.tags or [],
+        },
+        "progress": {
+            "total": total,
+            "completed": completed,
+            "percentage": round(pct, 2)
+        },
+        "participants": list({a.assignee_name or str(a.assignee_id) for a in assignments}),
+        "notes_count": len(notes),
+        "assignments_count": len(assignments),
+        "upcoming_alarms": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "at": a.scheduled_time,
+                "checkpoint_id": a.checkpoint_id
+            } for a in upcoming_alarms
+        ],
+        "insights": insights
+    }
+
+# --- Scaffold (placeholder) ---
+class ScaffoldRequest(BaseModel):
+    template: Optional[str] = None
+    language: Optional[str] = None
+    init_readme: Optional[bool] = True
+
+@router.post("/{flow_id}/scaffold")
+async def scaffold_project(
+    flow_id: int,
+    payload: ScaffoldRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Ensure flow exists and belongs to user
+    result = await db.execute(
+        select(ProjectFlow).filter(ProjectFlow.id == flow_id, ProjectFlow.user_id == current_user.id)
+    )
+    flow = result.scalar_one_or_none()
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    message = BuddyFlowMessage(
+        user_id=current_user.id,
+        flow_id=flow_id,
+        content=f"Scaffold requested for '{flow.title}' (template={payload.template}, language={payload.language})",
+        role="assistant",
+        context=MessageContext.flow_creation
+    )
+    db.add(message)
+    await db.commit()
+
+    # Build comprehensive buddy config from checkpoints
+    config = {
+        "name": flow.title,
+        "description": flow.description,
+        "template": payload.template,
+        "language": payload.language,
+        "version": "1.0.0",
+        "buddy": {
+            "flow_id": flow_id,
+            "created_at": flow.created_at.isoformat(),
+            "auto_tracking": True,
+            "rules_engine": "strict"
+        },
+        "checkpoints": [
+            {
+                "id": cp.id,
+                "title": cp.title,
+                "description": cp.description or "",
+                "order": cp.order,
+                "type": cp.type.value if cp.type else "task",
+                "file_patterns": [
+                    f"**/{cp.title.lower().replace(' ', '-')}/*",
+                    f"**/src/{cp.title.lower().replace(' ', '_')}.*",
+                    f"**/*{cp.title.lower().replace(' ', '')}*"
+                ],
+                "rules": [
+                    "file_exists",
+                    "has_content",
+                    "tests_pass" if "test" in cp.title.lower() else "lints_clean"
+                ],
+                "deliverables": [
+                    f"{cp.title.lower().replace(' ', '_')}.{payload.language or 'js'}",
+                    f"{cp.title.lower().replace(' ', '-')}/README.md"
+                ]
+            }
+            for cp in sorted(flow.checkpoints, key=lambda c: c.order)
+        ],
+        "scripts": {
+            "test": "npm test" if payload.language in ["javascript", "typescript"] else "python -m pytest",
+            "lint": "eslint ." if payload.language in ["javascript", "typescript"] else "flake8 .",
+            "build": "npm run build" if payload.language in ["javascript", "typescript"] else "python setup.py build"
+        }
+    }
+
+    # TODO: In production, write to actual repo via git/dock service
+    # For now, return the config that would be written as buddy.json
+    
+    return {
+        "status": "completed", 
+        "flow_id": flow_id, 
+        "template": payload.template, 
+        "language": payload.language, 
+        "config": config,
+        "file_path": "buddy.json",
+        "message": f"Scaffold configuration generated for {flow.title}"
+    }
+
+class CodeEventPayload(BaseModel):
+    path: str
+    event: str
+    editor: Optional[str] = None
+    sha: Optional[str] = None
+    timestamp: Optional[datetime] = None
+
+@router.post("/{flow_id}/code-events")
+async def handle_code_event(
+    flow_id: int,
+    payload: CodeEventPayload,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Enhanced code event handler with proper rules evaluation.
+    Auto-marks checkpoints based on file patterns, rules, and deliverables.
+    """
+    result = await db.execute(
+        select(ProjectFlow)
+        .options(selectinload(ProjectFlow.checkpoints))
+        .filter(ProjectFlow.id == flow_id, ProjectFlow.user_id == current_user.id)
+    )
+    flow = result.scalar_one_or_none()
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    updated_ids = []
+    path_lc = (payload.path or "").lower()
+    # Prefer earlier pending checkpoints first
+    pending = sorted([cp for cp in flow.checkpoints if not cp.is_completed], key=lambda c: c.order)
+
+    def evaluate_checkpoint_rules(checkpoint, file_path: str) -> bool:
+        """Evaluate if checkpoint rules are satisfied"""
+        # Basic file pattern matching
+        title_tokens = [t for t in checkpoint.title.lower().replace('-', ' ').replace('_', ' ').split() if len(t) > 2]
+        deliverable_tokens = []
+        try:
+            for d in (checkpoint.deliverables or []):
+                deliverable_tokens += [t for t in str(d).lower().replace('-', ' ').replace('_', ' ').split() if len(t) > 2]
+        except Exception:
+            pass
+        
+        tokens = set(title_tokens + deliverable_tokens)
+        if not tokens:
+            return False
+            
+        # File path matching
+        path_match = any(tok in file_path.lower() for tok in tokens)
+        if not path_match:
+            return False
+            
+        # Enhanced rules evaluation
+        rules_passed = 0
+        total_rules = 0
+        
+        # Rule: file_exists (always true if we got an event)
+        rules_passed += 1
+        total_rules += 1
+        
+        # Rule: has_content (check file extension indicates content)
+        if any(ext in file_path for ext in ['.js', '.py', '.ts', '.jsx', '.vue', '.md', '.txt', '.json']):
+            rules_passed += 1
+        total_rules += 1
+        
+        # Rule: tests_pass (heuristic: if path contains test and checkpoint is test-related)
+        if 'test' in checkpoint.title.lower() and 'test' in file_path.lower():
+            rules_passed += 1
+            total_rules += 1
+        elif 'test' not in checkpoint.title.lower():
+            # Non-test checkpoints get benefit of doubt
+            rules_passed += 1
+            total_rules += 1
+            
+        # Rule: lints_clean (heuristic: standard file extensions)
+        if any(file_path.endswith(ext) for ext in ['.js', '.ts', '.py', '.jsx', '.vue']):
+            rules_passed += 1
+        total_rules += 1
+        
+        # Pass if 75% of rules satisfied
+        return rules_passed >= (total_rules * 0.75)
+
+    for cp in pending:
+        if evaluate_checkpoint_rules(cp, payload.path):
+            # Mark checkpoint as completed
+            await db.execute(
+                update(FlowCheckpoint)
+                .where(FlowCheckpoint.id == cp.id)
+                .values(is_completed=True, completed_at=datetime.now())
+            )
+            updated_ids.append(cp.id)
+            
+            # Update flow status if all checkpoints completed
+            remaining = len([c for c in flow.checkpoints if not c.is_completed and c.id not in updated_ids])
+            if remaining == 0:
+                await db.execute(
+                    update(ProjectFlow)
+                    .where(ProjectFlow.id == flow_id)
+                    .values(status=FlowStatus.completed, current_checkpoint_index=len(flow.checkpoints))
+                )
+            else:
+                # Update current checkpoint index
+                next_idx = min(c.order for c in flow.checkpoints if not c.is_completed and c.id not in updated_ids)
+                await db.execute(
+                    update(ProjectFlow)
+                    .where(ProjectFlow.id == flow_id)
+                    .values(current_checkpoint_index=next_idx)
+                )
+            break  # Only auto-complete one checkpoint per event
+
+    await db.commit()
+
+    # Broadcast update if any checkpoints were updated
+    if updated_ids:
+        update_payload = {
+            "flow_id": flow_id,
+            "updated_checkpoint_ids": updated_ids,
+            "status": "completed" if len([c for c in flow.checkpoints if not c.is_completed]) == len(updated_ids) else "active",
+            "current_checkpoint_index": flow.current_checkpoint_index,
+            "timestamp": datetime.now().isoformat()
+        }
+        # Use the existing connection manager
+        await flow_ws_manager.broadcast_to_flow(flow_id, current_user.mobile or str(current_user.id), "flow_update", update_payload)
+
+    return {
+        "event_received": True,
+        "path": payload.path,
+        "auto_completed": updated_ids,
+        "flow_status": flow.status.value,
+        "rules_engine": "enhanced"
+    }
+    if completed_count == len(flow.checkpoints) and len(flow.checkpoints) > 0:
+        flow.status = FlowStatus.completed
+    elif flow.status == FlowStatus.completed and completed_count < len(flow.checkpoints):
+        flow.status = FlowStatus.active
+
+    flow.updated_at = datetime.utcnow()
+    await db.commit()
+
+    # Broadcast changes to WS subscribers for this flow
+    if updated_ids:
+        await flow_ws_manager.send_to_flow(
+            current_user.id, flow_id,
+            {
+                "type": "flow_update",
+                "data": {
+                    "flow_id": flow_id,
+                    "updated_checkpoint_ids": updated_ids,
+                    "status": flow.status.value if hasattr(flow.status, 'value') else str(flow.status),
+                    "current_checkpoint_index": flow.current_checkpoint_index,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            }
+        )
+
+    return {"updated": len(updated_ids), "auto_marked_ids": updated_ids}

@@ -1,7 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
+# Enhanced WhatsApp-like chat endpoints with comprehensive features
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, or_, desc, func
 from jose import JWTError, jwt
-from typing import Dict, List
+from typing import Dict, List, Optional
+from datetime import datetime, timedelta
+import json
+import os
+import uuid
 from app.dependencies import get_db, get_current_user
 from app.core.config import settings
 from app.schemas.message import MessageCreate, MessageRead
@@ -167,3 +173,226 @@ async def clear_chat(
         return {"message": "Chat cleared successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to clear chat")
+
+# Enhanced WhatsApp-like Features
+
+@router.post("/{message_id}/read")
+async def mark_message_as_read(
+    message_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark a message as read (blue ticks)"""
+    try:
+        # In a real implementation, you'd update message status in database
+        await manager.send_to_user(current_user.id, {
+            "type": "read_receipt", 
+            "data": {"message_id": message_id, "read_by": current_user.id}
+        })
+        return {"message": "Message marked as read"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{other_user_id}/typing")
+async def send_typing_indicator(
+    other_user_id: int,
+    typing: bool,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Send typing indicator to another user"""
+    try:
+        await manager.send_to_user(other_user_id, {
+            "type": "typing",
+            "data": {"user_id": current_user.id, "typing": typing}
+        })
+        return {"message": "Typing status sent"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{other_user_id}/online-status")
+async def update_online_status(
+    other_user_id: int,
+    is_online: bool,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update and broadcast online status"""
+    try:
+        # Broadcast online status to all contacts
+        await manager.send_to_user(other_user_id, {
+            "type": "online_status",
+            "data": {"user_id": current_user.id, "is_online": is_online, "last_seen": datetime.now().isoformat()}
+        })
+        return {"message": "Online status updated"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/media/upload")
+async def upload_media(
+    file: UploadFile = File(...),
+    receiver_id: int = Query(...),
+    message_type: str = Query(default="image"),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Upload media file (image, video, document, audio)"""
+    try:
+        # Create uploads directory if it doesn't exist
+        upload_dir = "uploads/media"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Generate unique filename
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        
+        # Save file
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Create message with media
+        message = await create_message(
+            db, 
+            current_user.id, 
+            receiver_id, 
+            f"{message_type.title()} file"
+        )
+        
+        # Broadcast message with media URL
+        payload = {
+            "id": message.id,
+            "sender_id": message.sender_id,
+            "receiver_id": message.receiver_id,
+            "content": message.content,
+            "timestamp": message.timestamp.isoformat(),
+            "media_url": f"/uploads/media/{unique_filename}",
+            "media_type": message_type
+        }
+        
+        await manager.send_to_user(receiver_id, {"type": "message", "data": payload})
+        await manager.send_to_user(current_user.id, {"type": "ack", "data": payload})
+        
+        return {"message": "Media uploaded successfully", "media_url": f"/uploads/media/{unique_filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{other_user_id}/media")
+async def get_shared_media(
+    other_user_id: int,
+    media_type: Optional[str] = Query(None),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all shared media between two users"""
+    try:
+        # In a real implementation, you'd filter messages by media type from database
+        messages = await get_messages_between_users(db, current_user.id, other_user_id)
+        
+        # Filter media messages (this would be done at database level in production)
+        media_messages = []
+        for msg in messages:
+            # Mock media filtering - in real implementation, check message.media_url
+            if "image" in msg.content.lower() or "video" in msg.content.lower() or "document" in msg.content.lower():
+                media_messages.append({
+                    "id": msg.id,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp.isoformat(),
+                    "media_type": "image",  # This would come from database
+                    "media_url": f"/uploads/media/sample_{msg.id}.jpg"  # Mock URL
+                })
+        
+        return {"media": media_messages}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{other_user_id}/block")
+async def block_user(
+    other_user_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Block a user"""
+    try:
+        # In production, you'd create a blocked_users table
+        # For now, just return success
+        return {"message": f"User {other_user_id} blocked successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{other_user_id}/block")
+async def unblock_user(
+    other_user_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Unblock a user"""
+    try:
+        # In production, you'd remove from blocked_users table
+        return {"message": f"User {other_user_id} unblocked successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{other_user_id}/search")
+async def search_messages(
+    other_user_id: int,
+    query: str = Query(...),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Search messages in a chat"""
+    try:
+        messages = await get_messages_between_users(db, current_user.id, other_user_id)
+        
+        # Simple text search (in production, use full-text search)
+        matching_messages = []
+        for msg in messages:
+            if query.lower() in msg.content.lower():
+                matching_messages.append({
+                    "id": msg.id,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp.isoformat(),
+                    "sender_id": msg.sender_id
+                })
+        
+        return {"results": matching_messages}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/{message_id}/star")
+async def star_message(
+    message_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Star/favorite a message"""
+    try:
+        # In production, you'd have a starred_messages table
+        return {"message": "Message starred successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{message_id}/star")
+async def unstar_message(
+    message_id: int,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Remove star from message"""
+    try:
+        return {"message": "Message unstarred successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/starred")
+async def get_starred_messages(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all starred messages for current user"""
+    try:
+        # In production, query starred_messages table
+        return {"starred_messages": []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -105,6 +105,7 @@ class _EnhancedIndividualChatScreenState
       receiverId: widget.contactId,
       content: content,
       timestamp: DateTime.now(),
+      status: MessageStatus.sent, // Show sending status
     );
 
     setState(() {
@@ -336,182 +337,496 @@ class _EnhancedIndividualChatScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF25D366),
-        foregroundColor: Colors.white,
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: Colors.white.withOpacity(0.2),
-              child: Text(
-                widget.contactName.isNotEmpty
-                    ? widget.contactName[0].toUpperCase()
-                    : 'U',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.contactName,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (_isTyping)
-                    const Text(
-                      'typing...',
-                      style: TextStyle(fontSize: 12, color: Colors.white70),
-                    )
-                  else
-                    const Text(
-                      'online',
-                      style: TextStyle(fontSize: 12, color: Colors.white70),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.videocam),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Video call coming soon!')),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.call),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Voice call coming soon!')),
-              );
-            },
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'view_contact':
-                  break;
-                case 'search':
-                  break;
-                case 'clear_chat':
-                  _clearChat();
-                  break;
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'view_contact',
-                child: Row(
-                  children: [
-                    Icon(Icons.person),
-                    SizedBox(width: 8),
-                    Text('View contact'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'search',
-                child: Row(
-                  children: [
-                    Icon(Icons.search),
-                    SizedBox(width: 8),
-                    Text('Search'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'clear_chat',
-                child: Row(
-                  children: [
-                    Icon(Icons.clear_all),
-                    SizedBox(width: 8),
-                    Text('Clear chat'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      backgroundColor: Colors.transparent,
       body: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFFE5DDD5),
-          // Removed background image asset to avoid missing asset errors
-          // image: DecorationImage(
-          //   image: AssetImage('assets/images/chat_bg.png'),
-          //   fit: BoxFit.cover,
-          //   opacity: 0.1,
-          // ),
+          gradient: LinearGradient(
+            colors: [Color(0xFF1B263B), Color(0xFF1B263B), Color(0xFF2D3748)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
         ),
         child: Column(
           children: [
-            Expanded(
-              child: _loading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFF25D366),
+            // Custom App Bar
+            SafeArea(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A202C).withOpacity(0.9),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: const Color(0xFF4A5568).withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Back button
+                    IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: Color.fromARGB(255, 247, 245, 245),
                       ),
-                    )
-                  : _messages.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.chat_bubble_outline,
-                            size: 64,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No messages yet',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    // Profile section (clickable)
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _showUserProfile,
+                        child: Row(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF667EEA),
+                                    Color(0xFF764BA2),
+                                  ],
+                                ),
+                              ),
+                              child: CircleAvatar(
+                                radius: 20,
+                                backgroundColor: Colors.transparent,
+                                child: Text(
+                                  widget.contactName.isNotEmpty
+                                      ? widget.contactName[0].toUpperCase()
+                                      : 'U',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Send a message to start the conversation',
-                            style: TextStyle(color: Colors.grey[500]),
-                          ),
-                        ],
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.contactName,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color.fromARGB(255, 246, 245, 245),
+                                    ),
+                                  ),
+                                  if (_isTyping)
+                                    const Text(
+                                      'typing...',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF667EEA),
+                                      ),
+                                    )
+                                  else
+                                    const Text(
+                                      'online',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: _messages.length,
-                      itemBuilder: (context, index) {
-                        final message = _messages[index];
-                        final isCurrentUser =
-                            message.senderId == widget.currentUserId;
-                        return MessageBubble(
-                          message: message,
-                          isCurrentUser: isCurrentUser,
-                          onLongPress: () => _onMessageLongPress(message),
-                          onCollaborationResponse: (accept) =>
-                              _handleCollaborationResponse(message, accept),
+                    ),
+                    // Action buttons
+                    IconButton(
+                      icon: const Icon(Icons.videocam, color: Colors.white),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Video call coming soon!'),
+                            backgroundColor: Color(0xFF667EEA),
+                          ),
                         );
                       },
                     ),
+                    IconButton(
+                      icon: const Icon(Icons.call, color: Colors.white),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Voice call coming soon!'),
+                            backgroundColor: Color(0xFF667EEA),
+                          ),
+                        );
+                      },
+                    ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.white),
+                      color: const Color(0xFF1A202C),
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'view_contact':
+                            _showUserProfile();
+                            break;
+                          case 'media':
+                            _showMediaGallery();
+                            break;
+                          case 'search':
+                            _showSearchInChat();
+                            break;
+                          case 'mute':
+                            _toggleMute();
+                            break;
+                          case 'wallpaper':
+                            _changeWallpaper();
+                            break;
+                          case 'clear_chat':
+                            _clearChat();
+                            break;
+                          case 'block':
+                            _blockUser();
+                            break;
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'view_contact',
+                          child: Row(
+                            children: [
+                              Icon(Icons.person, color: Colors.white),
+                              SizedBox(width: 12),
+                              Text(
+                                'View contact',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'media',
+                          child: Row(
+                            children: [
+                              Icon(Icons.photo_library, color: Colors.white),
+                              SizedBox(width: 12),
+                              Text(
+                                'Media, links, and docs',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'search',
+                          child: Row(
+                            children: [
+                              Icon(Icons.search, color: Colors.white),
+                              SizedBox(width: 12),
+                              Text(
+                                'Search',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'mute',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.notifications_off,
+                                color: Colors.white,
+                              ),
+                              SizedBox(width: 12),
+                              Text(
+                                'Mute notifications',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'wallpaper',
+                          child: Row(
+                            children: [
+                              Icon(Icons.wallpaper, color: Colors.white),
+                              SizedBox(width: 12),
+                              Text(
+                                'Wallpaper',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'clear_chat',
+                          child: Row(
+                            children: [
+                              Icon(Icons.clear_all, color: Colors.white),
+                              SizedBox(width: 12),
+                              Text(
+                                'Clear chat',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'block',
+                          child: Row(
+                            children: [
+                              Icon(Icons.block, color: Colors.red),
+                              SizedBox(width: 12),
+                              Text(
+                                'Block',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-            ChatInput(onSendMessage: _sendMessage, onSendMedia: _sendMedia),
+            // Messages section
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A202C).withOpacity(0.1),
+                  // Removed background image asset to avoid missing asset errors
+                  // image: DecorationImage(
+                  //   image: AssetImage('assets/images/chat_bg.png'),
+                  //   fit: BoxFit.cover,
+                  //   opacity: 0.1,
+                  // ),
+                ),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: _loading
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF25D366),
+                              ),
+                            )
+                          : _messages.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.chat_bubble_outline,
+                                    size: 64,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'No messages yet',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Send a message to start the conversation',
+                                    style: TextStyle(color: Colors.grey[500]),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: _messages.length,
+                              itemBuilder: (context, index) {
+                                final message = _messages[index];
+                                final isCurrentUser =
+                                    message.senderId == widget.currentUserId;
+                                return MessageBubble(
+                                  message: message,
+                                  isCurrentUser: isCurrentUser,
+                                  onLongPress: () =>
+                                      _onMessageLongPress(message),
+                                  onCollaborationResponse: (accept) =>
+                                      _handleCollaborationResponse(
+                                        message,
+                                        accept,
+                                      ),
+                                );
+                              },
+                            ),
+                    ),
+                    ChatInput(
+                      onSendMessage: _sendMessage,
+                      onSendMedia: _sendMedia,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showUserProfile() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A202C),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(50),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                ),
+              ),
+              child: CircleAvatar(
+                radius: 50,
+                backgroundColor: Colors.transparent,
+                child: Text(
+                  widget.contactName.isNotEmpty
+                      ? widget.contactName[0].toUpperCase()
+                      : 'U',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 32,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              widget.contactName,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Last seen recently',
+              style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildProfileAction(Icons.call, 'Call', () {}),
+                _buildProfileAction(Icons.videocam, 'Video', () {}),
+                _buildProfileAction(Icons.info, 'Info', () {}),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileAction(IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2D3748),
+              borderRadius: BorderRadius.circular(50),
+            ),
+            child: Icon(icon, color: Colors.white, size: 24),
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  void _showMediaGallery() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Media gallery coming soon!'),
+        backgroundColor: Color(0xFF667EEA),
+      ),
+    );
+  }
+
+  void _showSearchInChat() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Search in chat coming soon!'),
+        backgroundColor: Color(0xFF667EEA),
+      ),
+    );
+  }
+
+  void _toggleMute() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Mute notifications toggled!'),
+        backgroundColor: Color(0xFF667EEA),
+      ),
+    );
+  }
+
+  void _changeWallpaper() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Wallpaper options coming soon!'),
+        backgroundColor: Color(0xFF667EEA),
+      ),
+    );
+  }
+
+  void _blockUser() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A202C),
+        title: const Text(
+          'Block Contact',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Block ${widget.contactName}? Blocked contacts will no longer be able to call you or send you messages.',
+          style: TextStyle(color: Colors.grey[400]),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Contact blocked!'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            },
+            child: const Text('Block', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }
@@ -520,14 +835,16 @@ class _EnhancedIndividualChatScreenState
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear Chat'),
-        content: const Text(
+        backgroundColor: const Color(0xFF1A202C),
+        title: const Text('Clear Chat', style: TextStyle(color: Colors.white)),
+        content: Text(
           'Are you sure you want to clear all messages? This cannot be undone.',
+          style: TextStyle(color: Colors.grey[400]),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
           ),
           TextButton(
             onPressed: () async {
@@ -543,13 +860,19 @@ class _EnhancedIndividualChatScreenState
                 });
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Chat cleared successfully')),
+                    const SnackBar(
+                      content: Text('Chat cleared successfully'),
+                      backgroundColor: Color(0xFF667EEA),
+                    ),
                   );
                 }
               } else {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Failed to clear chat')),
+                    const SnackBar(
+                      content: Text('Failed to clear chat'),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                 }
               }
