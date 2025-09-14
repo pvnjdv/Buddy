@@ -749,16 +749,17 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF667eea).withOpacity(0.1),
-            const Color(0xFF764ba2).withOpacity(0.1),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: const Color(0xFF1A202C).withOpacity(0.9),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF667eea).withOpacity(0.2)),
+        border: Border.all(color: const Color(0xFF667EEA).withOpacity(0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF667EEA).withOpacity(0.1),
+            spreadRadius: 0,
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -768,13 +769,13 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF667eea).withOpacity(0.2),
+                  color: const Color(0xFF667EEA).withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.analytics,
                   size: 20,
-                  color: Color(0xFF667eea),
+                  color: Color(0xFF667EEA),
                 ),
               ),
               const SizedBox(width: 12),
@@ -783,7 +784,7 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF2D3748),
+                  color: Colors.white,
                 ),
               ),
             ],
@@ -814,7 +815,7 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                   'AI Responses',
                   '$totalAiMessages',
                   Icons.smart_toy,
-                  Colors.purple,
+                  const Color(0xFF667EEA),
                 ),
               ),
             ],
@@ -823,19 +824,19 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
+              color: const Color(0xFF2D3748).withOpacity(0.8),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
+            child: const Row(
               children: [
-                Icon(Icons.info_outline, size: 16, color: Colors.blue.shade600),
-                const SizedBox(width: 8),
+                Icon(Icons.info_outline, size: 16, color: Color(0xFF667EEA)),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Each conversation maintains its own context. BuddyAI remembers everything within each conversation separately.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.blue.shade700,
+                      color: Colors.white70,
                       height: 1.3,
                     ),
                   ),
@@ -857,9 +858,9 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.8),
+        color: const Color(0xFF2D3748).withOpacity(0.6),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Column(
         children: [
@@ -876,9 +877,9 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
           const SizedBox(height: 4),
           Text(
             title,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 11,
-              color: color.withOpacity(0.8),
+              color: Colors.white70,
               fontWeight: FontWeight.w500,
             ),
             textAlign: TextAlign.center,
@@ -891,264 +892,282 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: Row(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D1B2A), Color(0xFF1B263B), Color(0xFF2D3748)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Column(
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+            // Custom App Bar with dark theme
+            SafeArea(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
                 ),
-                shape: BoxShape.circle,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A202C).withOpacity(0.9),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: const Color(0xFF4A5568).withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Back button
+                    Container(
+                      margin: const EdgeInsets.only(right: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2D3748).withOpacity(0.8),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.close,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ),
+                    // Logo and title
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.history,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Chat History',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          Text(
+                            'Your conversations with BuddyAI',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Action buttons
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      child: IconButton(
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF667EEA).withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.add_comment,
+                            size: 18,
+                            color: Color(0xFF667EEA),
+                          ),
+                        ),
+                        onPressed: _startNewConversation,
+                        tooltip: 'New Conversation',
+                      ),
+                    ),
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      child: IconButton(
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.refresh,
+                            size: 18,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        onPressed: () async {
+                          print('🔄 Manual refresh triggered');
+                          await _loadConversations();
+                        },
+                        tooltip: 'Refresh',
+                      ),
+                    ),
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      child: PopupMenuButton<String>(
+                        onSelected: (value) async {
+                          switch (value) {
+                            case 'debug':
+                              await _debugConversations();
+                              break;
+                            case 'export_all':
+                              await _exportAllConversations();
+                              break;
+                            case 'ai_context':
+                              _showAIContextInfo();
+                              break;
+                          }
+                        },
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.more_horiz,
+                            size: 18,
+                            color: Colors.orange,
+                          ),
+                        ),
+                        color: const Color(0xFF1A202C),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: const BorderSide(color: Color(0xFF4A5568)),
+                        ),
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'ai_context',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.psychology,
+                                  size: 18,
+                                  color: Color(0xFF667EEA),
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'AI Context Info',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'export_all',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.cloud_download,
+                                  size: 18,
+                                  color: Colors.green,
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Export All',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'debug',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.bug_report,
+                                  size: 18,
+                                  color: Colors.orange,
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Debug Info',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: const Icon(Icons.history, color: Colors.white, size: 18),
             ),
-            const SizedBox(width: 12),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Chat History',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2D3748),
-                  ),
-                ),
-                Text(
-                  'Your conversations with BuddyAI',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF718096),
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-              ],
+            // Content area
+            Expanded(
+              child: _loading
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                              ),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF667EEA,
+                                  ).withOpacity(0.3),
+                                  spreadRadius: 0,
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: const CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 3,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          const Text(
+                            'Loading conversations...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : _conversations.isEmpty
+                  ? _buildEmptyState()
+                  : _buildConversationsList(),
             ),
           ],
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        toolbarHeight: 80,
-        leading: Container(
-          margin: const EdgeInsets.all(8),
-          child: IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.close, size: 20),
-            ),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  child: IconButton(
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF667eea).withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.add_comment,
-                        size: 18,
-                        color: Color(0xFF667eea),
-                      ),
-                    ),
-                    onPressed: _startNewConversation,
-                    tooltip: 'New Conversation',
-                  ),
-                ),
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  child: IconButton(
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.refresh,
-                        size: 18,
-                        color: Colors.blue,
-                      ),
-                    ),
-                    onPressed: () async {
-                      print('🔄 Manual refresh triggered');
-                      await _loadConversations();
-                    },
-                    tooltip: 'Refresh',
-                  ),
-                ),
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  child: PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      switch (value) {
-                        case 'debug':
-                          await _debugConversations();
-                          break;
-                        case 'export_all':
-                          await _exportAllConversations();
-                          break;
-                        case 'ai_context':
-                          _showAIContextInfo();
-                          break;
-                      }
-                    },
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.more_horiz,
-                        size: 18,
-                        color: Colors.orange,
-                      ),
-                    ),
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'ai_context',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.psychology,
-                              size: 18,
-                              color: Color(0xFF667eea),
-                            ),
-                            SizedBox(width: 12),
-                            Text(
-                              'AI Context Info',
-                              style: TextStyle(color: Color(0xFF667eea)),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'export_all',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.cloud_download,
-                              size: 18,
-                              color: Colors.green,
-                            ),
-                            SizedBox(width: 12),
-                            Text(
-                              'Export All',
-                              style: TextStyle(color: Colors.green),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'debug',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.bug_report,
-                              size: 18,
-                              color: Colors.orange,
-                            ),
-                            SizedBox(width: 12),
-                            Text(
-                              'Debug Info',
-                              style: TextStyle(color: Colors.orange),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.transparent,
-                  Colors.grey.shade200,
-                  Colors.transparent,
-                ],
-              ),
-            ),
-          ),
-        ),
       ),
-      body: _loading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF667eea).withOpacity(0.3),
-                          spreadRadius: 0,
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: const CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 3,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Loading conversations...',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade600,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : _conversations.isEmpty
-          ? _buildEmptyState()
-          : _buildConversationsList(),
       floatingActionButton: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF667eea).withOpacity(0.3),
+              color: const Color(0xFF667EEA).withOpacity(0.3),
               spreadRadius: 0,
               blurRadius: 20,
               offset: const Offset(0, 8),
@@ -1157,7 +1176,7 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
         ),
         child: FloatingActionButton.extended(
           onPressed: _startNewConversation,
-          backgroundColor: const Color(0xFF667eea),
+          backgroundColor: const Color(0xFF667EEA),
           foregroundColor: Colors.white,
           elevation: 0,
           icon: const Icon(Icons.add),
@@ -1181,35 +1200,31 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF667eea).withOpacity(0.1),
-                  const Color(0xFF764ba2).withOpacity(0.1),
+                  const Color(0xFF667EEA).withOpacity(0.3),
+                  const Color(0xFF764BA2).withOpacity(0.3),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.history, size: 60, color: Colors.grey[400]),
+            child: const Icon(Icons.history, size: 60, color: Colors.white70),
           ),
           const SizedBox(height: 32),
           const Text(
             'No conversations yet',
             style: TextStyle(
               fontSize: 24,
-              color: Color(0xFF2D3748),
+              color: Colors.white,
               fontWeight: FontWeight.bold,
               letterSpacing: -0.5,
             ),
           ),
           const SizedBox(height: 12),
-          Text(
+          const Text(
             'Start your first conversation with BuddyAI\nand it will appear here',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-              height: 1.5,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.white70, height: 1.5),
           ),
           const SizedBox(height: 40),
           Container(
@@ -1217,7 +1232,7 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF667eea).withOpacity(0.3),
+                  color: const Color(0xFF667EEA).withOpacity(0.3),
                   spreadRadius: 0,
                   blurRadius: 20,
                   offset: const Offset(0, 8),
@@ -1235,7 +1250,7 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                 ),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF667eea),
+                backgroundColor: const Color(0xFF667EEA),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
@@ -1253,36 +1268,34 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 40),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
+              color: const Color(0xFF1A202C).withOpacity(0.8),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.shade200),
+              border: Border.all(
+                color: const Color(0xFF667EEA).withOpacity(0.3),
+              ),
             ),
             child: Column(
               children: [
-                Row(
+                const Row(
                   children: [
-                    Icon(
-                      Icons.psychology,
-                      size: 20,
-                      color: Colors.blue.shade600,
-                    ),
-                    const SizedBox(width: 8),
+                    Icon(Icons.psychology, size: 20, color: Color(0xFF667EEA)),
+                    SizedBox(width: 8),
                     Text(
                       'AI Context Memory',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade700,
+                        color: Color(0xFF667EEA),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
+                const Text(
                   'Each conversation maintains its own context. BuddyAI will remember everything you discuss within each conversation.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.blue.shade600,
+                    color: Colors.white70,
                     height: 1.3,
                   ),
                 ),
@@ -1343,11 +1356,19 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Colors.white, Colors.grey.shade50],
+            color: const Color(0xFF1A202C).withOpacity(0.9),
+            border: Border.all(
+              color: const Color(0xFF4A5568).withOpacity(0.3),
+              width: 1,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                spreadRadius: 0,
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Padding(
             padding: const EdgeInsets.all(20),
@@ -1393,7 +1414,7 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF2D3748),
+                              color: Colors.white,
                               letterSpacing: -0.5,
                             ),
                             maxLines: 2,
@@ -1407,10 +1428,10 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                             ),
                             decoration: BoxDecoration(
                               color: messageCount > 10
-                                  ? Colors.green.shade100
+                                  ? const Color(0xFF667EEA).withOpacity(0.3)
                                   : messageCount > 5
-                                  ? Colors.blue.shade100
-                                  : Colors.grey.shade100,
+                                  ? Colors.blue.withOpacity(0.3)
+                                  : const Color(0xFF4A5568).withOpacity(0.3),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -1419,10 +1440,10 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 color: messageCount > 10
-                                    ? Colors.green.shade700
+                                    ? const Color(0xFF667EEA)
                                     : messageCount > 5
-                                    ? Colors.blue.shade700
-                                    : Colors.grey.shade700,
+                                    ? Colors.blue
+                                    : Colors.white70,
                               ),
                             ),
                           ),
@@ -1433,13 +1454,13 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                       icon: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
+                          color: const Color(0xFF2D3748).withOpacity(0.8),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           Icons.more_vert,
                           size: 18,
-                          color: Colors.grey.shade600,
+                          color: Colors.white70,
                         ),
                       ),
                       onSelected: (value) {
@@ -1458,6 +1479,11 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                             break;
                         }
                       },
+                      color: const Color(0xFF1A202C),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Color(0xFF4A5568)),
+                      ),
                       itemBuilder: (context) => [
                         const PopupMenuItem(
                           value: 'details',
@@ -1466,12 +1492,12 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                               Icon(
                                 Icons.info_outline,
                                 size: 18,
-                                color: Color(0xFF667eea),
+                                color: Color(0xFF667EEA),
                               ),
                               SizedBox(width: 12),
                               Text(
                                 'View Details',
-                                style: TextStyle(color: Color(0xFF667eea)),
+                                style: TextStyle(color: Colors.white),
                               ),
                             ],
                           ),
@@ -1483,12 +1509,12 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                               Icon(
                                 Icons.edit,
                                 size: 18,
-                                color: Color(0xFF667eea),
+                                color: Color(0xFF667EEA),
                               ),
                               SizedBox(width: 12),
                               Text(
                                 'Rename',
-                                style: TextStyle(color: Color(0xFF667eea)),
+                                style: TextStyle(color: Colors.white),
                               ),
                             ],
                           ),
@@ -1534,24 +1560,26 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
+                    color: const Color(0xFF2D3748).withOpacity(0.5),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade200),
+                    border: Border.all(
+                      color: const Color(0xFF4A5568).withOpacity(0.3),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.chat_bubble_outline,
                         size: 16,
-                        color: Colors.grey.shade600,
+                        color: Colors.white54,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           lastMessage,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 13,
-                            color: Colors.grey.shade700,
+                            color: Colors.white70,
                             height: 1.4,
                           ),
                           maxLines: 2,
@@ -1575,23 +1603,23 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
+                          color: Colors.blue.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.person,
                               size: 16,
-                              color: Colors.blue.shade600,
+                              color: Colors.blue,
                             ),
                             const SizedBox(width: 6),
                             Text(
                               '$userMessages',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.blue.shade700,
+                                color: Colors.blue,
                               ),
                             ),
                           ],
@@ -1609,23 +1637,23 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.purple.shade50,
+                          color: const Color(0xFF667EEA).withOpacity(0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.smart_toy,
                               size: 16,
-                              color: Colors.purple.shade600,
+                              color: Color(0xFF667EEA),
                             ),
                             const SizedBox(width: 6),
                             Text(
                               '$aiMessages',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.purple.shade700,
+                                color: Color(0xFF667EEA),
                               ),
                             ),
                           ],
@@ -1644,24 +1672,24 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
+                          color: const Color(0xFF4A5568).withOpacity(0.3),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.schedule,
                               size: 16,
-                              color: Colors.grey.shade600,
+                              color: Colors.white54,
                             ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 _formatTimestamp(createdAt),
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade700,
+                                  color: Colors.white70,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),

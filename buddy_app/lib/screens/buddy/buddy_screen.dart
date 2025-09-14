@@ -4,7 +4,7 @@ import '../../models/flow_models.dart';
 import '../../services/ai/buddy_service.dart';
 import '../../config/settings/theme_config.dart';
 import '../../config/settings/settings_manager.dart';
-import '../settings/settings_screen.dart';
+
 import 'chat_history_screen.dart';
 import '../../widgets/chat/buddy_message_bubble.dart';
 
@@ -26,7 +26,6 @@ class _BuddyScreenState extends State<BuddyScreen>
 
   // AI Mode State
   String _currentAIMode = 'api'; // Default to API mode
-  bool _isLoadingMode = false;
 
   // Real-time sync
   Timer? _syncTimer;
@@ -215,10 +214,6 @@ class _BuddyScreenState extends State<BuddyScreen>
   Future<void> _switchAIMode() async {
     final newMode = _currentAIMode == 'local' ? 'api' : 'local';
 
-    setState(() {
-      _isLoadingMode = true;
-    });
-
     try {
       final success = await BuddyService.switchAIMode(newMode);
       if (success && mounted) {
@@ -231,12 +226,6 @@ class _BuddyScreenState extends State<BuddyScreen>
       }
     } catch (e) {
       _showSnackBar('Error switching AI mode: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingMode = false;
-        });
-      }
     }
   }
 
@@ -377,402 +366,582 @@ class _BuddyScreenState extends State<BuddyScreen>
     _showSnackBar('New conversation started');
   }
 
+  void _showComingSoon(String feature) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.info_outline, color: Colors.white),
+            const SizedBox(width: 8),
+            Text('$feature coming soon!'),
+          ],
+        ),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _exportChat() async {
+    try {
+      // TODO: Implement actual export functionality
+      _showSnackBar('Chat export feature coming soon!');
+    } catch (e) {
+      _showSnackBar('Error exporting chat: $e');
+    }
+  }
+
+  Future<void> _importChat() async {
+    try {
+      // TODO: Implement actual import functionality
+      _showSnackBar('Chat import feature coming soon!');
+    } catch (e) {
+      _showSnackBar('Error importing chat: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        automaticallyImplyLeading: false, // Remove back button
-        title: Row(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D1B2A), Color(0xFF1B263B), Color(0xFF2D3748)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Column(
           children: [
-            // Animated AI Avatar
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.primaryColor,
-                    AppTheme.accentColor,
-                    Colors.purple.shade300,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            // Custom App Bar with Enhanced Buddy Logo
+            SafeArea(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
                 ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A202C).withOpacity(0.9),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: const Color(0xFF4A5568).withOpacity(0.3),
+                      width: 1,
+                    ),
                   ),
-                ],
-              ),
-              child: Icon(
-                _isTyping ? Icons.smart_toy_outlined : Icons.smart_toy,
-                color: Colors.white,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Buddy AI',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimaryColor,
+                ),
+                child: Row(
+                  children: [
+                    // Enhanced Buddy Logo (same as home screen)
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Online status indicator
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _isOnline ? Colors.green : Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      if (_activePersona != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF667EEA).withOpacity(0.4),
+                            blurRadius: 12,
+                            offset: const Offset(0, 3),
                           ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withValues(
-                              alpha: 0.08,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: AppTheme.primaryColor.withValues(
-                                alpha: 0.3,
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 6,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Outer glow effect
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              gradient: RadialGradient(
+                                colors: [
+                                  Colors.white.withOpacity(0.2),
+                                  Colors.transparent,
+                                ],
+                                stops: const [0.0, 1.0],
                               ),
                             ),
                           ),
+                          // Buddy logo
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              'assets/icon/app_icon.jpg',
+                              width: 38,
+                              height: 38,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.smart_toy,
+                                  color: Colors.white,
+                                  size: 24,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Title row with status
+                          Row(
+                            children: [
+                              const Text(
+                                'Buddy AI',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              // Online status indicator
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: _isOnline ? Colors.green : Colors.red,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color:
+                                          (_isOnline
+                                                  ? Colors.green
+                                                  : Colors.red)
+                                              .withOpacity(0.5),
+                                      blurRadius: 4,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (_activePersona != null) ...[
+                                const SizedBox(width: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFF667EEA,
+                                    ).withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: const Color(
+                                        0xFF667EEA,
+                                      ).withOpacity(0.4),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.tune,
+                                        size: 11,
+                                        color: Color(0xFF667EEA),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _activePersona!.name,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: Color(0xFF667EEA),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          // Mode indicator below title
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _getModeColor(
+                                    _currentAIMode,
+                                  ).withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: _getModeColor(
+                                      _currentAIMode,
+                                    ).withOpacity(0.4),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _getModeIcon(_currentAIMode),
+                                      size: 12,
+                                      color: _getModeColor(_currentAIMode),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _getModeName(_currentAIMode),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: _getModeColor(_currentAIMode),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '• ${_currentAIMode == 'local' ? 'Local' : 'Cloud'}',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: _getModeColor(
+                                          _currentAIMode,
+                                        ).withOpacity(0.8),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_lastSyncTime != null) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              '• ${_formatSyncTime(_lastSyncTime!)}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.white54,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    // History button
+                    IconButton(
+                      icon: const Icon(Icons.history, color: Colors.white),
+                      onPressed: _showChatHistory,
+                    ),
+                    // Enhanced menu with more features
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.white),
+                      color: const Color(0xFF1A202C),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Color(0xFF4A5568)),
+                      ),
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'create_persona':
+                            _showCreatePersonaDialog();
+                            break;
+                          case 'manage_personas':
+                            _showManagePersonasDialog();
+                            break;
+                          case 'clear_persona':
+                            _clearActivePersona();
+                            break;
+                          case 'settings':
+                            _showComingSoon('Settings');
+                            break;
+                          case 'clear':
+                            _clearChat();
+                            break;
+                          case 'switch_mode':
+                            _switchAIMode();
+                            break;
+                          case 'history':
+                            _showChatHistory();
+                            break;
+                          case 'new_conversation':
+                            _startNewConversation();
+                            break;
+                          case 'export_chat':
+                            _exportChat();
+                            break;
+                          case 'import_chat':
+                            _importChat();
+                            break;
+                          default:
+                            // Handle persona selection
+                            if (value.startsWith('persona_')) {
+                              final personaId = value.substring(8);
+                              _selectPersona(personaId);
+                            }
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        // Personas Section
+                        ..._savedPersonas
+                            .map(
+                              (persona) => PopupMenuItem(
+                                value: 'persona_${persona.id}',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      _activePersona?.id == persona.id
+                                          ? Icons.check_circle
+                                          : Icons.person_outline,
+                                      color: _activePersona?.id == persona.id
+                                          ? const Color(0xFF667EEA)
+                                          : Colors.white,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            persona.name,
+                                            style: TextStyle(
+                                              color:
+                                                  _activePersona?.id ==
+                                                      persona.id
+                                                  ? const Color(0xFF667EEA)
+                                                  : Colors.white,
+                                              fontWeight:
+                                                  _activePersona?.id ==
+                                                      persona.id
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                            ),
+                                          ),
+                                          if (persona.description.isNotEmpty)
+                                            Text(
+                                              persona.description.length > 30
+                                                  ? '${persona.description.substring(0, 30)}...'
+                                                  : persona.description,
+                                              style: const TextStyle(
+                                                color: Colors.white54,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        if (_savedPersonas.isNotEmpty) const PopupMenuDivider(),
+
+                        // Persona management
+                        PopupMenuItem(
+                          value: 'create_persona',
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.add, color: Color(0xFF667EEA)),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Create New AI',
+                                style: TextStyle(color: Color(0xFF667EEA)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_savedPersonas.isNotEmpty)
+                          PopupMenuItem(
+                            value: 'manage_personas',
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.manage_accounts,
+                                  color: Color(0xFF667EEA),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Manage Custom AIs',
+                                  style: TextStyle(color: Color(0xFF667EEA)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (_activePersona != null)
+                          PopupMenuItem(
+                            value: 'clear_persona',
+                            child: Row(
+                              children: [
+                                const Icon(Icons.clear, color: Colors.white54),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Clear Active AI',
+                                  style: TextStyle(color: Colors.white54),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        const PopupMenuDivider(),
+
+                        // Chat management
+                        PopupMenuItem(
+                          value: 'new_conversation',
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.add_comment,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'New Conversation',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'clear',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.clear_all, color: Colors.white),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Clear Chat',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'export_chat',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.download, color: Colors.white),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Export Chat',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem(
+                          value: 'import_chat',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.upload, color: Colors.white),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Import Chat',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const PopupMenuDivider(),
+
+                        // Settings and mode switching
+                        PopupMenuItem(
+                          value: 'switch_mode',
+                          child: Row(
                             children: [
                               Icon(
-                                Icons.tune,
-                                size: 12,
-                                color: AppTheme.primaryColor,
+                                _currentAIMode == 'local'
+                                    ? Icons.cloud
+                                    : Icons.computer,
+                                color: Colors.white,
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 8),
                               Text(
-                                _activePersona!.name,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppTheme.primaryColor,
-                                  fontWeight: FontWeight.w600,
+                                'Switch to ${_currentAIMode == 'local' ? 'Cloud' : 'Local'} Mode',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _currentAIMode == 'local'
+                                      ? Colors.green.withOpacity(0.2)
+                                      : Colors.blue.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  _currentAIMode == 'local' ? 'LOCAL' : 'CLOUD',
+                                  style: TextStyle(
+                                    color: _currentAIMode == 'local'
+                                        ? Colors.green
+                                        : Colors.blue,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Icon(
-                        _currentAIMode == 'local'
-                            ? Icons.computer
-                            : Icons.cloud,
-                        size: 14,
-                        color: AppTheme.textSecondaryColor,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _currentAIMode == 'local' ? 'Local AI' : 'Cloud AI',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondaryColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      if (_lastSyncTime != null) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          '• ${_formatSyncTime(_lastSyncTime!)}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppTheme.textSecondaryColor.withValues(
-                              alpha: 0.7,
-                            ),
+                        PopupMenuItem(
+                          value: 'settings',
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.settings_outlined,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Settings',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
                           ),
                         ),
                       ],
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
+            // Chat area
+            Expanded(
+              child: _messages.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: _messages.length + (_isTyping ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == _messages.length && _isTyping) {
+                          return _buildTypingIndicator();
+                        }
+                        return _buildMessageBubble(_messages[index]);
+                      },
+                    ),
+            ),
+            _buildInputArea(),
           ],
         ),
-        backgroundColor: AppTheme.surfaceColor,
-        foregroundColor: AppTheme.textPrimaryColor,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.history, color: AppTheme.textPrimaryColor),
-            onPressed: _showChatHistory,
-          ),
-          PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: AppTheme.textPrimaryColor),
-            color: AppTheme.surfaceColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: AppTheme.borderColor),
-            ),
-            onSelected: (value) {
-              switch (value) {
-                case 'create_persona':
-                  _showCreatePersonaDialog();
-                  break;
-                case 'manage_personas':
-                  _showManagePersonasDialog();
-                  break;
-                case 'clear_persona':
-                  _clearActivePersona();
-                  break;
-                case 'settings':
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SettingsScreen(),
-                    ),
-                  );
-                  break;
-                case 'clear':
-                  _clearChat();
-                  break;
-                case 'switch_mode':
-                  _switchAIMode();
-                  break;
-                case 'history':
-                  _showChatHistory();
-                  break;
-                case 'new_conversation':
-                  _startNewConversation();
-                  break;
-                default:
-                  // Handle persona selection
-                  if (value.startsWith('persona_')) {
-                    final personaId = value.substring(8); // Remove "persona_"
-                    _selectPersona(personaId);
-                  }
-              }
-            },
-            itemBuilder: (context) => [
-              // Show saved personas first
-              ..._savedPersonas.map(
-                (persona) => PopupMenuItem(
-                  value: 'persona_${persona.id}',
-                  child: Row(
-                    children: [
-                      Icon(
-                        _activePersona?.id == persona.id
-                            ? Icons.check_circle
-                            : Icons.person_outline,
-                        color: _activePersona?.id == persona.id
-                            ? AppTheme.primaryColor
-                            : AppTheme.textPrimaryColor,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              persona.name,
-                              style: TextStyle(
-                                color: _activePersona?.id == persona.id
-                                    ? AppTheme.primaryColor
-                                    : AppTheme.textPrimaryColor,
-                                fontWeight: _activePersona?.id == persona.id
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                            if (persona.description.isNotEmpty)
-                              Text(
-                                persona.description.length > 30
-                                    ? '${persona.description.substring(0, 30)}...'
-                                    : persona.description,
-                                style: TextStyle(
-                                  color: AppTheme.textSecondaryColor,
-                                  fontSize: 12,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              if (_savedPersonas.isNotEmpty) const PopupMenuDivider(),
-
-              // Persona management
-              PopupMenuItem(
-                value: 'create_persona',
-                child: Row(
-                  children: [
-                    Icon(Icons.add, color: AppTheme.primaryColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Create New AI',
-                      style: TextStyle(color: AppTheme.primaryColor),
-                    ),
-                  ],
-                ),
-              ),
-              if (_savedPersonas.isNotEmpty)
-                PopupMenuItem(
-                  value: 'manage_personas',
-                  child: Row(
-                    children: [
-                      Icon(Icons.settings, color: AppTheme.textPrimaryColor),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Manage AIs',
-                        style: TextStyle(color: AppTheme.textPrimaryColor),
-                      ),
-                    ],
-                  ),
-                ),
-              if (_activePersona != null)
-                PopupMenuItem(
-                  value: 'clear_persona',
-                  child: Row(
-                    children: [
-                      Icon(Icons.clear, color: Colors.orange),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Clear Active AI',
-                        style: TextStyle(color: Colors.orange),
-                      ),
-                    ],
-                  ),
-                ),
-
-              const PopupMenuDivider(),
-
-              // Original menu items
-              PopupMenuItem(
-                value: 'settings',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.settings_outlined,
-                      color: AppTheme.textPrimaryColor,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Settings',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
-                    ),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem(
-                value: 'new_conversation',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.add_comment_outlined,
-                      color: AppTheme.textPrimaryColor,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'New Conversation',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'clear',
-                child: Row(
-                  children: [
-                    Icon(Icons.clear_all, color: AppTheme.textPrimaryColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Clear chat',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'switch_mode',
-                child: Row(
-                  children: [
-                    Icon(
-                      _isLoadingMode
-                          ? Icons.hourglass_empty
-                          : (_currentAIMode == 'local'
-                                ? Icons.cloud
-                                : Icons.computer),
-                      color: AppTheme.textPrimaryColor,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isLoadingMode
-                          ? 'Switching...'
-                          : 'Switch to ${_currentAIMode == 'local' ? 'API' : 'Local'}',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'history',
-                child: Row(
-                  children: [
-                    Icon(Icons.history, color: AppTheme.textPrimaryColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Chat history',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: _messages.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length + (_isTyping ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _messages.length && _isTyping) {
-                        return _buildTypingIndicator();
-                      }
-                      return _buildMessageBubble(_messages[index]);
-                    },
-                  ),
-          ),
-          _buildInputArea(),
-        ],
       ),
     );
   }
@@ -807,10 +976,42 @@ class _BuddyScreenState extends State<BuddyScreen>
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.smart_toy,
-                  size: 70,
-                  color: Colors.white,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Outer glow effect
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(60),
+                        gradient: RadialGradient(
+                          colors: [
+                            Colors.white.withOpacity(0.2),
+                            Colors.transparent,
+                          ],
+                          stops: const [0.0, 1.0],
+                        ),
+                      ),
+                    ),
+                    // Buddy logo
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(60),
+                      child: Image.asset(
+                        'assets/icon/app_icon.jpg',
+                        width: 120,
+                        height: 120,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.smart_toy,
+                            size: 70,
+                            color: Colors.white,
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               );
             },
@@ -996,126 +1197,393 @@ class _BuddyScreenState extends State<BuddyScreen>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        border: Border(top: BorderSide(color: AppTheme.borderColor)),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1B263B), Color(0xFF1B263B), Color(0xFF2D3748)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        border: Border(
+          top: BorderSide(
+            color: const Color(0xFF4A5568).withOpacity(0.3),
+            width: 1,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.3),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppTheme.backgroundColor,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: _controller.text.isNotEmpty
-                      ? AppTheme.primaryColor.withValues(alpha: 0.3)
-                      : AppTheme.borderColor,
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  if (_controller.text.isNotEmpty)
-                    BoxShadow(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+          // Input row
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2D3748).withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(
+                      color: _controller.text.isNotEmpty
+                          ? const Color(0xFF667EEA).withOpacity(0.5)
+                          : const Color(0xFF4A5568).withOpacity(0.3),
+                      width: 1.5,
                     ),
-                ],
-              ),
-              child: TextField(
-                controller: _controller,
-                style: TextStyle(
-                  color: AppTheme.textPrimaryColor,
-                  fontSize: 16,
+                    boxShadow: [
+                      if (_controller.text.isNotEmpty)
+                        BoxShadow(
+                          color: const Color(0xFF667EEA).withOpacity(0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _controller,
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                    maxLines: null,
+                    decoration: InputDecoration(
+                      hintText: '💭 Ask Buddy anything...',
+                      hintStyle: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 16,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.only(left: 4, right: 8),
+                        child: Icon(
+                          Icons.chat_bubble_outline,
+                          color: Colors.white54,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                    onSubmitted: (_) => _sendMessage(),
+                    onChanged: (text) {
+                      setState(() {}); // Rebuild to update border color
+                    },
+                  ),
                 ),
-                maxLines: null,
-                decoration: InputDecoration(
-                  hintText: '💭 Ask Buddy anything...',
-                  hintStyle: TextStyle(
-                    color: AppTheme.textSecondaryColor,
-                    fontSize: 16,
+              ),
+              const SizedBox(width: 8),
+              // Mode selector button
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2D3748).withOpacity(0.8),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFF4A5568).withOpacity(0.3),
+                    width: 1,
                   ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 14,
+                ),
+                child: PopupMenuButton<String>(
+                  icon: Icon(
+                    _getModeIcon(_currentAIMode),
+                    color: _getModeColor(_currentAIMode),
+                    size: 20,
                   ),
-                  prefixIcon: Padding(
-                    padding: const EdgeInsets.only(left: 4, right: 8),
+                  color: const Color(0xFF1A202C),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Color(0xFF4A5568)),
+                  ),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'api':
+                        setState(() {
+                          _currentAIMode = 'api';
+                        });
+                        _showSnackBar('Switched to Standard Mode');
+                        break;
+                      case 'ask':
+                        setState(() {
+                          _currentAIMode = 'ask';
+                        });
+                        _showSnackBar('Switched to Ask Mode');
+                        break;
+                      case 'agent':
+                        setState(() {
+                          _currentAIMode = 'agent';
+                        });
+                        _showSnackBar('Switched to Agent Mode');
+                        break;
+                      case 'reasoning':
+                        setState(() {
+                          _currentAIMode = 'reasoning';
+                        });
+                        _showSnackBar('Switched to Reasoning Mode');
+                        break;
+                      case 'deep_think':
+                        setState(() {
+                          _currentAIMode = 'deep_think';
+                        });
+                        _showSnackBar('Switched to Deep Think Mode');
+                        break;
+                      case 'image_generation':
+                        _showComingSoon('Image Generation');
+                        break;
+                      case 'hybrid_beta':
+                        _showComingSoon('Hybrid Beta');
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'api',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.cloud,
+                            color: _currentAIMode == 'api'
+                                ? const Color(0xFF667EEA)
+                                : Colors.white,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Standard Mode',
+                            style: TextStyle(
+                              color: _currentAIMode == 'api'
+                                  ? const Color(0xFF667EEA)
+                                  : Colors.white,
+                              fontWeight: _currentAIMode == 'api'
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'ask',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.help_outline,
+                            color: _currentAIMode == 'ask'
+                                ? Colors.orange
+                                : Colors.white,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Ask Mode',
+                            style: TextStyle(
+                              color: _currentAIMode == 'ask'
+                                  ? Colors.orange
+                                  : Colors.white,
+                              fontWeight: _currentAIMode == 'ask'
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'agent',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.android,
+                            color: _currentAIMode == 'agent'
+                                ? Colors.green
+                                : Colors.white,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Agent Mode',
+                            style: TextStyle(
+                              color: _currentAIMode == 'agent'
+                                  ? Colors.green
+                                  : Colors.white,
+                              fontWeight: _currentAIMode == 'agent'
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'reasoning',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.psychology,
+                            color: _currentAIMode == 'reasoning'
+                                ? Colors.purple
+                                : Colors.white,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Reasoning Mode',
+                            style: TextStyle(
+                              color: _currentAIMode == 'reasoning'
+                                  ? Colors.purple
+                                  : Colors.white,
+                              fontWeight: _currentAIMode == 'reasoning'
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'deep_think',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.psychology_alt,
+                            color: _currentAIMode == 'deep_think'
+                                ? Colors.indigo
+                                : Colors.white,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Deep Think Mode',
+                            style: TextStyle(
+                              color: _currentAIMode == 'deep_think'
+                                  ? Colors.indigo
+                                  : Colors.white,
+                              fontWeight: _currentAIMode == 'deep_think'
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: 'image_generation',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.image, color: Colors.white54),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Image Generation',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'SOON',
+                              style: TextStyle(
+                                color: Colors.orange,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'hybrid_beta',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.auto_awesome, color: Colors.white54),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'Hybrid Beta',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'BETA',
+                              style: TextStyle(
+                                color: Colors.blue,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Send/Mic button
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: _controller.text.isNotEmpty
+                        ? [const Color(0xFF667EEA), const Color(0xFF764BA2)]
+                        : [Colors.white24, Colors.white12],
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: _controller.text.isNotEmpty
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF667EEA).withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: IconButton(
+                  icon: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
                     child: Icon(
-                      Icons.chat_bubble_outline,
-                      color: AppTheme.textSecondaryColor.withValues(alpha: 0.6),
+                      _isLoading
+                          ? Icons.hourglass_empty
+                          : _controller.text.isNotEmpty
+                          ? Icons.send_rounded
+                          : Icons.mic,
+                      key: ValueKey(
+                        _isLoading
+                            ? 'loading'
+                            : _controller.text.isNotEmpty
+                            ? 'send'
+                            : 'mic',
+                      ),
+                      color: Colors.white,
                       size: 20,
                     ),
                   ),
-                ),
-                onSubmitted: (_) => _sendMessage(),
-                onChanged: (text) {
-                  setState(() {}); // Rebuild to update border color
-                },
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: _controller.text.isNotEmpty
-                    ? [AppTheme.primaryColor, AppTheme.accentColor]
-                    : [
-                        AppTheme.textSecondaryColor.withValues(alpha: 0.3),
-                        AppTheme.textSecondaryColor.withValues(alpha: 0.2),
-                      ],
-              ),
-              shape: BoxShape.circle,
-              boxShadow: _controller.text.isNotEmpty
-                  ? [
-                      BoxShadow(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                  : [],
-            ),
-            child: IconButton(
-              icon: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  _isLoading
-                      ? Icons.hourglass_empty
-                      : _controller.text.isNotEmpty
-                      ? Icons.send_rounded
-                      : Icons.mic,
-                  key: ValueKey(
-                    _isLoading
-                        ? 'loading'
-                        : _controller.text.isNotEmpty
-                        ? 'send'
-                        : 'mic',
-                  ),
-                  color: Colors.white,
-                  size: 20,
+                  onPressed: _isLoading
+                      ? null
+                      : () {
+                          if (_controller.text.isNotEmpty) {
+                            _sendMessage();
+                          } else {
+                            // Could implement voice input here
+                            _showSnackBar('Voice input coming soon!');
+                          }
+                        },
                 ),
               ),
-              onPressed: _isLoading
-                  ? null
-                  : () {
-                      if (_controller.text.isNotEmpty) {
-                        _sendMessage();
-                      } else {
-                        // Could implement voice input here
-                        _showSnackBar('Voice input coming soon!');
-                      }
-                    },
-            ),
+            ],
           ),
         ],
       ),
@@ -1141,123 +1609,395 @@ class _BuddyScreenState extends State<BuddyScreen>
   Future<void> _showCreatePersonaDialog() async {
     final nameCtrl = TextEditingController();
     final descCtrl = TextEditingController();
+    final expertiseCtrl = TextEditingController();
+    final toneCtrl = TextEditingController();
+    String selectedCategory = 'General';
+
+    final categories = [
+      'General',
+      'Education',
+      'Programming',
+      'Creative Writing',
+      'Business',
+      'Science',
+      'Health',
+      'Lifestyle',
+      'Entertainment',
+    ];
 
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: AppTheme.borderColor),
-        ),
-        title: Row(
-          children: [
-            Icon(Icons.smart_toy, color: AppTheme.primaryColor),
-            const SizedBox(width: 8),
-            Text(
-              'Create Custom AI',
-              style: TextStyle(color: AppTheme.textPrimaryColor),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: AppTheme.borderColor),
+          ),
+          title: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.primaryColor.withOpacity(0.1),
+                  AppTheme.accentColor.withOpacity(0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.auto_awesome,
+                    color: AppTheme.primaryColor,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Create Custom AI',
+                        style: TextStyle(
+                          color: AppTheme.textPrimaryColor,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Design your perfect AI assistant',
+                        style: TextStyle(
+                          color: AppTheme.textSecondaryColor,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // AI Name Section
+                  Text(
+                    'AI Identity',
+                    style: TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'AI Name *',
+                      hintText:
+                          'e.g., Professor Alex, Code Mentor, Creative Writer',
+                      labelStyle: TextStyle(color: AppTheme.textSecondaryColor),
+                      prefixIcon: Icon(
+                        Icons.badge,
+                        color: AppTheme.primaryColor,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppTheme.primaryColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Category Selection
+                  Text(
+                    'Category',
+                    style: TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppTheme.borderColor),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedCategory,
+                        isExpanded: true,
+                        icon: Icon(
+                          Icons.arrow_drop_down,
+                          color: AppTheme.primaryColor,
+                        ),
+                        items: categories.map((category) {
+                          return DropdownMenuItem(
+                            value: category,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _getCategoryIcon(category),
+                                  color: AppTheme.primaryColor,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  category,
+                                  style: TextStyle(
+                                    color: AppTheme.textPrimaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedCategory = value!;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Expertise Section
+                  Text(
+                    'Expertise & Skills',
+                    style: TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: expertiseCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Areas of Expertise',
+                      hintText:
+                          'e.g., Python, Machine Learning, Creative Writing',
+                      labelStyle: TextStyle(color: AppTheme.textSecondaryColor),
+                      prefixIcon: Icon(
+                        Icons.lightbulb_outline,
+                        color: AppTheme.primaryColor,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppTheme.primaryColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Personality & Tone
+                  Text(
+                    'Personality & Communication',
+                    style: TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: toneCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Communication Style',
+                      hintText:
+                          'e.g., Friendly, Professional, Encouraging, Detailed',
+                      labelStyle: TextStyle(color: AppTheme.textSecondaryColor),
+                      prefixIcon: Icon(
+                        Icons.chat,
+                        color: AppTheme.primaryColor,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppTheme.primaryColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Detailed Description
+                  Text(
+                    'Detailed Behavior Description',
+                    style: TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descCtrl,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: 'How should this AI behave?',
+                      hintText:
+                          'Describe the AI\'s role, expertise, tone, and how it should help users. Be specific about its personality and approach.',
+                      labelStyle: TextStyle(color: AppTheme.textSecondaryColor),
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(bottom: 60),
+                        child: Icon(
+                          Icons.description,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppTheme.primaryColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Tips Section
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppTheme.primaryColor.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.tips_and_updates,
+                              color: AppTheme.primaryColor,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Pro Tips',
+                              style: TextStyle(
+                                color: AppTheme.primaryColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '• Be specific about the AI\'s role and expertise\n'
+                          '• Define the communication style you prefer\n'
+                          '• Include examples of how it should respond\n'
+                          '• Set clear boundaries for the AI\'s behavior',
+                          style: TextStyle(
+                            color: AppTheme.textSecondaryColor,
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: AppTheme.textSecondaryColor),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final name = nameCtrl.text.trim();
+                if (name.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Please enter AI name'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
+                // Build comprehensive description
+                String fullDescription = '';
+                if (descCtrl.text.trim().isNotEmpty) {
+                  fullDescription = descCtrl.text.trim();
+                }
+                if (expertiseCtrl.text.trim().isNotEmpty) {
+                  fullDescription +=
+                      '\n\nExpertise: ${expertiseCtrl.text.trim()}';
+                }
+                if (toneCtrl.text.trim().isNotEmpty) {
+                  fullDescription +=
+                      '\n\nCommunication Style: ${toneCtrl.text.trim()}';
+                }
+                fullDescription += '\n\nCategory: $selectedCategory';
+
+                await BuddyService.createPersona(name, fullDescription);
+                _savedPersonas = BuddyService.getSavedPersonas();
+
+                // Auto-select the new persona
+                if (_savedPersonas.isNotEmpty) {
+                  await BuddyService.setActivePersona(_savedPersonas.last.id);
+                  _activePersona = BuddyService.getActivePersona();
+                }
+
+                setState(() {});
+                Navigator.of(ctx).pop();
+                _showSnackBar('🎉 AI "$name" created and activated!');
+              },
+              icon: const Icon(Icons.auto_awesome, color: Colors.white),
+              label: const Text(
+                'Create & Activate',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
           ],
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: InputDecoration(
-                  labelText: 'AI Name',
-                  hintText: 'e.g., Teacher, Developer, Writer',
-                  labelStyle: TextStyle(color: AppTheme.textSecondaryColor),
-                  prefixIcon: Icon(Icons.person, color: AppTheme.primaryColor),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descCtrl,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  labelText: 'AI Description & Behavior',
-                  hintText:
-                      'Describe how this AI should behave, its expertise, tone, etc.',
-                  labelStyle: TextStyle(color: AppTheme.textSecondaryColor),
-                  prefixIcon: Icon(
-                    Icons.description,
-                    color: AppTheme.primaryColor,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.lightbulb_outline,
-                      color: AppTheme.primaryColor,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Tip: Be specific! e.g., "Primary school teacher who explains complex topics in simple words"',
-                        style: TextStyle(
-                          color: AppTheme.primaryColor,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: AppTheme.textSecondaryColor),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final name = nameCtrl.text.trim();
-              if (name.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Please enter AI name')),
-                );
-                return;
-              }
-
-              await BuddyService.createPersona(name, descCtrl.text.trim());
-              _savedPersonas = BuddyService.getSavedPersonas();
-
-              // Auto-select the new persona
-              if (_savedPersonas.isNotEmpty) {
-                await BuddyService.setActivePersona(_savedPersonas.last.id);
-                _activePersona = BuddyService.getActivePersona();
-              }
-
-              setState(() {});
-              Navigator.of(ctx).pop();
-              _showSnackBar('AI "${name}" created and activated!');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-            ),
-            child: const Text(
-              'Create & Use',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1493,5 +2233,87 @@ class _BuddyScreenState extends State<BuddyScreen>
         backgroundColor: AppTheme.primaryColor,
       ),
     );
+  }
+
+  // Helper method for category icons
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case 'Education':
+        return Icons.school;
+      case 'Programming':
+        return Icons.code;
+      case 'Creative Writing':
+        return Icons.edit;
+      case 'Business':
+        return Icons.business;
+      case 'Science':
+        return Icons.science;
+      case 'Health':
+        return Icons.health_and_safety;
+      case 'Lifestyle':
+        return Icons.favorite;
+      case 'Entertainment':
+        return Icons.movie;
+      default:
+        return Icons.star;
+    }
+  }
+
+  // Helper methods for mode icons and colors
+  IconData _getModeIcon(String mode) {
+    switch (mode) {
+      case 'ask':
+        return Icons.help_outline;
+      case 'agent':
+        return Icons.android;
+      case 'reasoning':
+        return Icons.psychology;
+      case 'deep_think':
+        return Icons.psychology_alt;
+      case 'image_generation':
+        return Icons.image;
+      case 'hybrid_beta':
+        return Icons.auto_awesome;
+      default:
+        return Icons.cloud;
+    }
+  }
+
+  Color _getModeColor(String mode) {
+    switch (mode) {
+      case 'ask':
+        return Colors.orange;
+      case 'agent':
+        return Colors.green;
+      case 'reasoning':
+        return Colors.purple;
+      case 'deep_think':
+        return Colors.indigo;
+      case 'image_generation':
+        return Colors.pink;
+      case 'hybrid_beta':
+        return Colors.cyan;
+      default:
+        return const Color(0xFF667EEA);
+    }
+  }
+
+  String _getModeName(String mode) {
+    switch (mode) {
+      case 'ask':
+        return 'Ask';
+      case 'agent':
+        return 'Agent';
+      case 'reasoning':
+        return 'Reasoning';
+      case 'deep_think':
+        return 'Deep Think';
+      case 'image_generation':
+        return 'Image Gen';
+      case 'hybrid_beta':
+        return 'Hybrid Beta';
+      default:
+        return 'Standard';
+    }
   }
 }
