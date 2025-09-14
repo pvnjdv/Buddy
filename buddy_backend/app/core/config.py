@@ -13,11 +13,6 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30  # 1 month refresh token validity
     
-    # AI Configuration - Reads directly from .env
-    AI_MODE: str = os.getenv("AI_MODE", "api")  # Default to API for cloud safety
-    MODEL_NAME: str = os.getenv("MODEL_NAME", "mistral")
-    MODEL_PATH: str = os.getenv("MODEL_PATH", "/home/pvn/Desktop/Buddy/buddy_backend/app/models/llama/mistral-7b-instruct-v0.1.Q4_K_M.gguf")
-    
     # Groq API Configuration
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")

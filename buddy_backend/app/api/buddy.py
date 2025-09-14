@@ -20,6 +20,7 @@ import re
 from datetime import datetime, timedelta
 import uuid
 import logging
+import os
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -733,6 +734,46 @@ async def switch_ai_mode(mode_request: ModeSwitch):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error switching mode: {str(e)}")
+
+class LocalModeSwitch(BaseModel):
+    mode: str  # Should be "local"
+    model_path: str  # Path to the local model file
+
+@router.post("/buddy/switch-to-local")
+async def switch_to_local_mode(request: LocalModeSwitch):
+    """Switch to local mode with a specific model file"""
+    try:
+        if request.mode != "local":
+            raise HTTPException(status_code=400, detail="Mode must be 'local'")
+        
+        # Validate model file exists
+        if not os.path.exists(request.model_path):
+            raise HTTPException(status_code=400, detail=f"Model file not found: {request.model_path}")
+        
+        # Check file extension
+        allowed_extensions = ['.gguf', '.bin', '.ggml']
+        if not any(request.model_path.lower().endswith(ext) for ext in allowed_extensions):
+            raise HTTPException(status_code=400, detail="Invalid model file format. Supported: .gguf, .bin, .ggml")
+        
+        # Switch to local mode with new model path
+        buddy_ai.ai_client.switch_to_local_with_path(request.model_path)
+        
+        return {
+            "message": f"AI mode switched to local with model: {os.path.basename(request.model_path)}",
+            "current_mode": "local",
+            "model_path": request.model_path
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error switching to local mode: {str(e)}")
+
+@router.get("/buddy/ai-status")
+async def get_ai_status():
+    """Get current AI status and mode"""
+    try:
+        status = buddy_ai.ai_client.get_status()
+        return status
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting AI status: {str(e)}")
 
 @router.post("/buddy/generate-flow-notes")
 async def generate_flow_notes(

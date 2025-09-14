@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:file_picker/file_picker.dart';
 import '../../models/flow_models.dart';
 import '../../services/ai/buddy_service.dart';
 import '../../config/settings/theme_config.dart';
@@ -26,6 +27,7 @@ class _BuddyScreenState extends State<BuddyScreen>
 
   // AI Mode State
   String _currentAIMode = 'api'; // Default to API mode
+  String _currentInfrastructure = 'cloud'; // 'cloud' or 'local'
 
   // Real-time sync
   Timer? _syncTimer;
@@ -204,6 +206,8 @@ class _BuddyScreenState extends State<BuddyScreen>
       if (mounted) {
         setState(() {
           _currentAIMode = status['mode'] ?? 'api';
+          // Determine infrastructure based on mode
+          _currentInfrastructure = status['mode'] == 'local' ? 'local' : 'cloud';
         });
       }
     } catch (e) {
@@ -212,20 +216,117 @@ class _BuddyScreenState extends State<BuddyScreen>
   }
 
   Future<void> _switchAIMode() async {
-    final newMode = _currentAIMode == 'local' ? 'api' : 'local';
-
-    try {
-      final success = await BuddyService.switchAIMode(newMode);
+    // Toggle infrastructure (cloud <-> local)
+    if (_currentInfrastructure == 'local') {
+      // Switch back to cloud with API mode (backend only supports 'api' mode for cloud)
+      final success = await BuddyService.switchAIMode('api');
       if (success && mounted) {
         setState(() {
-          _currentAIMode = newMode;
+          _currentInfrastructure = 'cloud';
+          // Keep the current AI mode for UI display, but backend uses 'api'
         });
-        _showSnackBar('AI mode switched to ${newMode.toUpperCase()}');
+        _showSnackBar('Switched to ${_getModeName(_currentAIMode)} • Cloud');
       } else {
-        _showSnackBar('Failed to switch AI mode');
+        _showSnackBar('Failed to switch to cloud mode');
+      }
+    } else {
+      // Switch to local mode with current mode
+      await _selectLocalModel();
+    }
+  }
+
+  // Method to handle mode switching while preserving infrastructure
+  Future<void> _switchToMode(String newMode) async {
+    if (_currentInfrastructure == 'cloud') {
+      // For cloud infrastructure, we don't need to call backend for mode changes
+      // The backend always uses 'api' mode, we just update UI mode
+      setState(() {
+        _currentAIMode = newMode;
+      });
+      _showSnackBar('Switched to ${_getModeName(newMode)} • Cloud');
+    } else {
+      // For local infrastructure, we don't need to call backend for mode changes
+      // The backend already has the local model loaded, we just update UI mode
+      setState(() {
+        _currentAIMode = newMode;
+      });
+      _showSnackBar('Mode: ${_getModeName(newMode)} • Local');
+    }
+  }
+
+  Future<void> _selectLocalModel() async {
+    try {
+      // Show file picker for selecting local model file
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['gguf', 'bin', 'ggml'],
+        dialogTitle: 'Select Local AI Model File',
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final modelPath = result.files.single.path!;
+        final fileName = result.files.single.name;
+
+        // Show loading dialog
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                backgroundColor: AppTheme.surfaceColor,
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Loading local model...',
+                      style: TextStyle(color: AppTheme.textPrimaryColor),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      fileName,
+                      style: TextStyle(
+                        color: AppTheme.textSecondaryColor,
+                        fontSize: 12,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        }
+
+        // Send model path to backend and switch mode
+        final success = await BuddyService.switchToLocalMode(modelPath);
+
+        // Close loading dialog
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+
+        if (success && mounted) {
+          setState(() {
+            _currentAIMode = 'local';
+            _currentInfrastructure = 'local';
+          });
+          _showSnackBar('Switched to ${_getModeName(_currentAIMode)} • Local: $fileName');
+        } else {
+          _showSnackBar('Failed to load local model');
+        }
+      } else {
+        // User cancelled file selection
+        _showSnackBar('Model selection cancelled');
       }
     } catch (e) {
-      _showSnackBar('Error switching AI mode: $e');
+      // Close loading dialog if open
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      _showSnackBar('Error selecting model: $e');
     }
   }
 
@@ -605,22 +706,11 @@ class _BuddyScreenState extends State<BuddyScreen>
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      _getModeName(_currentAIMode),
+                                      '${_getModeName(_currentAIMode)} • ${_currentInfrastructure == 'local' ? 'Local' : 'Cloud'}',
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: _getModeColor(_currentAIMode),
                                         fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '• ${_currentAIMode == 'local' ? 'Local' : 'Cloud'}',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: _getModeColor(
-                                          _currentAIMode,
-                                        ).withOpacity(0.8),
-                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
@@ -865,38 +955,15 @@ class _BuddyScreenState extends State<BuddyScreen>
                           child: Row(
                             children: [
                               Icon(
-                                _currentAIMode == 'local'
+                                _currentInfrastructure == 'local'
                                     ? Icons.cloud
                                     : Icons.computer,
                                 color: Colors.white,
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'Switch to ${_currentAIMode == 'local' ? 'Cloud' : 'Local'} Mode',
+                                'Switch to ${_currentInfrastructure == 'local' ? 'Cloud' : 'Local'} Mode',
                                 style: const TextStyle(color: Colors.white),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _currentAIMode == 'local'
-                                      ? Colors.green.withOpacity(0.2)
-                                      : Colors.blue.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  _currentAIMode == 'local' ? 'LOCAL' : 'CLOUD',
-                                  style: TextStyle(
-                                    color: _currentAIMode == 'local'
-                                        ? Colors.green
-                                        : Colors.blue,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
                               ),
                             ],
                           ),
@@ -1294,37 +1361,22 @@ class _BuddyScreenState extends State<BuddyScreen>
                     borderRadius: BorderRadius.circular(12),
                     side: const BorderSide(color: Color(0xFF4A5568)),
                   ),
-                  onSelected: (value) {
+                  onSelected: (value) async {
                     switch (value) {
                       case 'api':
-                        setState(() {
-                          _currentAIMode = 'api';
-                        });
-                        _showSnackBar('Switched to Standard Mode');
+                        await _switchToMode('api');
                         break;
                       case 'ask':
-                        setState(() {
-                          _currentAIMode = 'ask';
-                        });
-                        _showSnackBar('Switched to Ask Mode');
+                        await _switchToMode('ask');
                         break;
                       case 'agent':
-                        setState(() {
-                          _currentAIMode = 'agent';
-                        });
-                        _showSnackBar('Switched to Agent Mode');
+                        await _switchToMode('agent');
                         break;
                       case 'reasoning':
-                        setState(() {
-                          _currentAIMode = 'reasoning';
-                        });
-                        _showSnackBar('Switched to Reasoning Mode');
+                        await _switchToMode('reasoning');
                         break;
                       case 'deep_think':
-                        setState(() {
-                          _currentAIMode = 'deep_think';
-                        });
-                        _showSnackBar('Switched to Deep Think Mode');
+                        await _switchToMode('deep_think');
                         break;
                       case 'image_generation':
                         _showComingSoon('Image Generation');
@@ -2262,6 +2314,8 @@ class _BuddyScreenState extends State<BuddyScreen>
   // Helper methods for mode icons and colors
   IconData _getModeIcon(String mode) {
     switch (mode) {
+      case 'local':
+        return Icons.computer;
       case 'ask':
         return Icons.help_outline;
       case 'agent':
@@ -2281,6 +2335,8 @@ class _BuddyScreenState extends State<BuddyScreen>
 
   Color _getModeColor(String mode) {
     switch (mode) {
+      case 'local':
+        return Colors.amber;
       case 'ask':
         return Colors.orange;
       case 'agent':
@@ -2300,6 +2356,9 @@ class _BuddyScreenState extends State<BuddyScreen>
 
   String _getModeName(String mode) {
     switch (mode) {
+      case 'local':
+      case 'api':
+        return 'Standard'; // Both 'local' and 'api' show as Standard mode
       case 'ask':
         return 'Ask';
       case 'agent':

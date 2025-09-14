@@ -817,18 +817,89 @@ class BuddyService {
     };
   }
 
-  // AI Status and mode methods (for compatibility)
+  // AI Status and mode methods
   static Future<Map<String, dynamic>> getAIStatus() async {
-    return {
-      'status': 'online',
-      'mode': 'api',
-      'last_updated': DateTime.now().toIso8601String(),
-    };
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/buddy/status'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'status': 'online',
+          'mode': data['current_mode'] ?? 'api',
+          'available_modes': data['available_modes'] ?? ['local', 'api'],
+          'models': data['models'] ?? {},
+          'last_updated': DateTime.now().toIso8601String(),
+        };
+      } else {
+        print('Failed to get AI status: ${response.statusCode}');
+        return {
+          'status': 'offline',
+          'mode': 'api',
+          'last_updated': DateTime.now().toIso8601String(),
+        };
+      }
+    } catch (e) {
+      print('Error getting AI status: $e');
+      return {
+        'status': 'offline',
+        'mode': 'api',
+        'last_updated': DateTime.now().toIso8601String(),
+      };
+    }
   }
 
   static Future<bool> switchAIMode(String mode) async {
-    // This could be used to switch between different AI backends in the future
-    return true;
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/buddy/switch-mode'),
+            headers: headers,
+            body: jsonEncode({'mode': mode}),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        print('AI mode switched to: $mode');
+        return true;
+      } else {
+        print('Failed to switch AI mode: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error switching AI mode: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> switchToLocalMode(String modelPath) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/buddy/switch-to-local'),
+            headers: headers,
+            body: jsonEncode({'mode': 'local', 'model_path': modelPath}),
+          )
+          .timeout(
+            const Duration(seconds: 30),
+          ); // Longer timeout for model loading
+
+      if (response.statusCode == 200) {
+        print('AI mode switched to local with model: $modelPath');
+        return true;
+      } else {
+        print('Failed to switch to local mode: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error switching to local mode: $e');
+      return false;
+    }
   }
 
   // Flow-related methods

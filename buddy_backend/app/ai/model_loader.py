@@ -1,15 +1,11 @@
-
 import os
 from typing import List, Dict
 from app.core.config import settings
 from app.ai.groq_client import GroqClient
 
-# Only import llama_cpp if we're using local mode to avoid Railway deployment issues
+# Only import llama_cpp when needed to avoid Railway deployment issues
 try:
-    if settings.AI_MODE == "local":
-        from llama_cpp import Llama
-    else:
-        Llama = None
+    from llama_cpp import Llama
 except ImportError:
     Llama = None
     print("Warning: llama_cpp not available, local model mode disabled")
@@ -20,17 +16,17 @@ class LlamaModelWrapper:
             raise ImportError("llama_cpp not available for local model")
         self.llm = Llama(
             model_path=model_path,
-            n_ctx=1024,
-            n_threads=8,
-            n_gpu_layers=15,
-            verbose=True
+            n_ctx=512,  # Reduced context for faster inference
+            n_threads=4,  # Reduced threads for stability
+            n_gpu_layers=0,  # CPU only for compatibility
+            verbose=False  # Reduced logging for cleaner output
         )
 
     def generate_response(self, prompt: str) -> str:
         prompt_template = f"[INST] {prompt} [/INST]"
         output = self.llm(
             prompt_template,
-            max_tokens=64,
+            max_tokens=128,  # Increased for better responses
             temperature=0.7,
             top_p=0.95,
             stop=["</s>"]
@@ -41,27 +37,27 @@ class UnifiedAIClient:
     """Unified AI client supporting both local and API modes"""
     
     def __init__(self):
-        self.current_mode = settings.AI_MODE
+        self.current_mode = "api"  # Default to API mode
         self.local_model = None
         self.groq_client = None
         
-        # Initialize based on current mode
-        if self.current_mode == "local":
-            self._init_local_model()
-        elif self.current_mode == "api":
-            self._init_groq_client()
+        # Initialize Groq client by default (API mode)
+        self._init_groq_client()
     
-    def _init_local_model(self):
-        """Initialize local Llama model"""
+    def _init_local_model(self, model_path: str = None):
+        """Initialize local Llama model with custom path only"""
         try:
             if Llama is None:
                 print("llama_cpp not available, cannot use local model")
                 self.local_model = None
                 return
                 
-            if not self.local_model:
-                print(f"Loading local model: {settings.MODEL_NAME} from {settings.MODEL_PATH}")
-                self.local_model = LlamaModelWrapper(settings.MODEL_PATH)
+            if model_path and not self.local_model:
+                print(f"Loading local model from {model_path}")
+                self.local_model = LlamaModelWrapper(model_path)
+            elif not model_path:
+                print("No model path provided for local mode")
+                self.local_model = None
         except Exception as e:
             print(f"Failed to load local model: {e}")
             self.local_model = None
@@ -80,7 +76,7 @@ class UnifiedAIClient:
         try:
             if self.current_mode == "local":
                 if not self.local_model:
-                    self._init_local_model()
+                    raise Exception("No local model loaded. Please select a model file first.")
                 if self.local_model:
                     # Local models don't support chat history in this implementation
                     return self.local_model.generate_response(prompt)
@@ -106,12 +102,8 @@ class UnifiedAIClient:
             fallback_mode = "api" if self.current_mode == "local" else "local"
             print(f"Trying fallback mode: {fallback_mode}")
             
-            if fallback_mode == "local" and not self.local_model:
-                self._init_local_model()
-                if self.local_model:
-                    return self.local_model.generate_response(prompt)
-            
-            elif fallback_mode == "api" and not self.groq_client:
+            # Only try API fallback for local mode failures
+            if fallback_mode == "api" and not self.groq_client:
                 self._init_groq_client()
                 if self.groq_client:
                     return await self.groq_client.generate_response(prompt, chat_history=chat_history)
@@ -153,10 +145,46 @@ class UnifiedAIClient:
         print(f"AI mode switched to: {new_mode}")
         
         # Pre-initialize the required client for the new mode
-        if new_mode == "local":
-            self._init_local_model()
-        elif new_mode == "api":
+        if new_mode == "api":
             self._init_groq_client()
+        # For local mode, don't auto-initialize - wait for user to select model
+    
+    def switch_to_local_with_path(self, model_path: str):
+        """Switch to local mode with a specific model file path"""
+        import os
+        
+        # Validate the model file exists
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+        
+        try:
+            # Clear existing local model to force reload with new path
+            self.local_model = None
+            
+            # Switch to local mode
+            self.current_mode = "local"
+            
+            # Initialize with new model path
+            self._init_local_model(model_path)
+            
+            print(f"AI mode switched to local with custom model: {os.path.basename(model_path)}")
+            
+        except Exception as e:
+            print(f"Failed to load custom model: {e}")
+            raise
+
+    def get_status(self):
+        """Get current AI client status"""
+        local_model_path = None
+        if self.local_model and hasattr(self.local_model, 'llm') and hasattr(self.local_model.llm, 'model_path'):
+            local_model_path = self.local_model.llm.model_path
+            
+        return {
+            "current_mode": self.current_mode,
+            "local_model_loaded": self.local_model is not None,
+            "groq_client_available": self.groq_client is not None,
+            "local_model_path": local_model_path
+        }
 
 def load_ai_model(model_name: str, model_path: str):
     print(f"Loading model: {model_name} from {model_path}")

@@ -23,8 +23,8 @@ class BuddyAI:
         # Initialize RAG service for custom knowledge
         self.rag_service = RAGService(db_path="buddy_knowledge.db")
         
-        # Initialize with default knowledge if database is empty
-        asyncio.create_task(self._initialize_default_knowledge())
+        # Flag to track if default knowledge has been initialized
+        self._knowledge_initialized = False
         
         # Advanced AI capabilities
         self.capabilities = {
@@ -37,6 +37,17 @@ class BuddyAI:
             "real_time_adaptation": True
         }
     
+    async def _ensure_knowledge_initialized(self):
+        """Ensure default knowledge is initialized"""
+        if not self._knowledge_initialized:
+            try:
+                await self._initialize_default_knowledge()
+                self._knowledge_initialized = True
+            except Exception as e:
+                print(f"Warning: Could not initialize default knowledge: {e}")
+                # Don't fail, just mark as initialized to avoid repeated attempts
+                self._knowledge_initialized = True
+
     async def _initialize_default_knowledge(self):
         """Initialize default knowledge if database is empty"""
         try:
@@ -1413,6 +1424,9 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
         Works like GPT-5 with full context awareness and GitHub Copilot capabilities
         """
         try:
+            # Ensure knowledge is initialized before processing
+            await self._ensure_knowledge_initialized()
+            
             print(f"Processing intelligent request: {prompt}")
             
             # Handle simple greetings and small talk quickly
@@ -1728,6 +1742,8 @@ Focus on being genuinely helpful rather than following rigid formats.
     def _is_simple_greeting(self, prompt: str) -> bool:
         """Check if the prompt is a simple greeting - be more natural like ChatGPT"""
         prompt_lower = prompt.lower().strip()
+        
+       
         
         # Very simple patterns that clearly indicate basic social interaction
         simple_patterns = [
