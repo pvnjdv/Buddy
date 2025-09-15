@@ -7,9 +7,10 @@ import '../../config/settings/theme_config.dart';
 import '../settings/settings_screen.dart';
 import '../buddy_code_editor/editor_selector.dart';
 import 'flows/flow_detail_screen.dart';
+import 'kanban/kanban_board_screen.dart';
 import 'notes/enhanced_notes_screen.dart';
 import 'alarms/enhanced_alarms_screen.dart';
-import 'kanban/kanban_board_screen.dart';
+import '../collaboration/collaboration_hub_screen.dart';
 
 class FlowScreen extends StatefulWidget {
   const FlowScreen({super.key});
@@ -58,42 +59,59 @@ class _FlowScreenState extends State<FlowScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: const Color(0xFF0D1B2A), // Login screen background
       appBar: AppBar(
         title: Text(
           'Flow',
-          style: TextStyle(
-            color: AppTheme.textPrimaryColor,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: AppTheme.surfaceColor,
-        foregroundColor: AppTheme.textPrimaryColor,
+        backgroundColor: const Color(0xFF1B263B),
+        foregroundColor: Colors.white,
         elevation: 0,
         automaticallyImplyLeading: false,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: AppTheme.primaryColor,
-          unselectedLabelColor: AppTheme.textSecondaryColor,
-          indicatorColor: AppTheme.primaryColor,
+          labelColor: const Color(0xFF667EEA),
+          unselectedLabelColor: Colors.grey[400],
+          indicatorColor: const Color(0xFF667EEA),
           tabs: const [
             Tab(text: 'Flows', icon: Icon(Icons.account_tree)),
             Tab(text: 'Code', icon: Icon(Icons.code)),
-            Tab(text: 'Notes', icon: Icon(Icons.note_alt)),
-            Tab(text: 'Alarms', icon: Icon(Icons.alarm)),
+            Tab(text: 'Kanban', icon: Icon(Icons.view_kanban)),
+            Tab(text: 'Collaborate', icon: Icon(Icons.people)),
           ],
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh, color: AppTheme.textPrimaryColor),
-            onPressed: _refreshData,
+            icon: Icon(Icons.note_alt, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const EnhancedNotesScreen(),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.alarm, color: Colors.white),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const EnhancedAlarmsScreen(),
+                ),
+              );
+            },
           ),
           PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: AppTheme.textPrimaryColor),
-            color: AppTheme.surfaceColor,
+            icon: Icon(Icons.more_vert, color: Colors.white),
+            color: const Color(0xFF1A202C),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: AppTheme.borderColor),
+              side: BorderSide(
+                color: const Color(0xFF4A5568).withValues(alpha: 0.3),
+              ),
             ),
             onSelected: (value) {
               switch (value) {
@@ -136,15 +154,9 @@ class _FlowScreenState extends State<FlowScreen>
                 value: 'settings',
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.settings_outlined,
-                      color: AppTheme.textPrimaryColor,
-                    ),
+                    Icon(Icons.settings_outlined, color: Colors.white),
                     const SizedBox(width: 8),
-                    Text(
-                      'Settings',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
-                    ),
+                    Text('Settings', style: TextStyle(color: Colors.white)),
                   ],
                 ),
               ),
@@ -153,11 +165,11 @@ class _FlowScreenState extends State<FlowScreen>
                 value: 'auto_generate',
                 child: Row(
                   children: [
-                    Icon(Icons.auto_awesome, color: AppTheme.primaryColor),
+                    Icon(Icons.auto_awesome, color: const Color(0xFF667EEA)),
                     const SizedBox(width: 8),
                     Text(
                       'Auto-generate Flow',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
+                      style: TextStyle(color: Colors.white),
                     ),
                   ],
                 ),
@@ -167,12 +179,9 @@ class _FlowScreenState extends State<FlowScreen>
                 value: 'create_note',
                 child: Row(
                   children: [
-                    Icon(Icons.note_add, color: AppTheme.accentColor),
+                    Icon(Icons.note_add, color: const Color(0xFF667EEA)),
                     const SizedBox(width: 8),
-                    Text(
-                      'Create Note',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
-                    ),
+                    Text('Create Note', style: TextStyle(color: Colors.white)),
                   ],
                 ),
               ),
@@ -180,12 +189,9 @@ class _FlowScreenState extends State<FlowScreen>
                 value: 'create_alarm',
                 child: Row(
                   children: [
-                    Icon(Icons.alarm_add, color: AppTheme.warningColor),
+                    Icon(Icons.alarm_add, color: const Color(0xFF764BA2)),
                     const SizedBox(width: 8),
-                    Text(
-                      'Create Alarm',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
-                    ),
+                    Text('Create Alarm', style: TextStyle(color: Colors.white)),
                   ],
                 ),
               ),
@@ -193,11 +199,11 @@ class _FlowScreenState extends State<FlowScreen>
                 value: 'view_notes_alarms',
                 child: Row(
                   children: [
-                    Icon(Icons.view_list, color: AppTheme.successColor),
+                    Icon(Icons.view_list, color: const Color(0xFF10B981)),
                     const SizedBox(width: 8),
                     Text(
                       'View Notes & Alarms',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
+                      style: TextStyle(color: Colors.white),
                     ),
                   ],
                 ),
@@ -211,15 +217,15 @@ class _FlowScreenState extends State<FlowScreen>
         children: [
           _buildFlowsTab(),
           _buildVSCodeTab(),
-          const EnhancedNotesScreen(),
-          const EnhancedAlarmsScreen(),
+          _buildKanbanTab(),
+          _buildCollaborationTab(),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _getContextualAction,
         icon: Icon(_getContextualIcon()),
         label: Text(_getContextualLabel()),
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFF667EEA),
         foregroundColor: Colors.white,
       ),
     );
@@ -227,28 +233,62 @@ class _FlowScreenState extends State<FlowScreen>
 
   Widget _buildFlowsTab() {
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+      return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFF0D1B2A), // Deep dark blue
+              Color(0xFF1B263B), // Dark slate
+              Color(0xFF2D3748), // Darker gray
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF667EEA)),
+          ),
         ),
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _loadAllData,
-      color: AppTheme.primaryColor,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [_buildProjectFlows()],
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF0D1B2A), // Deep dark blue
+            Color(0xFF1B263B), // Dark slate
+            Color(0xFF2D3748), // Darker gray
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: RefreshIndicator(
+        onRefresh: _loadAllData,
+        color: const Color(0xFF667EEA),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [_buildProjectFlows()],
+        ),
       ),
     );
   }
 
   Widget _buildVSCodeTab() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF0D1B2A), // Deep dark blue
+            Color(0xFF1B263B), // Dark slate
+            Color(0xFF2D3748), // Darker gray
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,57 +297,51 @@ class _FlowScreenState extends State<FlowScreen>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: isDark
-                    ? [
-                        AppTheme.primaryColor.withValues(alpha: 0.2),
-                        AppTheme.accentColor.withValues(alpha: 0.2),
-                      ]
-                    : [
-                        AppTheme.primaryColor.withValues(alpha: 0.1),
-                        AppTheme.accentColor.withValues(alpha: 0.1),
-                      ],
+                colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
               ),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                color: const Color(0xFF4A5568).withValues(alpha: 0.3),
                 width: 1,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF667EEA).withOpacity(0.3),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    Icons.code,
-                    color: AppTheme.primaryColor,
-                    size: 32,
-                  ),
+                  child: const Icon(Icons.code, color: Colors.white, size: 32),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'VS Code Integration',
-                        style: theme.textTheme.headlineSmall?.copyWith(
+                        style: TextStyle(
+                          fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : Colors.black87,
+                          color: Colors.white,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Open your project flows in VS Code with seamless sync across devices',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: isDark ? Colors.grey[300] : Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 16, color: Colors.grey[300]),
                       ),
                     ],
                   ),
@@ -317,8 +351,8 @@ class _FlowScreenState extends State<FlowScreen>
                   icon: const Icon(Icons.launch),
                   label: const Text('Open VS Code'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF667EEA),
                   ),
                 ),
               ],
@@ -331,11 +365,12 @@ class _FlowScreenState extends State<FlowScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 'Open in VS Code',
-                style: theme.textTheme.titleLarge?.copyWith(
+                style: TextStyle(
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black87,
+                  color: Colors.white,
                 ),
               ),
               TextButton.icon(
@@ -343,7 +378,7 @@ class _FlowScreenState extends State<FlowScreen>
                 icon: const Icon(Icons.add),
                 label: const Text('New Project'),
                 style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.primaryColor,
+                  foregroundColor: const Color(0xFF667EEA),
                 ),
               ),
             ],
@@ -357,7 +392,7 @@ class _FlowScreenState extends State<FlowScreen>
                 ? Center(
                     child: CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        AppTheme.primaryColor,
+                        Color(0xFF667EEA),
                       ),
                     ),
                   )
@@ -384,9 +419,6 @@ class _FlowScreenState extends State<FlowScreen>
   }
 
   Widget _buildEmptyVSCodeState() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -394,25 +426,24 @@ class _FlowScreenState extends State<FlowScreen>
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.1),
+              color: const Color(0xFF667EEA).withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Icon(Icons.code, size: 64, color: AppTheme.primaryColor),
+            child: const Icon(Icons.code, size: 64, color: Color(0xFF667EEA)),
           ),
           const SizedBox(height: 24),
-          Text(
+          const Text(
             'No Project Flows Yet',
-            style: theme.textTheme.headlineSmall?.copyWith(
+            style: TextStyle(
+              fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: isDark ? Colors.white : Colors.black87,
+              color: Colors.white,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'Create a project flow to open in VS Code',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: isDark ? Colors.grey[300] : Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey[300]),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
@@ -420,7 +451,7 @@ class _FlowScreenState extends State<FlowScreen>
             icon: const Icon(Icons.add),
             label: const Text('Create Project Flow'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
+              backgroundColor: const Color(0xFF667EEA),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
@@ -431,9 +462,6 @@ class _FlowScreenState extends State<FlowScreen>
   }
 
   Widget _buildVSCodeFlowCard(ProjectFlow flow) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     IconData getFlowIcon(List<String> tags) {
       if (tags.contains('web')) return Icons.web;
       if (tags.contains('mobile')) return Icons.phone_android;
@@ -451,7 +479,7 @@ class _FlowScreenState extends State<FlowScreen>
       if (tags.contains('game')) return Colors.orange;
       if (tags.contains('api')) return Colors.red;
       if (tags.contains('data')) return Colors.teal;
-      return AppTheme.primaryColor;
+      return const Color(0xFF667EEA);
     }
 
     final completedCheckpoints = flow.checkpoints
@@ -462,12 +490,12 @@ class _FlowScreenState extends State<FlowScreen>
         : completedCheckpoints / flow.checkpoints.length;
 
     return Card(
-      elevation: isDark ? 8 : 4,
-      color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+      elevation: 8,
+      color: const Color(0xFF1A202C),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+          color: const Color(0xFF4A5568).withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -529,9 +557,10 @@ class _FlowScreenState extends State<FlowScreen>
               const SizedBox(height: 12),
               Text(
                 flow.title,
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: const TextStyle(
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black87,
+                  color: Colors.white,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -539,9 +568,7 @@ class _FlowScreenState extends State<FlowScreen>
               const SizedBox(height: 4),
               Text(
                 flow.description,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: isDark ? Colors.grey[300] : Colors.grey[600],
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey[300]),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -552,9 +579,7 @@ class _FlowScreenState extends State<FlowScreen>
                   Expanded(
                     child: LinearProgressIndicator(
                       value: progressPercentage,
-                      backgroundColor: isDark
-                          ? Colors.grey[700]
-                          : Colors.grey[300],
+                      backgroundColor: Colors.grey[700],
                       valueColor: AlwaysStoppedAnimation<Color>(
                         getFlowColor(flow.tags),
                       ),
@@ -563,8 +588,9 @@ class _FlowScreenState extends State<FlowScreen>
                   const SizedBox(width: 8),
                   Text(
                     '${(progressPercentage * 100).toInt()}%',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: isDark ? Colors.grey[300] : Colors.grey[600],
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[300],
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -578,24 +604,49 @@ class _FlowScreenState extends State<FlowScreen>
   }
 
   Widget _buildProjectFlows() {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     if (_flows.isEmpty) {
       return Center(
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(height: 40),
-            Icon(
-              Icons.work_outline,
-              size: 64,
-              color: isDark ? Colors.grey[600] : Colors.grey[400],
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF667EEA).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(
+                Icons.account_tree,
+                size: 64,
+                color: Color(0xFF667EEA),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
+            const Text(
+              'No Project Flows Yet',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
             Text(
-              'No projects yet',
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              'Create your first project flow to get started',
+              style: TextStyle(fontSize: 16, color: Colors.grey[300]),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => _promptAutoGenerateFlow(),
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('Auto-generate Flow'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF667EEA),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
               ),
             ),
           ],
@@ -603,37 +654,55 @@ class _FlowScreenState extends State<FlowScreen>
       );
     }
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _flows.length,
-      itemBuilder: (context, index) {
-        final flow = _flows[index];
-        return _buildEnhancedFlowCard(flow, isDark);
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Project Flows',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => _promptAutoGenerateFlow(),
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('Auto-generate'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF667EEA),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ..._flows.map((flow) => _buildEnhancedFlowCard(flow)).toList(),
+      ],
     );
   }
 
-  Widget _buildEnhancedFlowCard(ProjectFlow flow, bool isDark) {
-    final theme = Theme.of(context);
+  Widget _buildEnhancedFlowCard(ProjectFlow flow) {
     final isCollaborative = flow.collaboration != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+        color: const Color(0xFF1A202C),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isCollaborative
-              ? AppTheme.primaryColor.withValues(alpha: 0.3)
-              : (isDark ? Colors.grey[800]! : Colors.grey[200]!),
-          width: isCollaborative ? 1.5 : 1,
+              ? const Color(0xFF667EEA).withValues(alpha: 0.5)
+              : const Color(0xFF4A5568).withValues(alpha: 0.3),
+          width: isCollaborative ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -654,14 +723,14 @@ class _FlowScreenState extends State<FlowScreen>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                      color: const Color(0xFF667EEA).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Stack(
                       children: [
                         Icon(
                           Icons.work,
-                          color: AppTheme.primaryColor,
+                          color: const Color(0xFF667EEA),
                           size: 20,
                         ),
                         if (isCollaborative)
@@ -691,16 +760,18 @@ class _FlowScreenState extends State<FlowScreen>
                       children: [
                         Text(
                           flow.title,
-                          style: theme.textTheme.titleMedium?.copyWith(
+                          style: const TextStyle(
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : Colors.black87,
+                            color: Colors.white,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           flow.description,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[400],
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -776,7 +847,7 @@ class _FlowScreenState extends State<FlowScreen>
                     ],
                     child: Icon(
                       Icons.more_vert,
-                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      color: Colors.grey[400],
                       size: 20,
                     ),
                   ),
@@ -1522,11 +1593,30 @@ class _FlowScreenState extends State<FlowScreen>
       case 1: // VS Code tab
         _createNewVSCodeProject();
         break;
-      case 2: // Notes tab
-        _createNote();
+      case 2: // Kanban tab
+        if (_flows.isNotEmpty) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => KanbanBoardScreen(
+                flow: _flows.first,
+                onCheckpointStatusChanged: (flowId, checkpointId, newStatus) {
+                  _loadAllData();
+                },
+              ),
+            ),
+          );
+        } else {
+          _promptAutoGenerateFlow();
+        }
         break;
-      case 3: // Alarms tab
-        _createAlarm();
+      case 3: // Collaboration tab
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const CollaborationHubScreen(),
+          ),
+        );
         break;
     }
   }
@@ -1537,10 +1627,10 @@ class _FlowScreenState extends State<FlowScreen>
         return Icons.add;
       case 1: // Code Editor tab
         return Icons.code;
-      case 2: // Notes tab
-        return Icons.note_add;
-      case 3: // Alarms tab
-        return Icons.alarm_add;
+      case 2: // Kanban tab
+        return Icons.view_kanban;
+      case 3: // Collaboration tab
+        return Icons.people;
       default:
         return Icons.add;
     }
@@ -1552,10 +1642,10 @@ class _FlowScreenState extends State<FlowScreen>
         return 'Quick Actions';
       case 1: // VS Code tab
         return 'Open VS Code';
-      case 2: // Notes tab
-        return 'Add Note';
-      case 3: // Alarms tab
-        return 'Add Alarm';
+      case 2: // Kanban tab
+        return 'Open Kanban';
+      case 3: // Collaboration tab
+        return 'Collaborate';
       default:
         return 'Add';
     }
@@ -1753,6 +1843,172 @@ class _FlowScreenState extends State<FlowScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildKanbanTab() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF0D1B2A), // Deep dark blue
+            Color(0xFF1B263B), // Dark slate
+            Color(0xFF2D3748), // Darker gray
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: _flows.isEmpty
+          ? _buildEmptyKanbanState()
+          : Column(
+              children: [
+                // Header with flow selector
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A202C),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: const Color(0xFF4A5568).withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.view_kanban,
+                        color: Color(0xFF667EEA),
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Kanban Board',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Flow selector if multiple flows
+                if (_flows.length > 1)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    child: DropdownButtonFormField<ProjectFlow>(
+                      decoration: const InputDecoration(
+                        labelText: 'Select Project Flow',
+                        border: OutlineInputBorder(),
+                        fillColor: Color(0xFF1A202C),
+                        filled: true,
+                      ),
+                      dropdownColor: const Color(0xFF1A202C),
+                      style: const TextStyle(color: Colors.white),
+                      value: _flows.first,
+                      items: _flows.map((flow) {
+                        return DropdownMenuItem(
+                          value: flow,
+                          child: Text(flow.title),
+                        );
+                      }).toList(),
+                      onChanged: (flow) {
+                        if (flow != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => KanbanBoardScreen(
+                                flow: flow,
+                                onCheckpointStatusChanged:
+                                    (flowId, checkpointId, newStatus) {
+                                      _loadAllData();
+                                    },
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                // Kanban preview or direct access
+                Expanded(
+                  child: _flows.isNotEmpty
+                      ? KanbanBoardScreen(
+                          flow: _flows.first,
+                          onCheckpointStatusChanged:
+                              (flowId, checkpointId, newStatus) {
+                                _loadAllData();
+                              },
+                        )
+                      : _buildEmptyKanbanState(),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildEmptyKanbanState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF667EEA).withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Icon(
+              Icons.view_kanban,
+              size: 64,
+              color: Color(0xFF667EEA),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'No Project Flows for Kanban',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Create a project flow to use the Kanban board',
+            style: TextStyle(fontSize: 16, color: Colors.grey[300]),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () => _promptAutoGenerateFlow(),
+            icon: const Icon(Icons.add),
+            label: const Text('Create Project Flow'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF667EEA),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCollaborationTab() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF0D1B2A), // Deep dark blue
+            Color(0xFF1B263B), // Dark slate
+            Color(0xFF2D3748), // Darker gray
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: CollaborationHubScreen(),
     );
   }
 }

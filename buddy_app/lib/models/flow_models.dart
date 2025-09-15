@@ -612,7 +612,8 @@ enum CheckpointType {
   subtask, // Sub-item of another checkpoint
   milestone, // Project milestone
   review, // Code/design review
-  testing, // Testing task
+  testing,
+  documentation, // Testing task
 }
 
 // Jira-like status workflow
@@ -1485,6 +1486,8 @@ class FlowCheckpoint {
         return 'Review';
       case CheckpointType.testing:
         return 'Testing';
+      case CheckpointType.documentation:
+        return 'Documentation';
     }
   }
 }
@@ -1940,6 +1943,8 @@ extension CheckpointTypeExtension on CheckpointType {
         return 'Review';
       case CheckpointType.testing:
         return 'Testing';
+      case CheckpointType.documentation:
+        return 'Documentation';
     }
   }
 
@@ -1961,6 +1966,8 @@ extension CheckpointTypeExtension on CheckpointType {
         return Icons.rate_review;
       case CheckpointType.testing:
         return Icons.science;
+      case CheckpointType.documentation:
+        return Icons.description;
     }
   }
 
@@ -1982,6 +1989,8 @@ extension CheckpointTypeExtension on CheckpointType {
         return Colors.teal;
       case CheckpointType.testing:
         return Colors.indigo;
+      case CheckpointType.documentation:
+        return Colors.teal;
     }
   }
 }

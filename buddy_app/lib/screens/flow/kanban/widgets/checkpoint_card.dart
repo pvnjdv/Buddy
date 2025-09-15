@@ -210,6 +210,8 @@ class CheckpointCard extends StatelessWidget {
         return Colors.indigo;
       case CheckpointType.testing:
         return Colors.teal;
+      case CheckpointType.documentation:
+        return Colors.teal;
     }
   }
 
@@ -231,6 +233,8 @@ class CheckpointCard extends StatelessWidget {
         return 'R';
       case CheckpointType.testing:
         return 'TS';
+      case CheckpointType.documentation:
+        return 'D';
     }
   }
 

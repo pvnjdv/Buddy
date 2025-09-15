@@ -51,9 +51,13 @@ dependencies:
   webview_flutter: ^4.4.2
   network_info_plus: ^6.1.4
   path: ^1.8.3
+  path_provider: ^2.1.2
   sqflite: ^2.3.3
   sqflite_common_ffi: ^2.3.2
   file_picker: ^8.0.5
+  # TensorFlow Lite for cross-platform AI (mobile + desktop)
+  tflite_flutter: ^0.10.4
+  #tflite_flutter_helper: ^0.3.1
   # Buddy Code Editor dependencies
   flutter_highlight: ^0.7.0
   google_fonts: ^6.2.1

@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../chat/user_profile_screen.dart';
 import 'appearance_settings_screen.dart';
 import '../contacts_screen.dart';
+import '../ai_settings_screen.dart';
 import '../../config/settings/theme_config.dart';
 import '../../config/settings/settings_manager.dart';
 import '../../services/auth/auth_service.dart';
@@ -278,6 +279,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
         children: [
+          _buildSettingsTile(
+            icon: Icons.smart_toy_outlined,
+            title: 'AI Settings',
+            subtitle: 'Configure AI mode (Local/Cloud)',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AISettingsScreen(),
+                ),
+              );
+            },
+          ),
+          _buildDivider(),
           _buildSettingsTile(
             icon: Icons.info_outline,
             title: 'About',

@@ -5,6 +5,7 @@ import '../../models/flow_models.dart';
 import '../../config/api_config.dart';
 import '../agent/buddy_orchestrator.dart';
 import '../databases/buddy_chat_database.dart';
+import 'on_device_ai_service.dart';
 
 class AIPersona {
   final String id;
@@ -76,6 +77,10 @@ class BuddyService {
   static List<AIPersona> _savedPersonas = [];
   static bool _isProcessingRequest = false; // Add request throttling
 
+  // AI Mode management
+  static String _currentAIMode = 'api'; // 'api' or 'local'
+  static OnDeviceAIService? _onDeviceAI;
+
   // Chat session management - now using BuddyChatDatabase
   static String _currentChatSessionId = DateTime.now().millisecondsSinceEpoch
       .toString();
@@ -85,7 +90,10 @@ class BuddyService {
     print('🚀 Initializing BuddyService...');
     await BuddyChatDatabase.initialize();
     await _loadCurrentChatHistory();
-    print('✅ BuddyService initialized with ${_chatHistory.length} messages');
+    await loadAIModePreference(); // Load AI mode preference
+    print(
+      '✅ BuddyService initialized with ${_chatHistory.length} messages, AI mode: $_currentAIMode',
+    );
   }
 
   // Load current chat history from BuddyChatDatabase
@@ -638,6 +646,42 @@ class BuddyService {
         print('Orchestrator error (ignored, fallback to backend): $e');
       }
 
+      // 2) Check if we should use local AI mode
+      if (_currentAIMode == 'local' && _onDeviceAI != null) {
+        try {
+          print('🤖 Using local on-device AI');
+          final localResponse = await _processWithLocalAI(prompt);
+
+          final assistantMessage = FlowBuddyMessage(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            content: localResponse,
+            role: 'assistant',
+            timestamp: DateTime.now(),
+          );
+          _chatHistory.add(assistantMessage);
+          // Save assistant message to database immediately
+          await BuddyChatDatabase.addMessage(
+            json.encode(assistantMessage.toJson()),
+          );
+          print(
+            '💾 Saved local AI response: ${_truncateString(assistantMessage.content, 50)}',
+          );
+
+          _isProcessingRequest = false; // Reset flag before returning
+          return {
+            'success': true,
+            'response': localResponse,
+            'message': localResponse,
+            'mode': 'local',
+          };
+        } catch (e) {
+          print('❌ Local AI failed, falling back to API: $e');
+          // Continue to API fallback below
+        }
+      }
+
+      // 3) Fallback to API mode
+      print('🌐 Using API mode');
       final url = Uri.parse('${ApiConfig.baseUrl}/buddy/ask');
       print('Request URL: $url');
 
@@ -876,7 +920,44 @@ class BuddyService {
     }
   }
 
-  static Future<bool> switchToLocalMode(String modelPath) async {
+  /// Switch to local on-device AI mode (new enhanced version)
+  static Future<bool> switchToLocalMode() async {
+    try {
+      if (_onDeviceAI == null) {
+        _onDeviceAI = OnDeviceAIService();
+      }
+
+      // Check if device is capable of running AI models
+      final isCapable = await _onDeviceAI!.isDeviceCapable();
+      if (!isCapable) {
+        print('⚠️ Device may not be suitable for on-device AI');
+        // Still allow user to try, but warn them
+      }
+
+      // Let user select and load a model
+      final success = await _onDeviceAI!.selectAndLoadModel();
+
+      if (success) {
+        _currentAIMode = 'local';
+        print('✅ Successfully switched to local AI mode');
+
+        // Save the preference
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('ai_mode', 'local');
+
+        return true;
+      } else {
+        print('❌ Failed to load local model');
+        return false;
+      }
+    } catch (e) {
+      print('Error switching to local mode: $e');
+      return false;
+    }
+  }
+
+  /// Legacy method for server-based local mode (deprecated)
+  static Future<bool> switchToServerLocalMode(String modelPath) async {
     try {
       final headers = await _getAuthHeaders();
       final response = await http
@@ -890,14 +971,14 @@ class BuddyService {
           ); // Longer timeout for model loading
 
       if (response.statusCode == 200) {
-        print('AI mode switched to local with model: $modelPath');
+        print('AI mode switched to server local with model: $modelPath');
         return true;
       } else {
-        print('Failed to switch to local mode: ${response.statusCode}');
+        print('Failed to switch to server local mode: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('Error switching to local mode: $e');
+      print('Error switching to server local mode: $e');
       return false;
     }
   }
@@ -1044,5 +1125,114 @@ class BuddyService {
         .join('\n');
 
     return 'Recent conversation context:\n$summary';
+  }
+
+  // ====== ON-DEVICE AI MODE METHODS ======
+
+  /// Process message using local AI
+  static Future<String> _processWithLocalAI(String prompt) async {
+    try {
+      if (_onDeviceAI == null || !_onDeviceAI!.isModelLoaded) {
+        throw Exception('Local AI model not loaded');
+      }
+
+      // Create a simple prompt with some context from chat history
+      String contextPrompt = prompt;
+
+      if (_chatHistory.isNotEmpty) {
+        final recentMessages = _chatHistory.length > 3
+            ? _chatHistory.sublist(_chatHistory.length - 3)
+            : _chatHistory;
+
+        final context = recentMessages
+            .map(
+              (msg) =>
+                  '${msg.role == 'user' ? 'User' : 'Assistant'}: ${msg.content}',
+            )
+            .join('\n');
+
+        contextPrompt =
+            'Previous conversation:\n$context\n\nUser: $prompt\nAssistant:';
+      } else {
+        contextPrompt = 'User: $prompt\nAssistant:';
+      }
+
+      final response = await _onDeviceAI!.generateResponse(
+        contextPrompt,
+        maxTokens: 512,
+        temperature: 0.7,
+      );
+
+      return response.trim();
+    } catch (e) {
+      print('Error processing with local AI: $e');
+      throw e;
+    }
+  }
+
+  /// Switch back to API mode
+  static Future<bool> switchToAPIMode() async {
+    try {
+      if (_onDeviceAI != null) {
+        await _onDeviceAI!.unloadModel();
+      }
+
+      _currentAIMode = 'api';
+      print('✅ Switched back to API mode');
+
+      // Save the preference
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('ai_mode', 'api');
+
+      return true;
+    } catch (e) {
+      print('Error switching to API mode: $e');
+      return false;
+    }
+  }
+
+  /// Get current AI mode
+  static String getCurrentAIMode() {
+    return _currentAIMode;
+  }
+
+  /// Check if currently using local AI
+  static bool isUsingLocalAI() {
+    return _currentAIMode == 'local' && _onDeviceAI != null;
+  }
+
+  /// Get local AI model info
+  static Future<Map<String, dynamic>> getLocalAIInfo() async {
+    if (_onDeviceAI == null) {
+      return {'available': false, 'message': 'On-device AI not initialized'};
+    }
+
+    final modelInfo = await _onDeviceAI!.getModelInfo();
+    return {
+      'available': true,
+      'model_loaded': modelInfo?['loaded'] ?? false,
+      'model_path': modelInfo?['modelPath'],
+      'device_capable': true, // We can check this separately if needed
+    };
+  }
+
+  /// Load AI mode preference on startup
+  static Future<void> loadAIModePreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedMode = prefs.getString('ai_mode') ?? 'api';
+      _currentAIMode = savedMode;
+
+      print('📱 Loaded AI mode preference: $_currentAIMode');
+
+      // If local mode was saved, try to initialize on-device AI
+      if (_currentAIMode == 'local') {
+        _onDeviceAI = OnDeviceAIService();
+        // Don't auto-load model, let user choose when they want to use it
+      }
+    } catch (e) {
+      print('Error loading AI mode preference: $e');
+      _currentAIMode = 'api'; // Default to API mode on error
+    }
   }
 }

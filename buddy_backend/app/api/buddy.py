@@ -708,13 +708,13 @@ async def get_ai_status():
     """Get current AI mode and status"""
     try:
         current_mode = buddy_ai.ai_client.current_mode
+        status = buddy_ai.ai_client.get_status()
         return {
-            "current_mode": current_mode,
+            "mode": current_mode,
             "available_modes": ["local", "api"],
-            "models": {
-                "local_model": settings.MODEL_NAME,
-                "api_model": settings.GROQ_MODEL
-            }
+            "local_model_loaded": status.get("local_model_loaded", False),
+            "local_model_path": status.get("local_model_path"),
+            "api_model": settings.GROQ_MODEL
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting status: {str(e)}")

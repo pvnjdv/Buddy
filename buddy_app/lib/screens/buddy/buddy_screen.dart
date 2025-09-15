@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:file_picker/file_picker.dart';
 import '../../models/flow_models.dart';
 import '../../services/ai/buddy_service.dart';
 import '../../config/settings/theme_config.dart';
@@ -207,7 +206,9 @@ class _BuddyScreenState extends State<BuddyScreen>
         setState(() {
           _currentAIMode = status['mode'] ?? 'api';
           // Determine infrastructure based on mode
-          _currentInfrastructure = status['mode'] == 'local' ? 'local' : 'cloud';
+          _currentInfrastructure = status['mode'] == 'local'
+              ? 'local'
+              : 'cloud';
         });
       }
     } catch (e) {
@@ -256,77 +257,20 @@ class _BuddyScreenState extends State<BuddyScreen>
 
   Future<void> _selectLocalModel() async {
     try {
-      // Show file picker for selecting local model file
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['gguf', 'bin', 'ggml'],
-        dialogTitle: 'Select Local AI Model File',
-      );
+      // Switch to local mode using new on-device AI (includes file picker)
+      final success = await BuddyService.switchToLocalMode();
 
-      if (result != null && result.files.single.path != null) {
-        final modelPath = result.files.single.path!;
-        final fileName = result.files.single.name;
-
-        // Show loading dialog
-        if (mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                backgroundColor: AppTheme.surfaceColor,
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Loading local model...',
-                      style: TextStyle(color: AppTheme.textPrimaryColor),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      fileName,
-                      style: TextStyle(
-                        color: AppTheme.textSecondaryColor,
-                        fontSize: 12,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        }
-
-        // Send model path to backend and switch mode
-        final success = await BuddyService.switchToLocalMode(modelPath);
-
-        // Close loading dialog
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-
-        if (success && mounted) {
-          setState(() {
-            _currentAIMode = 'local';
-            _currentInfrastructure = 'local';
-          });
-          _showSnackBar('Switched to ${_getModeName(_currentAIMode)} • Local: $fileName');
-        } else {
-          _showSnackBar('Failed to load local model');
-        }
+      if (success && mounted) {
+        setState(() {
+          _currentAIMode = 'local';
+          _currentInfrastructure = 'local';
+        });
+        _showSnackBar('Successfully switched to Local AI mode');
       } else {
-        // User cancelled file selection
-        _showSnackBar('Model selection cancelled');
+        _showSnackBar('Failed to switch to local mode or no model selected');
       }
     } catch (e) {
-      // Close loading dialog if open
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-      _showSnackBar('Error selecting model: $e');
+      _showSnackBar('Error switching to local mode: $e');
     }
   }
 
@@ -1109,16 +1053,6 @@ class _BuddyScreenState extends State<BuddyScreen>
             ),
           ),
           const SizedBox(height: 40),
-          // Feature highlights
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildFeatureItem(Icons.lightbulb_outline, 'Creative Ideas'),
-              _buildFeatureItem(Icons.task_alt, 'Task Planning'),
-              _buildFeatureItem(Icons.chat_bubble_outline, 'Smart Chat'),
-            ],
-          ),
-          const SizedBox(height: 40),
           // Animated call-to-action
           AnimatedContainer(
             duration: const Duration(milliseconds: 500),
@@ -1158,34 +1092,6 @@ class _BuddyScreenState extends State<BuddyScreen>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildFeatureItem(IconData icon, String label) {
-    return Column(
-      children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceColor,
-            borderRadius: BorderRadius.circular(25),
-            border: Border.all(
-              color: AppTheme.primaryColor.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Icon(icon, color: AppTheme.primaryColor, size: 24),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: AppTheme.textSecondaryColor,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
     );
   }
 
