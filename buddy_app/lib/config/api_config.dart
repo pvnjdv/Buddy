@@ -1,6 +1,6 @@
 class ApiConfig {
   // Environment configuration
-  static const bool useProduction = false; // Set to true for release/testing
+  static const bool useProduction = true; // Set to true for release/testing
 
   // Local development configuration
   static const String _localIp = '10.172.224.3';
