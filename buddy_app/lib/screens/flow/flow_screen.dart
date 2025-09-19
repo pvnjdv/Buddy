@@ -3,6 +3,7 @@ import '../../models/flow_models.dart';
 import '../../models/collaboration_models.dart';
 import '../../services/flow_service.dart';
 import '../../services/ai/chat_service.dart';
+import '../../services/ai/buddy_service.dart';
 import '../../config/settings/theme_config.dart';
 import '../settings/settings_screen.dart';
 import '../buddy_code_editor/editor_selector.dart';
@@ -10,7 +11,12 @@ import 'flows/flow_detail_screen.dart';
 import 'kanban/kanban_board_screen.dart';
 import 'notes/enhanced_notes_screen.dart';
 import 'alarms/enhanced_alarms_screen.dart';
-import '../collaboration/collaboration_hub_screen.dart';
+
+extension StringExtension on String {
+  String capitalize() {
+    return "${this[0].toUpperCase()}${substring(1)}";
+  }
+}
 
 class FlowScreen extends StatefulWidget {
   const FlowScreen({super.key});
@@ -52,10 +58,6 @@ class _FlowScreenState extends State<FlowScreen>
     }
   }
 
-  Future<void> _refreshData() async {
-    await _loadAllData();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -77,8 +79,8 @@ class _FlowScreenState extends State<FlowScreen>
           tabs: const [
             Tab(text: 'Flows', icon: Icon(Icons.account_tree)),
             Tab(text: 'Code', icon: Icon(Icons.code)),
-            Tab(text: 'Kanban', icon: Icon(Icons.view_kanban)),
-            Tab(text: 'Collaborate', icon: Icon(Icons.people)),
+            Tab(text: 'Track', icon: Icon(Icons.track_changes)),
+            Tab(text: 'Product', icon: Icon(Icons.inventory)),
           ],
         ),
         actions: [
@@ -217,16 +219,9 @@ class _FlowScreenState extends State<FlowScreen>
         children: [
           _buildFlowsTab(),
           _buildVSCodeTab(),
-          _buildKanbanTab(),
-          _buildCollaborationTab(),
+          _buildTrackTab(),
+          _buildProductTab(),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _getContextualAction,
-        icon: Icon(_getContextualIcon()),
-        label: Text(_getContextualLabel()),
-        backgroundColor: const Color(0xFF667EEA),
-        foregroundColor: Colors.white,
       ),
     );
   }
@@ -635,20 +630,6 @@ class _FlowScreenState extends State<FlowScreen>
               'Create your first project flow to get started',
               style: TextStyle(fontSize: 16, color: Colors.grey[300]),
             ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => _promptAutoGenerateFlow(),
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('Auto-generate Flow'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF667EEA),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
-            ),
           ],
         ),
       );
@@ -666,14 +647,6 @@ class _FlowScreenState extends State<FlowScreen>
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => _promptAutoGenerateFlow(),
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('Auto-generate'),
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF667EEA),
               ),
             ),
           ],
@@ -1584,134 +1557,851 @@ class _FlowScreenState extends State<FlowScreen>
     );
   }
 
-  // Contextual action methods for old-style floating action button
-  void _getContextualAction() {
-    switch (_tabController.index) {
-      case 0: // Flows tab
-        _showQuickActions();
-        break;
-      case 1: // VS Code tab
-        _createNewVSCodeProject();
-        break;
-      case 2: // Kanban tab
-        if (_flows.isNotEmpty) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => KanbanBoardScreen(
-                flow: _flows.first,
-                onCheckpointStatusChanged: (flowId, checkpointId, newStatus) {
-                  _loadAllData();
-                },
-              ),
-            ),
-          );
-        } else {
-          _promptAutoGenerateFlow();
-        }
-        break;
-      case 3: // Collaboration tab
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const CollaborationHubScreen(),
-          ),
-        );
-        break;
-    }
-  }
-
-  IconData _getContextualIcon() {
-    switch (_tabController.index) {
-      case 0: // Flows tab
-        return Icons.add;
-      case 1: // Code Editor tab
-        return Icons.code;
-      case 2: // Kanban tab
-        return Icons.view_kanban;
-      case 3: // Collaboration tab
-        return Icons.people;
-      default:
-        return Icons.add;
-    }
-  }
-
-  String _getContextualLabel() {
-    switch (_tabController.index) {
-      case 0: // Flows tab
-        return 'Quick Actions';
-      case 1: // VS Code tab
-        return 'Open VS Code';
-      case 2: // Kanban tab
-        return 'Open Kanban';
-      case 3: // Collaboration tab
-        return 'Collaborate';
-      default:
-        return 'Add';
-    }
-  }
-
   // Additional methods for old-style menu functionality
   void _promptAutoGenerateFlow() {
-    final controller = TextEditingController();
+    final TextEditingController _descriptionController =
+        TextEditingController();
+    bool _isGenerating = false;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Describe your project'),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            hintText:
-                'e.g., Build a Flutter app for note taking with auth and offline mode',
-            border: OutlineInputBorder(),
-          ),
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1A202C),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: const Color(0xFF4A5568).withValues(alpha: 0.3),
+                ),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF667EEA).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome,
+                      color: Color(0xFF667EEA),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'AI Flow Generator',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Describe your project and let AI create a complete flow with tasks and checkpoints.',
+                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _descriptionController,
+                    maxLines: 4,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText:
+                          'e.g., "Create a Flutter e-commerce app with user authentication, product catalog, shopping cart, and payment integration"',
+                      hintStyle: TextStyle(color: Colors.grey[400]),
+                      filled: true,
+                      fillColor: const Color(0xFF2D3748),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF667EEA),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.lightbulb,
+                          color: const Color(0xFF10B981),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Tip: Be specific about technologies, features, and complexity level for better results.',
+                            style: TextStyle(
+                              color: const Color(0xFF10B981),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey[400]),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: _isGenerating
+                      ? null
+                      : () async {
+                          final description = _descriptionController.text
+                              .trim();
+                          if (description.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Please enter a project description',
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+
+                          setState(() => _isGenerating = true);
+
+                          try {
+                            // Use enhanced dynamic flow generation
+                            final previewResult =
+                                await BuddyService.generateDynamicFlow(
+                                  projectDescription: description,
+                                  technologies:
+                                      [], // Will be extracted from description
+                                  complexity:
+                                      'medium', // Default, can be enhanced
+                                  externalData: null,
+                                  includeNotes: true,
+                                  includeAlarms: true,
+                                  accessExternalData: true,
+                                );
+
+                            if (previewResult['success'] == true) {
+                              Navigator.of(dialogContext).pop();
+
+                              // Show enhanced preview dialog with detailed structure
+                              _showEnhancedFlowPreviewDialog(
+                                description: description,
+                                previewData: previewResult,
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    previewResult['message'] ??
+                                        'Failed to generate dynamic flow',
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error generating flow: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          } finally {
+                            setState(() => _isGenerating = false);
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF667EEA),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey,
+                  ),
+                  child: _isGenerating
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Text('Generate Flow'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEnhancedFlowPreviewDialog({
+    required String description,
+    required Map<String, dynamic> previewData,
+  }) {
+    final TextEditingController _modificationsController =
+        TextEditingController();
+    bool _isCreating = false;
+    bool _showDetails = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1A202C),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: const Color(0xFF4A5568).withValues(alpha: 0.3),
+                ),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.psychology,
+                      color: Color(0xFF10B981),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'AI-Generated Dynamic Flow',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // AI Analysis Summary
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2D3748),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.analytics,
+                                color: const Color(0xFF10B981),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'AI Analysis Complete',
+                                style: TextStyle(
+                                  color: Color(0xFF10B981),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            previewData['preview_text'] ??
+                                'Flow analysis in progress...',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Flow Structure Visualization
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2D3748),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Flow Structure',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: () => setState(
+                                  () => _showDetails = !_showDetails,
+                                ),
+                                icon: Icon(
+                                  _showDetails
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  size: 16,
+                                  color: const Color(0xFF667EEA),
+                                ),
+                                label: Text(
+                                  _showDetails
+                                      ? 'Hide Details'
+                                      : 'Show Details',
+                                  style: const TextStyle(
+                                    color: Color(0xFF667EEA),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          _buildFlowStructureVisualization(
+                            previewData['flow_data'],
+                            showDetails: _showDetails,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Notes and Alarms Section
+                    if ((previewData['notes'] as List?)?.isNotEmpty == true ||
+                        (previewData['alarms'] as List?)?.isNotEmpty ==
+                            true) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2D3748),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Flow Intelligence',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            if ((previewData['notes'] as List?)?.isNotEmpty ==
+                                true) ...[
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.note,
+                                    size: 16,
+                                    color: const Color(0xFFF59E0B),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Smart Notes Generated:',
+                                    style: TextStyle(
+                                      color: Color(0xFFF59E0B),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              ..._buildNotesList(previewData['notes'] as List),
+                            ],
+                            if ((previewData['alarms'] as List?)?.isNotEmpty ==
+                                true) ...[
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.alarm,
+                                    size: 16,
+                                    color: const Color(0xFFEF4444),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Critical Alarms Set:',
+                                    style: TextStyle(
+                                      color: Color(0xFFEF4444),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              ..._buildAlarmsList(
+                                previewData['alarms'] as List,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 16),
+
+                    // Modifications Input
+                    const Text(
+                      'Enhance the flow (optional):',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _modificationsController,
+                      maxLines: 3,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText:
+                            'e.g., "Add more security checks" or "Include performance monitoring"',
+                        hintStyle: TextStyle(color: Colors.grey[400]),
+                        filled: true,
+                        fillColor: const Color(0xFF2D3748),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF667EEA),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey[400]),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: _isCreating
+                      ? null
+                      : () async {
+                          setState(() => _isCreating = true);
+
+                          try {
+                            final modifications = _modificationsController.text
+                                .trim();
+
+                            // Create the flow directly using the enhanced data
+                            final flowData =
+                                previewData['flow_data']
+                                    as Map<String, dynamic>;
+
+                            // Convert the AI-generated structure to ProjectFlow format
+                            final projectFlow = _convertAIFlowToProjectFlow(
+                              flowData,
+                              description,
+                              modifications,
+                            );
+
+                            // Save the flow
+                            await FlowService.createProjectFlow(projectFlow);
+
+                            if (mounted) {
+                              Navigator.of(dialogContext).pop();
+                              await _loadAllData();
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Dynamic AI flow "${projectFlow.title}" created successfully!',
+                                  ),
+                                  backgroundColor: const Color(0xFF10B981),
+                                  action: SnackBarAction(
+                                    label: 'View',
+                                    textColor: Colors.white,
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              FlowDetailScreen(
+                                                flow: projectFlow,
+                                              ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Error creating dynamic flow: $e',
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (mounted) {
+                              setState(() => _isCreating = false);
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF667EEA),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey,
+                  ),
+                  child: _isCreating
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Text('Create Dynamic Flow'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFlowStructureVisualization(
+    Map<String, dynamic>? flowData, {
+    bool showDetails = false,
+  }) {
+    if (flowData == null) {
+      return const Text(
+        'Flow structure analysis in progress...',
+        style: TextStyle(color: Colors.grey, fontSize: 12),
+      );
+    }
+
+    final phases = flowData['phases'] as List<dynamic>? ?? [];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Summary stats
+        Row(
+          children: [
+            _buildStatChip('${phases.length}', 'Phases'),
+            const SizedBox(width: 8),
+            _buildStatChip(
+              '${phases.fold<int>(0, (sum, phase) => sum + ((phase['steps'] as List?)?.length ?? 0))}',
+              'Steps',
+            ),
+            const SizedBox(width: 8),
+            _buildStatChip(
+              '${flowData['checkpoints']?.length ?? 0}',
+              'Checkpoints',
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+
+        if (showDetails && phases.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text(
+            'Execution Flow:',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-          ElevatedButton(
-            onPressed: () async {
-              final text = controller.text.trim();
-              if (text.isEmpty) return;
-              Navigator.of(context).pop();
-              await _autoGenerateFlow(text);
-            },
-            child: const Text('Generate'),
-          ),
+          const SizedBox(height: 8),
+          ...phases.map((phase) {
+            final phaseMap = phase as Map<String, dynamic>;
+            final steps = phaseMap['steps'] as List<dynamic>? ?? [];
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A202C),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: const Color(0xFF4A5568).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF667EEA),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          phaseMap['title'] as String? ?? 'Phase',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        phaseMap['estimated_duration'] as String? ?? '',
+                        style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                      ),
+                    ],
+                  ),
+                  if (steps.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    ...steps.map((step) {
+                      final stepMap = step as Map<String, dynamic>;
+                      return Padding(
+                        padding: const EdgeInsets.only(left: 16, bottom: 4),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 4,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                stepMap['title'] as String? ?? 'Step',
+                                style: TextStyle(
+                                  color: Colors.grey[300],
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
         ],
+      ],
+    );
+  }
+
+  Widget _buildStatChip(String value, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF667EEA).withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF667EEA).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Text(
+        '$value $label',
+        style: const TextStyle(
+          color: Color(0xFF667EEA),
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
 
-  Future<void> _autoGenerateFlow(String description) async {
-    try {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Generating flow...')));
+  List<Widget> _buildNotesList(List<dynamic> notes) {
+    return notes.take(3).map((note) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          children: [
+            const SizedBox(width: 24),
+            Expanded(
+              child: Text(
+                '• $note',
+                style: TextStyle(color: Colors.grey[300], fontSize: 11),
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList();
+  }
 
-      final flow = await FlowService.generateFlowFromDescription(description);
+  List<Widget> _buildAlarmsList(List<dynamic> alarms) {
+    return alarms.take(3).map((alarm) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Row(
+          children: [
+            const SizedBox(width: 24),
+            Expanded(
+              child: Text(
+                '• $alarm',
+                style: TextStyle(color: Colors.grey[300], fontSize: 11),
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList();
+  }
 
-      // If backend created the flow, it will appear in list on refresh
-      await _refreshData();
+  ProjectFlow _convertAIFlowToProjectFlow(
+    Map<String, dynamic> aiFlowData,
+    String originalDescription,
+    String modifications,
+  ) {
+    final phases = aiFlowData['phases'] as List<dynamic>? ?? [];
+    final notes = aiFlowData['notes'] as List<dynamic>? ?? [];
+    final alarms = aiFlowData['alarms'] as List<dynamic>? ?? [];
 
-      // Navigate to detail for immediate view
-      if (!mounted) return;
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => FlowDetailScreen(flow: flow)));
+    // Convert phases to checkpoints
+    final checkpoints = <FlowCheckpoint>[];
+    int stepIndex = 0;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Flow "${flow.title}" created')));
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to generate flow: $e')));
+    for (final phase in phases) {
+      final phaseMap = phase as Map<String, dynamic>;
+      final phaseSteps = phaseMap['steps'] as List<dynamic>? ?? [];
+
+      for (final step in phaseSteps) {
+        final stepMap = step as Map<String, dynamic>;
+        checkpoints.add(
+          FlowCheckpoint(
+            id: 'step_${stepIndex++}',
+            title: stepMap['title'] as String? ?? 'Step ${stepIndex}',
+            description: stepMap['description'] as String? ?? '',
+            isCompleted: false,
+            estimatedTime: stepMap['estimated_time'] as String? ?? '1 hour',
+            order: stepIndex,
+            labels: ['ai-generated', 'dynamic'],
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
+      }
     }
+
+    // Create title from description
+    final title = _generateFlowTitle(aiFlowData, originalDescription);
+
+    return ProjectFlow(
+      id: 'ai_flow_${DateTime.now().millisecondsSinceEpoch}',
+      title: title,
+      description:
+          '$originalDescription\n\n${modifications.isNotEmpty ? 'Modifications: $modifications' : ''}',
+      estimatedDuration: _calculateTotalDuration(checkpoints),
+      difficulty: _determineDifficulty(checkpoints.length),
+      checkpoints: checkpoints,
+      tags: ['ai-generated', 'dynamic', 'intelligent'],
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      collaboration: null,
+      notes: notes.map((note) => note.toString()).toList(),
+      alarms: alarms.map((alarm) => alarm.toString()).toList(),
+    );
+  }
+
+  String _calculateTotalDuration(List<FlowCheckpoint> checkpoints) {
+    int totalHours = 0;
+
+    for (final checkpoint in checkpoints) {
+      final timeStr = checkpoint.estimatedTime;
+      final hourMatch = RegExp(r'(\d+)').firstMatch(timeStr);
+      if (hourMatch != null) {
+        totalHours += int.parse(hourMatch.group(1)!);
+      } else {
+        totalHours += 1; // Default 1 hour
+      }
+    }
+
+    if (totalHours < 8) return '$totalHours hours';
+    final days = (totalHours / 8).ceil();
+    return '$days day${days > 1 ? 's' : ''}';
+  }
+
+  FlowDifficulty _determineDifficulty(int checkpointCount) {
+    if (checkpointCount < 5) return FlowDifficulty.easy;
+    if (checkpointCount < 15) return FlowDifficulty.medium;
+    return FlowDifficulty.hard;
   }
 
   void _showNotesAlarms() {
@@ -1738,115 +2428,7 @@ class _FlowScreenState extends State<FlowScreen>
     );
   }
 
-  void _showQuickActions() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.flash_on, color: Colors.blue.shade700),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Quick Actions',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.auto_awesome,
-                    color: Colors.purple.shade700,
-                  ),
-                ),
-                title: const Text(
-                  'Auto-generate Flow',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-                subtitle: const Text(
-                  'Describe your project and let Buddy create a flow',
-                ),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  Navigator.pop(context);
-                  _promptAutoGenerateFlow();
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.note_add, color: Colors.orange.shade700),
-                ),
-                title: const Text(
-                  'Create Note',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-                subtitle: const Text('Create a quick note or checklist'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  Navigator.pop(context);
-                  _createNote();
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.alarm_add, color: Colors.red.shade700),
-                ),
-                title: const Text(
-                  'Set Alarm',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-                subtitle: const Text('Create a reminder or deadline alarm'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  Navigator.pop(context);
-                  _createAlarm();
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildKanbanTab() {
+  Widget _buildTrackTab() {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -1860,10 +2442,10 @@ class _FlowScreenState extends State<FlowScreen>
         ),
       ),
       child: _flows.isEmpty
-          ? _buildEmptyKanbanState()
+          ? _buildEmptyTrackState()
           : Column(
               children: [
-                // Header with flow selector
+                // Header with repository selector
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -1877,13 +2459,13 @@ class _FlowScreenState extends State<FlowScreen>
                   child: Row(
                     children: [
                       const Icon(
-                        Icons.view_kanban,
+                        Icons.track_changes,
                         color: Color(0xFF667EEA),
                         size: 24,
                       ),
                       const SizedBox(width: 12),
                       const Text(
-                        'Kanban Board',
+                        'GitHub Commits Analysis',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -1893,21 +2475,26 @@ class _FlowScreenState extends State<FlowScreen>
                     ],
                   ),
                 ),
-                // Flow selector if multiple flows
-                if (_flows.length > 1)
+                // Repository selector if multiple flows with repos
+                if (_flows.where((f) => f.repositoryUrl != null).length > 1)
                   Container(
                     padding: const EdgeInsets.all(16),
                     child: DropdownButtonFormField<ProjectFlow>(
                       decoration: const InputDecoration(
-                        labelText: 'Select Project Flow',
+                        labelText: 'Select Repository',
                         border: OutlineInputBorder(),
                         fillColor: Color(0xFF1A202C),
                         filled: true,
                       ),
                       dropdownColor: const Color(0xFF1A202C),
                       style: const TextStyle(color: Colors.white),
-                      value: _flows.first,
-                      items: _flows.map((flow) {
+                      value: _flows.firstWhere(
+                        (f) => f.repositoryUrl != null,
+                        orElse: () => _flows.first,
+                      ),
+                      items: _flows.where((f) => f.repositoryUrl != null).map((
+                        flow,
+                      ) {
                         return DropdownMenuItem(
                           value: flow,
                           child: Text(flow.title),
@@ -1915,40 +2502,392 @@ class _FlowScreenState extends State<FlowScreen>
                       }).toList(),
                       onChanged: (flow) {
                         if (flow != null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => KanbanBoardScreen(
-                                flow: flow,
-                                onCheckpointStatusChanged:
-                                    (flowId, checkpointId, newStatus) {
-                                      _loadAllData();
-                                    },
-                              ),
-                            ),
-                          );
+                          // TODO: Load commits for selected repository
+                          setState(() {});
                         }
                       },
                     ),
                   ),
-                // Kanban preview or direct access
+                // Commits analysis content
                 Expanded(
-                  child: _flows.isNotEmpty
-                      ? KanbanBoardScreen(
-                          flow: _flows.first,
-                          onCheckpointStatusChanged:
-                              (flowId, checkpointId, newStatus) {
-                                _loadAllData();
-                              },
-                        )
-                      : _buildEmptyKanbanState(),
+                  child:
+                      _flows.isNotEmpty &&
+                          _flows.any((f) => f.repositoryUrl != null)
+                      ? _buildCommitsAnalysisView()
+                      : _buildEmptyTrackState(),
                 ),
               ],
             ),
     );
   }
 
-  Widget _buildEmptyKanbanState() {
+  Widget _buildCommitsAnalysisView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Repository Overview Cards
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricCard(
+                  'Total Commits',
+                  '247',
+                  Icons.commit,
+                  Colors.blue,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildMetricCard(
+                  'This Week',
+                  '23',
+                  Icons.calendar_view_week,
+                  Colors.green,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildMetricCard(
+                  'Contributors',
+                  '8',
+                  Icons.people,
+                  Colors.purple,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildMetricCard(
+                  'Avg/Day',
+                  '3.3',
+                  Icons.trending_up,
+                  Colors.orange,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Recent Commits Section
+          const Text(
+            'Recent Commits',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Mock recent commits - in real implementation, this would come from GitHub API
+          _buildCommitItem(
+            'feat: Add user authentication flow',
+            'john.doe',
+            '2 hours ago',
+            'Added JWT token handling and user login endpoints',
+            ['auth', 'backend'],
+          ),
+          _buildCommitItem(
+            'fix: Resolve memory leak in code editor',
+            'jane.smith',
+            '5 hours ago',
+            'Fixed widget disposal and stream cleanup',
+            ['bugfix', 'ui'],
+          ),
+          _buildCommitItem(
+            'docs: Update API documentation',
+            'mike.johnson',
+            '1 day ago',
+            'Added comprehensive API docs for new endpoints',
+            ['documentation'],
+          ),
+          _buildCommitItem(
+            'refactor: Optimize database queries',
+            'sarah.wilson',
+            '2 days ago',
+            'Improved query performance by 40%',
+            ['performance', 'database'],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Commit Velocity Chart (Mock visualization)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A202C),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFF4A5568).withValues(alpha: 0.3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Commit Velocity (Last 30 Days)',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // Mock chart visualization
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2D3748),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '📊 Commit velocity chart would be displayed here',
+                      style: TextStyle(color: Colors.grey[400]),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // Development Activity
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A202C),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFF4A5568).withValues(alpha: 0.3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Current Development Activity',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildActivityItem(
+                  'Active Branches',
+                  '3 feature branches, 1 hotfix',
+                  Icons.call_split,
+                  Colors.blue,
+                ),
+                const SizedBox(height: 12),
+                _buildActivityItem(
+                  'Open Pull Requests',
+                  '7 PRs awaiting review',
+                  Icons.merge,
+                  Colors.green,
+                ),
+                const SizedBox(height: 12),
+                _buildActivityItem(
+                  'Recent Releases',
+                  'v2.1.0 released 3 days ago',
+                  Icons.tag,
+                  Colors.purple,
+                ),
+                const SizedBox(height: 12),
+                _buildActivityItem(
+                  'Code Quality',
+                  '94% test coverage, 2 failing checks',
+                  Icons.check_circle,
+                  Colors.orange,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A202C),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF4A5568).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 32),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommitItem(
+    String message,
+    String author,
+    String time,
+    String description,
+    List<String> tags,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A202C),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF4A5568).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.commit, color: Colors.blue, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.person, color: Colors.grey[400], size: 16),
+              const SizedBox(width: 4),
+              Text(
+                author,
+                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              ),
+              const SizedBox(width: 16),
+              Icon(Icons.access_time, color: Colors.grey[400], size: 16),
+              const SizedBox(width: 4),
+              Text(
+                time,
+                style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              ),
+            ],
+          ),
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              description,
+              style: TextStyle(color: Colors.grey[300], fontSize: 14),
+            ),
+          ],
+          if (tags.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              children: tags
+                  .map(
+                    (tag) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        tag,
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityItem(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                value,
+                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyTrackState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1960,14 +2899,14 @@ class _FlowScreenState extends State<FlowScreen>
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Icon(
-              Icons.view_kanban,
+              Icons.track_changes,
               size: 64,
               color: Color(0xFF667EEA),
             ),
           ),
           const SizedBox(height: 24),
           const Text(
-            'No Project Flows for Kanban',
+            'No Repositories to Track',
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -1976,26 +2915,321 @@ class _FlowScreenState extends State<FlowScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'Create a project flow to use the Kanban board',
+            'Create a project flow with a GitHub repository to view commit analysis',
             style: TextStyle(fontSize: 16, color: Colors.grey[300]),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () => _promptAutoGenerateFlow(),
-            icon: const Icon(Icons.add),
-            label: const Text('Create Project Flow'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF667EEA),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCollaborationTab() {
+  Widget _buildProductManagementView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Product Management Header
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF667EEA).withValues(alpha: 0.3),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.inventory, size: 32, color: Colors.white),
+                  SizedBox(width: 12),
+                  Text(
+                    'Product Management',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Manage your product lifecycle, documentation, and deployments',
+                style: TextStyle(fontSize: 16, color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Product Documentation Section
+        _buildProductSection(
+          title: 'Documentation',
+          icon: Icons.description,
+          color: const Color(0xFF10B981),
+          children: [
+            _buildProductCard(
+              title: 'API Documentation',
+              subtitle: 'View and manage API docs',
+              icon: Icons.api,
+              onTap: () => _showDocumentation('api'),
+            ),
+            _buildProductCard(
+              title: 'User Guide',
+              subtitle: 'Product usage documentation',
+              icon: Icons.book,
+              onTap: () => _showDocumentation('user'),
+            ),
+            _buildProductCard(
+              title: 'Technical Specs',
+              subtitle: 'System architecture and specs',
+              icon: Icons.settings,
+              onTap: () => _showDocumentation('technical'),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 24),
+
+        // Current Product Preview Section
+        _buildProductSection(
+          title: 'Current Product',
+          icon: Icons.preview,
+          color: const Color(0xFFF59E0B),
+          children: [
+            _buildProductCard(
+              title: 'Live Preview',
+              subtitle: 'View current product state',
+              icon: Icons.visibility,
+              onTap: () => _showProductPreview(),
+            ),
+            _buildProductCard(
+              title: 'Feature Status',
+              subtitle: 'Track feature implementation',
+              icon: Icons.check_circle,
+              onTap: () => _showFeatureStatus(),
+            ),
+            _buildProductCard(
+              title: 'User Feedback',
+              subtitle: 'View user reviews and feedback',
+              icon: Icons.feedback,
+              onTap: () => _showUserFeedback(),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 24),
+
+        // Deployment Details Section
+        _buildProductSection(
+          title: 'Deployments',
+          icon: Icons.rocket_launch,
+          color: const Color(0xFFEF4444),
+          children: [
+            _buildProductCard(
+              title: 'Deployment History',
+              subtitle: 'View past deployments',
+              icon: Icons.history,
+              onTap: () => _showDeploymentHistory(),
+            ),
+            _buildProductCard(
+              title: 'Environment Status',
+              subtitle: 'Check staging/prod status',
+              icon: Icons.cloud,
+              onTap: () => _showEnvironmentStatus(),
+            ),
+            _buildProductCard(
+              title: 'Release Notes',
+              subtitle: 'Current version changelog',
+              icon: Icons.new_releases,
+              onTap: () => _showReleaseNotes(),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductSection({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required List<Widget> children,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A202C),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 24),
+                const SizedBox(width: 12),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: Colors.grey[700]!.withValues(alpha: 0.3)),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF667EEA).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: const Color(0xFF667EEA), size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDocumentation(String type) {
+    // TODO: Implement documentation viewer
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Opening $type documentation...'),
+        backgroundColor: const Color(0xFF10B981),
+      ),
+    );
+  }
+
+  void _showProductPreview() {
+    // TODO: Implement product preview
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Opening product preview...'),
+        backgroundColor: const Color(0xFFF59E0B),
+      ),
+    );
+  }
+
+  void _showFeatureStatus() {
+    // TODO: Implement feature status tracker
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Opening feature status...'),
+        backgroundColor: const Color(0xFF10B981),
+      ),
+    );
+  }
+
+  void _showUserFeedback() {
+    // TODO: Implement user feedback viewer
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Opening user feedback...'),
+        backgroundColor: const Color(0xFF667EEA),
+      ),
+    );
+  }
+
+  void _showDeploymentHistory() {
+    // TODO: Implement deployment history
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Opening deployment history...'),
+        backgroundColor: const Color(0xFFEF4444),
+      ),
+    );
+  }
+
+  void _showEnvironmentStatus() {
+    // TODO: Implement environment status
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Opening environment status...'),
+        backgroundColor: const Color(0xFF764BA2),
+      ),
+    );
+  }
+
+  void _showReleaseNotes() {
+    // TODO: Implement release notes
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Opening release notes...'),
+        backgroundColor: const Color(0xFF10B981),
+      ),
+    );
+  }
+
+  Widget _buildProductTab() {
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -2008,7 +3242,113 @@ class _FlowScreenState extends State<FlowScreen>
           end: Alignment.bottomRight,
         ),
       ),
-      child: CollaborationHubScreen(),
+      child: _buildProductManagementView(),
     );
+  }
+
+  Future<ProjectFlow> _convertPreviewDataToProjectFlow(
+    Map<String, dynamic> previewData,
+    String description,
+  ) async {
+    final flowTitle = _generateFlowTitle(previewData, description);
+    final checkpoints = <FlowCheckpoint>[];
+
+    if (previewData['checkpoints'] != null) {
+      int order = 1;
+      for (final checkpointData in previewData['checkpoints']) {
+        if (checkpointData is Map<String, dynamic>) {
+          checkpoints.add(
+            FlowCheckpoint(
+              id: DateTime.now().millisecondsSinceEpoch.toString() + '_$order',
+              title: checkpointData['title'] ?? 'Step $order',
+              description: checkpointData['description'] ?? '',
+              requirements: List<String>.from(
+                checkpointData['requirements'] ?? [],
+              ),
+              deliverables: List<String>.from(
+                checkpointData['deliverables'] ?? [],
+              ),
+              estimatedTime: checkpointData['estimated_time'] ?? '1 day',
+              order: order,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            ),
+          );
+          order++;
+        }
+      }
+    }
+
+    return ProjectFlow(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: flowTitle,
+      description: description,
+      checkpoints: checkpoints,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      estimatedDuration: _calculateFlowDuration(checkpoints),
+      difficulty: _determineFlowDifficulty(checkpoints),
+      notes: List<String>.from(previewData['notes'] ?? []),
+      alarms: List<String>.from(previewData['alarms'] ?? []),
+    );
+  }
+
+  String _generateFlowTitle(
+    Map<String, dynamic> previewData,
+    String description,
+  ) {
+    // Use AI-generated title if available, otherwise create from description
+    final aiTitle = previewData['title'];
+    if (aiTitle != null && aiTitle.toString().isNotEmpty) {
+      return aiTitle.toString();
+    }
+    // Create a title from the first few words of the description
+    final words = description.split(' ');
+    final titleWords = words.take(4).join(' ');
+    return titleWords.capitalize();
+  }
+
+  String _calculateFlowDuration(List<FlowCheckpoint> checkpoints) {
+    if (checkpoints.isEmpty) return '1 week';
+
+    // Simple estimation based on number of checkpoints
+    final weeks = (checkpoints.length / 5).ceil();
+    if (weeks == 1) return '1 week';
+    return '$weeks weeks';
+  }
+
+  FlowDifficulty _determineFlowDifficulty(List<FlowCheckpoint> checkpoints) {
+    if (checkpoints.isEmpty) return FlowDifficulty.medium;
+
+    // Determine difficulty based on complexity indicators
+    final hasComplexRequirements = checkpoints.any(
+      (c) => c.requirements.length > 3 || c.description.length > 200,
+    );
+
+    if (hasComplexRequirements) return FlowDifficulty.hard;
+    if (checkpoints.length > 10) return FlowDifficulty.medium;
+    return FlowDifficulty.easy;
+  }
+
+  Future<void> _saveGeneratedFlow(ProjectFlow flow) async {
+    try {
+      await FlowService.createProjectFlow(flow);
+      setState(() {
+        _flows.add(flow);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Flow "${flow.title}" created successfully!'),
+          backgroundColor: const Color(0xFF10B981),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save flow: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }

@@ -54,6 +54,7 @@ class ProjectFlow(Base):
     checkpoints = relationship("FlowCheckpoint", back_populates="flow", cascade="all, delete-orphan")
     buddy_messages = relationship("BuddyFlowMessage", back_populates="flow", cascade="all, delete-orphan")
     alarms = relationship("FlowAlarm", back_populates="flow", cascade="all, delete-orphan")
+    repository = relationship("Repository", back_populates="flow", uselist=False)
 
 class FlowCheckpoint(Base):
     __tablename__ = "flow_checkpoints"
@@ -191,3 +192,24 @@ class FlowCheckpointAssignment(Base):
     
     # Relationships
     checkpoint = relationship("FlowCheckpoint", back_populates="assignments")
+
+# Repository tracking for GitHub repositories
+class Repository(Base):
+    __tablename__ = "repositories"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    flow_id = Column(Integer, ForeignKey("project_flows.id"), nullable=True)  # Can be null for standalone repos
+    github_id = Column(Integer, unique=True, nullable=False)  # GitHub repository ID
+    name = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=False)  # owner/repo format
+    description = Column(Text)
+    html_url = Column(String(500), nullable=False)
+    ssh_url = Column(String(500))
+    clone_url = Column(String(500), nullable=False)
+    private = Column(Boolean, default=True)
+    local_path = Column(String(500))  # Local path where repo is cloned
+    created_by_ai = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    flow = relationship("ProjectFlow", back_populates="repository")

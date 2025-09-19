@@ -5,7 +5,50 @@ import '../../models/flow_models.dart';
 import '../../config/api_config.dart';
 import '../agent/buddy_orchestrator.dart';
 import '../databases/buddy_chat_database.dart';
+import '../auth/http_interceptor.dart';
 import 'on_device_ai_service.dart';
+
+// Simple response cache to improve performance
+class _ResponseCache {
+  static final Map<String, _CacheEntry> _cache = {};
+  static const Duration cacheTimeout = Duration(minutes: 5);
+
+  static String? get(String key) {
+    final entry = _cache[key];
+    if (entry != null &&
+        DateTime.now().difference(entry.timestamp) < cacheTimeout) {
+      return entry.response;
+    }
+    _cache.remove(key);
+    return null;
+  }
+
+  static void set(String key, String response) {
+    _cache[key] = _CacheEntry(response, DateTime.now());
+
+    // Clean old entries
+    _cache.removeWhere(
+      (key, entry) => DateTime.now().difference(entry.timestamp) > cacheTimeout,
+    );
+  }
+
+  static void clear() {
+    _cache.clear();
+  }
+
+  // Public method to clear response cache
+  static void clearResponseCache() {
+    _ResponseCache.clear();
+    print('📦 Response cache cleared');
+  }
+}
+
+class _CacheEntry {
+  final String response;
+  final DateTime timestamp;
+
+  _CacheEntry(this.response, this.timestamp);
+}
 
 class AIPersona {
   final String id;
@@ -145,10 +188,8 @@ class BuddyService {
   // Load all personas from backend
   static Future<void> loadSavedPersonas() async {
     try {
-      final headers = await _getAuthHeaders();
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/personas/'),
-        headers: headers,
+      final response = await HttpInterceptor.get(
+        '${ApiConfig.baseUrl}/personas/',
       );
 
       if (response.statusCode == 200) {
@@ -552,7 +593,10 @@ class BuddyService {
   }
 
   // Main chat method with persona support - Simplified like old code
-  static Future<Map<String, dynamic>> askBuddy(String prompt) async {
+  static Future<Map<String, dynamic>> askBuddy(
+    String prompt, {
+    String? subMode,
+  }) async {
     // Prevent multiple simultaneous requests
     if (_isProcessingRequest) {
       print('Request blocked: Another request is already in progress');
@@ -561,6 +605,13 @@ class BuddyService {
         'response': 'Please wait for the previous message to complete.',
         'error': 'request_throttled',
       };
+    }
+
+    // Check cache first
+    final cachedResponse = _ResponseCache.get(prompt);
+    if (cachedResponse != null) {
+      print('📦 Returning cached response for: ${_truncateString(prompt, 50)}');
+      return {'success': true, 'response': cachedResponse, 'cached': true};
     }
 
     _isProcessingRequest = true;
@@ -616,6 +667,9 @@ class BuddyService {
             'extra': agentResult.extra,
           };
 
+          // Cache the successful orchestrator response
+          _ResponseCache.set(prompt, msg);
+
           // Handle navigation actions from AppControlSkill
           if (agentResult.extra?['action'] == 'navigate') {
             response['navigate'] = {
@@ -667,6 +721,9 @@ class BuddyService {
             '💾 Saved local AI response: ${_truncateString(assistantMessage.content, 50)}',
           );
 
+          // Cache the successful local AI response
+          _ResponseCache.set(prompt, localResponse);
+
           _isProcessingRequest = false; // Reset flag before returning
           return {
             'success': true,
@@ -707,6 +764,7 @@ class BuddyService {
         'is_task_continuation': isTaskContinuation,
         'recent_context': recentContext,
         'session_id': _currentChatSessionId,
+        'sub_mode': subMode ?? 'standard',
       };
 
       print(
@@ -741,6 +799,9 @@ class BuddyService {
 
         print('=== SUCCESS - RETURNING RESPONSE ===');
         print('AI Response: $aiResponse');
+
+        // Cache the successful response
+        _ResponseCache.set(prompt, aiResponse);
 
         _isProcessingRequest = false; // Reset flag before returning
         return {'success': true, 'response': aiResponse, 'message': aiResponse};
@@ -1234,5 +1295,436 @@ class BuddyService {
       print('Error loading AI mode preference: $e');
       _currentAIMode = 'api'; // Default to API mode on error
     }
+  }
+
+  // Enhanced Dynamic Flow Generation with AI Reasoning
+  static Future<Map<String, dynamic>> generateDynamicFlow({
+    required String projectDescription,
+    required List<String> technologies,
+    required String complexity,
+    Map<String, dynamic>? externalData,
+    bool includeNotes = true,
+    bool includeAlarms = true,
+    bool accessExternalData = true,
+  }) async {
+    try {
+      print('🤖 Starting dynamic flow generation for: $projectDescription');
+
+      // Step 1: Analyze project requirements with AI reasoning
+      final analysisResult = await _analyzeProjectRequirements(
+        projectDescription,
+        technologies,
+        complexity,
+      );
+
+      // Step 2: Access external data if requested
+      Map<String, dynamic> enrichedData = {};
+      if (accessExternalData) {
+        enrichedData = await _gatherExternalData(
+          (analysisResult['requirements'] as List<dynamic>)
+              .map((req) => req.toString())
+              .toList(),
+          technologies,
+        );
+      }
+
+      // Step 3: Generate comprehensive workflow with AI thinking
+      final workflowResult = await _generateComprehensiveWorkflow(
+        analysisResult,
+        enrichedData,
+        includeNotes,
+        includeAlarms,
+      );
+
+      // Step 4: Create flow structure with dependencies and execution flow
+      final flowStructure = await _createFlowStructure(workflowResult);
+
+      return {
+        'success': true,
+        'flow_data': flowStructure,
+        'analysis': analysisResult,
+        'external_data': enrichedData,
+        'preview_text': _generatePreviewText(flowStructure, analysisResult),
+        'notes': includeNotes ? workflowResult['notes'] : [],
+        'alarms': includeAlarms ? workflowResult['alarms'] : [],
+      };
+    } catch (e) {
+      print('❌ Error in dynamic flow generation: $e');
+      return {
+        'success': false,
+        'message': 'Failed to generate dynamic flow: $e',
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> _analyzeProjectRequirements(
+    String description,
+    List<String> technologies,
+    String complexity,
+  ) async {
+    final prompt =
+        '''
+Analyze this project requirement and provide a comprehensive breakdown:
+
+PROJECT: $description
+TECHNOLOGIES: ${technologies.join(', ')}
+COMPLEXITY: $complexity
+
+Please provide:
+1. Core objectives and goals
+2. Required technical components
+3. Dependencies and prerequisites
+4. Potential challenges and risks
+5. Estimated timeline breakdown
+6. Success criteria
+
+Think step-by-step and be thorough in your analysis.
+''';
+
+    try {
+      final response = await _sendAIRequest(prompt, 'analysis');
+      final analysis = jsonDecode(response);
+
+      return {
+        'objectives': analysis['objectives'] ?? [],
+        'components': analysis['components'] ?? [],
+        'dependencies': analysis['dependencies'] ?? [],
+        'challenges': analysis['challenges'] ?? [],
+        'timeline': analysis['timeline'] ?? {},
+        'requirements':
+            (analysis['requirements'] as List<dynamic>?)
+                ?.map((req) => req.toString())
+                .toList() ??
+            [],
+        'complexity_analysis': analysis['complexity_analysis'] ?? '',
+      };
+    } catch (e) {
+      // Fallback analysis
+      return {
+        'objectives': ['Complete the project successfully'],
+        'components': technologies,
+        'dependencies': ['Basic development setup'],
+        'challenges': ['Technical implementation'],
+        'timeline': {'total': '2-4 weeks'},
+        'requirements': [description],
+        'complexity_analysis': complexity,
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> _gatherExternalData(
+    List<String> requirements,
+    List<String> technologies,
+  ) async {
+    final externalData = <String, dynamic>{};
+
+    try {
+      // Gather technology-specific best practices
+      for (final tech in technologies) {
+        final techData = await _fetchTechnologyData(tech);
+        if (techData.isNotEmpty) {
+          externalData['tech_$tech'] = techData;
+        }
+      }
+
+      // Gather industry standards and patterns
+      final industryData = await _fetchIndustryStandards(requirements);
+      externalData['industry_standards'] = industryData;
+
+      // Gather similar project examples
+      final examples = await _fetchSimilarProjects(requirements);
+      externalData['project_examples'] = examples;
+    } catch (e) {
+      print('Warning: Could not gather external data: $e');
+    }
+
+    return externalData;
+  }
+
+  static Future<Map<String, dynamic>> _generateComprehensiveWorkflow(
+    Map<String, dynamic> analysis,
+    Map<String, dynamic> externalData,
+    bool includeNotes,
+    bool includeAlarms,
+  ) async {
+    final prompt =
+        '''
+Based on this project analysis, create a comprehensive workflow:
+
+ANALYSIS: ${jsonEncode(analysis)}
+EXTERNAL DATA: ${jsonEncode(externalData)}
+
+Create a detailed workflow that includes:
+1. All necessary steps in logical order
+2. Dependencies between steps
+3. Estimated time for each step
+4. Required resources and tools
+5. Quality checkpoints
+6. Testing strategies
+7. Deployment considerations
+
+${includeNotes ? '8. Important notes and considerations' : ''}
+${includeAlarms ? '9. Critical alarms and reminders' : ''}
+
+Think like an experienced project manager and architect.
+''';
+
+    try {
+      final response = await _sendAIRequest(prompt, 'workflow');
+      final workflow = jsonDecode(response);
+
+      return {
+        'steps': workflow['steps'] ?? [],
+        'dependencies': workflow['dependencies'] ?? [],
+        'checkpoints': workflow['checkpoints'] ?? [],
+        'resources': workflow['resources'] ?? [],
+        'testing': workflow['testing'] ?? [],
+        'deployment': workflow['deployment'] ?? [],
+        'notes': includeNotes ? (workflow['notes'] ?? []) : [],
+        'alarms': includeAlarms ? (workflow['alarms'] ?? []) : [],
+      };
+    } catch (e) {
+      // Fallback workflow generation
+      return {
+        'steps': _generateFallbackSteps(analysis),
+        'dependencies': [],
+        'checkpoints': ['Code review', 'Testing', 'Deployment'],
+        'resources': analysis['components'] ?? [],
+        'testing': ['Unit tests', 'Integration tests'],
+        'deployment': ['Production deployment'],
+        'notes': includeNotes ? ['Review requirements carefully'] : [],
+        'alarms': includeAlarms ? ['Deadline approaching'] : [],
+      };
+    }
+  }
+
+  static Future<Map<String, dynamic>> _createFlowStructure(
+    Map<String, dynamic> workflow,
+  ) async {
+    final steps = workflow['steps'] as List<dynamic>;
+
+    // Create structured flow with proper hierarchy
+    final structuredSteps = <Map<String, dynamic>>[];
+    final phaseMap = <String, List<Map<String, dynamic>>>{};
+
+    // Group steps by phase
+    for (final step in steps) {
+      final stepMap = step as Map<String, dynamic>;
+      final phase = stepMap['phase'] ?? 'General';
+
+      if (!phaseMap.containsKey(phase)) {
+        phaseMap[phase] = [];
+      }
+      phaseMap[phase]!.add(stepMap);
+    }
+
+    // Create flow structure
+    final phases = phaseMap.keys.toList()..sort();
+    for (final phase in phases) {
+      structuredSteps.add({
+        'type': 'phase',
+        'title': phase,
+        'description': 'Phase: $phase',
+        'steps': phaseMap[phase]!,
+        'estimated_duration': _calculatePhaseDuration(phaseMap[phase]!),
+      });
+    }
+
+    return {
+      'title': 'Dynamic AI-Generated Flow',
+      'description': 'Comprehensive workflow created with AI reasoning',
+      'phases': structuredSteps,
+      'checkpoints': workflow['checkpoints'],
+      'resources': workflow['resources'],
+      'testing_strategy': workflow['testing'],
+      'deployment_plan': workflow['deployment'],
+      'notes': workflow['notes'],
+      'alarms': workflow['alarms'],
+      'metadata': {
+        'generated_by': 'AI Reasoning Engine',
+        'generation_time': DateTime.now().toIso8601String(),
+        'complexity': 'dynamic',
+        'external_data_used': true,
+      },
+    };
+  }
+
+  static String _generatePreviewText(
+    Map<String, dynamic> flowStructure,
+    Map<String, dynamic> analysis,
+  ) {
+    final phases = flowStructure['phases'] as List<dynamic>;
+    final totalSteps = phases.fold<int>(
+      0,
+      (sum, phase) => sum + (phase['steps'] as List).length,
+    );
+
+    return '''
+🤖 AI-Generated Dynamic Flow
+
+📊 Analysis Complete:
+• ${analysis['objectives'].length} core objectives identified
+• ${analysis['components'].length} technical components required
+• ${analysis['challenges'].length} challenges anticipated
+
+🔄 Workflow Structure:
+• ${phases.length} phases identified
+• $totalSteps total steps planned
+• Comprehensive testing and deployment strategy included
+
+✨ Key Features:
+• Dynamic step generation based on requirements
+• Dependency mapping and execution flow
+• Quality checkpoints and validation steps
+• Resource allocation and timeline estimation
+• Flow-specific notes and contextual alarms
+
+Ready to create this comprehensive workflow?
+''';
+  }
+
+  // Helper methods for external data access
+  static Future<Map<String, dynamic>> _fetchTechnologyData(
+    String technology,
+  ) async {
+    // Simulate external API calls for technology data
+    // In real implementation, this would call actual APIs
+    final techPrompt =
+        'Provide best practices and current standards for $technology development';
+
+    try {
+      final response = await _sendAIRequest(techPrompt, 'tech_data');
+      return jsonDecode(response);
+    } catch (e) {
+      return {'technology': technology, 'best_practices': [], 'standards': []};
+    }
+  }
+
+  static Future<Map<String, dynamic>> _fetchIndustryStandards(
+    List<String> requirements,
+  ) async {
+    final standardsPrompt =
+        'What are current industry standards for: ${requirements.join(", ")}';
+
+    try {
+      final response = await _sendAIRequest(standardsPrompt, 'standards');
+      return jsonDecode(response);
+    } catch (e) {
+      return {'standards': [], 'recommendations': []};
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> _fetchSimilarProjects(
+    List<String> requirements,
+  ) async {
+    final examplesPrompt =
+        'Provide examples of similar projects that include: ${requirements.join(", ")}';
+
+    try {
+      final response = await _sendAIRequest(examplesPrompt, 'examples');
+      final data = jsonDecode(response);
+      return (data['examples'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // AI Request helper
+  static Future<String> _sendAIRequest(String prompt, String context) async {
+    try {
+      final headers = await _getAuthHeaders();
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/buddy/ai-request'),
+        headers: headers,
+        body: jsonEncode({
+          'prompt': prompt,
+          'context': context,
+          'chat_history': _chatHistory
+              .map((msg) => {'role': msg.role, 'content': msg.content})
+              .take(10) // Limit history for performance
+              .toList(),
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['response'] ?? '{}';
+      }
+    } catch (e) {
+      print('Error sending AI request: $e');
+    }
+
+    return '{}';
+  }
+
+  // Fallback methods
+  static List<Map<String, dynamic>> _generateFallbackSteps(
+    Map<String, dynamic> analysis,
+  ) {
+    final components = analysis['components'] as List<dynamic>;
+
+    final steps = <Map<String, dynamic>>[];
+
+    // Planning phase
+    steps.add({
+      'phase': 'Planning',
+      'title': 'Project Planning',
+      'description': 'Define project scope and requirements',
+      'estimated_time': '2-4 hours',
+      'dependencies': [],
+    });
+
+    // Setup phase
+    steps.add({
+      'phase': 'Setup',
+      'title': 'Environment Setup',
+      'description': 'Set up development environment and tools',
+      'estimated_time': '1-2 hours',
+      'dependencies': ['Project Planning'],
+    });
+
+    // Development phases based on components
+    for (final component in components) {
+      steps.add({
+        'phase': 'Development',
+        'title': 'Implement $component',
+        'description': 'Develop the $component component',
+        'estimated_time': '4-8 hours',
+        'dependencies': ['Environment Setup'],
+      });
+    }
+
+    // Testing phase
+    steps.add({
+      'phase': 'Testing',
+      'title': 'Testing & Quality Assurance',
+      'description': 'Test all components and ensure quality',
+      'estimated_time': '2-4 hours',
+      'dependencies': ['Development'],
+    });
+
+    // Deployment phase
+    steps.add({
+      'phase': 'Deployment',
+      'title': 'Deployment',
+      'description': 'Deploy to production environment',
+      'estimated_time': '1-2 hours',
+      'dependencies': ['Testing'],
+    });
+
+    return steps;
+  }
+
+  static String _calculatePhaseDuration(List<Map<String, dynamic>> steps) {
+    // Simple duration calculation - could be enhanced
+    final totalHours = steps.fold<int>(0, (sum, step) {
+      final timeStr = step['estimated_time'] as String? ?? '1 hour';
+      final hours = int.tryParse(timeStr.split('-').first) ?? 1;
+      return sum + hours;
+    });
+
+    if (totalHours < 8) return '$totalHours hours';
+    final days = (totalHours / 8).ceil();
+    return '$days day${days > 1 ? 's' : ''}';
   }
 }

@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     SENDER_APP_PASSWORD: str = os.getenv("SENDER_APP_PASSWORD", "")
     TARGET_EMAIL: str = os.getenv("TARGET_EMAIL", "")
 
+    # GitHub Configuration
+    GITHUB_PAT: str = os.getenv("GITHUB_PAT", "")
+    GITHUB_USERNAME: str = os.getenv("GITHUB_USERNAME", "")
+
     class Config:
         env_file = ".env"
         env_file_encoding = 'utf-8'

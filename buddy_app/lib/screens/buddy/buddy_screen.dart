@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../models/flow_models.dart';
 import '../../services/ai/buddy_service.dart';
+import '../../services/databases/buddy_chat_database.dart';
 import '../../config/settings/theme_config.dart';
 import '../../config/settings/settings_manager.dart';
 
 import 'chat_history_screen.dart';
-import '../../widgets/chat/buddy_message_bubble.dart';
+import '../../widgets/chat/enhanced_message_bubble.dart';
+import '../../services/conversation_export_service.dart';
 
 class BuddyScreen extends StatefulWidget {
   const BuddyScreen({super.key});
@@ -22,11 +24,19 @@ class _BuddyScreenState extends State<BuddyScreen>
   List<BuddyMessage> _messages = [];
   bool _isLoading = false;
   bool _isTyping = false;
+  bool _isSearching = false;
+  String _searchQuery = '';
+  List<BuddyMessage> _filteredMessages = [];
   late AnimationController _typingController;
+
+  // Cancel token for stopping AI generation
+  bool _isCancelled = false;
 
   // AI Mode State
   String _currentAIMode = 'api'; // Default to API mode
   String _currentInfrastructure = 'cloud'; // 'cloud' or 'local'
+  String _currentSubMode =
+      'standard'; // Current submode: standard, ask, agent, reasoning, deepthink
 
   // Real-time sync
   Timer? _syncTimer;
@@ -217,61 +227,108 @@ class _BuddyScreenState extends State<BuddyScreen>
   }
 
   Future<void> _switchAIMode() async {
-    // Toggle infrastructure (cloud <-> local)
-    if (_currentInfrastructure == 'local') {
-      // Switch back to cloud with API mode (backend only supports 'api' mode for cloud)
-      final success = await BuddyService.switchAIMode('api');
-      if (success && mounted) {
-        setState(() {
-          _currentInfrastructure = 'cloud';
-          // Keep the current AI mode for UI display, but backend uses 'api'
-        });
-        _showSnackBar('Switched to ${_getModeName(_currentAIMode)} • Cloud');
-      } else {
-        _showSnackBar('Failed to switch to cloud mode');
-      }
-    } else {
-      // Switch to local mode with current mode
-      await _selectLocalModel();
+    // Cycle through AI modes: api -> creative -> local -> api
+    String nextMode;
+    switch (_currentAIMode) {
+      case 'api':
+        nextMode = 'creative';
+        break;
+      case 'creative':
+        nextMode = 'local';
+        break;
+      case 'local':
+        nextMode = 'api';
+        break;
+      default:
+        nextMode = 'api';
     }
+
+    await _switchToMode(nextMode);
   }
 
-  // Method to handle mode switching while preserving infrastructure
+  // Method to handle mode switching with proper backend integration
   Future<void> _switchToMode(String newMode) async {
-    if (_currentInfrastructure == 'cloud') {
-      // For cloud infrastructure, we don't need to call backend for mode changes
-      // The backend always uses 'api' mode, we just update UI mode
-      setState(() {
-        _currentAIMode = newMode;
-      });
-      _showSnackBar('Switched to ${_getModeName(newMode)} • Cloud');
-    } else {
-      // For local infrastructure, we don't need to call backend for mode changes
-      // The backend already has the local model loaded, we just update UI mode
-      setState(() {
-        _currentAIMode = newMode;
-      });
-      _showSnackBar('Mode: ${_getModeName(newMode)} • Local');
-    }
-  }
-
-  Future<void> _selectLocalModel() async {
     try {
-      // Switch to local mode using new on-device AI (includes file picker)
-      final success = await BuddyService.switchToLocalMode();
+      bool success = false;
 
-      if (success && mounted) {
-        setState(() {
-          _currentAIMode = 'local';
-          _currentInfrastructure = 'local';
-        });
-        _showSnackBar('Successfully switched to Local AI mode');
+      // Handle infrastructure modes (local/api)
+      if (newMode == 'local') {
+        // Switch to local mode (requires model selection)
+        success = await BuddyService.switchToLocalMode();
+        if (success) {
+          setState(() {
+            _currentAIMode = 'local';
+            _currentInfrastructure = 'local';
+            // Keep current submode when switching infrastructure
+          });
+          _showSnackBar(
+            'Switched to Local • ${_getSubModeName(_currentSubMode)}',
+          );
+        } else {
+          _showSnackBar('Failed to switch to local mode or no model selected');
+        }
+      } else if (newMode == 'api') {
+        // Switch to API mode
+        success = await BuddyService.switchAIMode('api');
+        if (success) {
+          setState(() {
+            _currentAIMode = 'api';
+            _currentInfrastructure = 'cloud';
+            // Keep current submode when switching infrastructure
+          });
+          _showSnackBar(
+            'Switched to Cloud • ${_getSubModeName(_currentSubMode)}',
+          );
+        } else {
+          _showSnackBar('Failed to switch to API mode');
+        }
       } else {
-        _showSnackBar('Failed to switch to local mode or no model selected');
+        // Handle submode switching (standard, ask, agent, reasoning, deepthink)
+        setState(() {
+          _currentSubMode = newMode;
+        });
+        _showSnackBar(
+          'Mode: ${_getSubModeName(newMode)} • ${_currentInfrastructure == 'local' ? 'Local' : 'Cloud'}',
+        );
+        success = true;
       }
     } catch (e) {
-      _showSnackBar('Error switching to local mode: $e');
+      _showSnackBar('Error switching mode: $e');
     }
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _isSearching = !_isSearching;
+      if (!_isSearching) {
+        _searchQuery = '';
+        _filteredMessages = [];
+      }
+    });
+  }
+
+  void _performSearch(String query) {
+    setState(() {
+      _searchQuery = query;
+      if (query.isEmpty) {
+        _filteredMessages = [];
+      } else {
+        _filteredMessages = _messages
+            .where(
+              (message) =>
+                  message.content.toLowerCase().contains(query.toLowerCase()),
+            )
+            .toList();
+      }
+    });
+  }
+
+  void _clearSearch() {
+    setState(() {
+      _isSearching = false;
+      _searchQuery = '';
+      _filteredMessages = [];
+    });
   }
 
   void _clearChat() {
@@ -295,6 +352,9 @@ class _BuddyScreenState extends State<BuddyScreen>
     final userMessage = _controller.text.trim();
     _controller.clear();
 
+    // Reset cancellation flag
+    _isCancelled = false;
+
     // Add user message
     final userMsg = BuddyMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -316,7 +376,16 @@ class _BuddyScreenState extends State<BuddyScreen>
       print('=== BUDDY SCREEN: Sending message ===');
       print('User message: "$userMessage"');
 
-      final result = await BuddyService.askBuddy(userMessage);
+      final result = await BuddyService.askBuddy(
+        userMessage,
+        subMode: _currentSubMode,
+      );
+
+      // Check if cancelled during the request
+      if (_isCancelled) {
+        print('=== BUDDY SCREEN: Request was cancelled ===');
+        return;
+      }
 
       print('=== BUDDY SCREEN: Received result ===');
       print('Full result: $result');
@@ -332,7 +401,7 @@ class _BuddyScreenState extends State<BuddyScreen>
       print('=== BUDDY SCREEN: Final response ===');
       print('Response to display: "$response"');
 
-      if (mounted) {
+      if (mounted && !_isCancelled) {
         // Add AI message with typing animation enabled
         final aiMsg = BuddyMessage(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -357,7 +426,7 @@ class _BuddyScreenState extends State<BuddyScreen>
         _scrollToBottom();
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !_isCancelled) {
         setState(() {
           _isLoading = false;
           _isTyping = false;
@@ -366,6 +435,16 @@ class _BuddyScreenState extends State<BuddyScreen>
         _showSnackBar('Error: $e');
       }
     }
+  }
+
+  void _stopGeneration() {
+    setState(() {
+      _isCancelled = true;
+      _isLoading = false;
+      _isTyping = false;
+    });
+    _typingController.stop();
+    _showSnackBar('AI response stopped');
   }
 
   void _scrollToBottom() {
@@ -404,11 +483,38 @@ class _BuddyScreenState extends State<BuddyScreen>
   }
 
   Future<void> _startNewConversation() async {
-    await BuddyService.startNewConversation();
-    setState(() {
-      _messages.clear();
-    });
-    _showSnackBar('New conversation started');
+    try {
+      // Start new conversation in database
+      await BuddyChatDatabase.startNewConversation();
+
+      // Start new conversation in buddy service
+      await BuddyService.startNewConversation();
+
+      // Clear UI messages and reset state
+      setState(() {
+        _messages.clear();
+        _activePersona = null; // Reset persona for new conversation
+        _isLoading = false;
+        _isTyping = false;
+      });
+
+      // Scroll to bottom (no messages to scroll to, but reset scroll position)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            0.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+
+      _showSnackBar('✨ New conversation started');
+      print('🆕 Started new conversation - UI reset complete');
+    } catch (e) {
+      print('❌ Error starting new conversation: $e');
+      _showSnackBar('Failed to start new conversation');
+    }
   }
 
   void _showComingSoon(String feature) {
@@ -429,8 +535,43 @@ class _BuddyScreenState extends State<BuddyScreen>
 
   Future<void> _exportChat() async {
     try {
-      // TODO: Implement actual export functionality
-      _showSnackBar('Chat export feature coming soon!');
+      if (_messages.isEmpty) {
+        _showSnackBar('No messages to export');
+        return;
+      }
+
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 16),
+              Text('Generating PDF...'),
+            ],
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Generate conversation title
+      final now = DateTime.now();
+      final dateStr =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final timeStr =
+          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+      final title = 'Buddy Chat $dateStr $timeStr';
+
+      // Export to PDF
+      await ConversationExportService.exportConversationToPDF(
+        messages: _messages,
+        context: context,
+        title: title,
+      );
     } catch (e) {
       _showSnackBar('Error exporting chat: $e');
     }
@@ -650,7 +791,7 @@ class _BuddyScreenState extends State<BuddyScreen>
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      '${_getModeName(_currentAIMode)} • ${_currentInfrastructure == 'local' ? 'Local' : 'Cloud'}',
+                                      '${_getSubModeName(_currentSubMode)} • ${_currentInfrastructure == 'local' ? 'Local' : 'Cloud'}',
                                       style: TextStyle(
                                         fontSize: 11,
                                         color: _getModeColor(_currentAIMode),
@@ -675,10 +816,34 @@ class _BuddyScreenState extends State<BuddyScreen>
                         ],
                       ),
                     ),
+                    // New conversation button
+                    IconButton(
+                      icon: const Icon(Icons.add_comment, color: Colors.white),
+                      onPressed: _startNewConversation,
+                      tooltip: 'Start New Conversation',
+                    ),
                     // History button
                     IconButton(
                       icon: const Icon(Icons.history, color: Colors.white),
                       onPressed: _showChatHistory,
+                      tooltip: 'Chat History',
+                    ),
+                    // Export button
+                    IconButton(
+                      icon: const Icon(Icons.download, color: Colors.white),
+                      onPressed: _exportChat,
+                      tooltip: 'Export as PDF',
+                    ),
+                    // Search button
+                    IconButton(
+                      icon: Icon(
+                        _isSearching ? Icons.search_off : Icons.search,
+                        color: Colors.white,
+                      ),
+                      onPressed: _toggleSearch,
+                      tooltip: _isSearching
+                          ? 'Close Search'
+                          : 'Search Messages',
                     ),
                     // Enhanced menu with more features
                     PopupMenuButton<String>(
@@ -877,19 +1042,6 @@ class _BuddyScreenState extends State<BuddyScreen>
                             ],
                           ),
                         ),
-                        PopupMenuItem(
-                          value: 'import_chat',
-                          child: Row(
-                            children: [
-                              const Icon(Icons.upload, color: Colors.white),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Import Chat',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ],
-                          ),
-                        ),
 
                         const PopupMenuDivider(),
 
@@ -934,26 +1086,99 @@ class _BuddyScreenState extends State<BuddyScreen>
                 ),
               ),
             ),
-            // Chat area
-            Expanded(
-              child: _messages.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _messages.length + (_isTyping ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == _messages.length && _isTyping) {
-                          return _buildTypingIndicator();
-                        }
-                        return _buildMessageBubble(_messages[index]);
-                      },
+            // Search bar (conditionally shown)
+            if (_isSearching)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.search, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        autofocus: true,
+                        onChanged: _performSearch,
+                        decoration: const InputDecoration(
+                          hintText: 'Search messages...',
+                          border: InputBorder.none,
+                          isDense: true,
+                        ),
+                      ),
                     ),
-            ),
+                    if (_searchQuery.isNotEmpty) ...[
+                      Text(
+                        '${_filteredMessages.length} results',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: _clearSearch,
+                        color: Colors.grey,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            // Chat area
+            Expanded(child: _buildChatArea()),
             _buildInputArea(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildChatArea() {
+    final displayMessages = _isSearching && _searchQuery.isNotEmpty
+        ? _filteredMessages
+        : _messages;
+
+    if (displayMessages.isEmpty) {
+      if (_isSearching && _searchQuery.isNotEmpty) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              Text(
+                'No messages found',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Try a different search term',
+                style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              ),
+            ],
+          ),
+        );
+      }
+      return _buildEmptyState();
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(16),
+      itemCount: displayMessages.length + (_isTyping && !_isSearching ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == displayMessages.length && _isTyping && !_isSearching) {
+          return _buildTypingIndicator();
+        }
+        return _buildMessageBubble(displayMessages[index]);
+      },
     );
   }
 
@@ -1096,7 +1321,7 @@ class _BuddyScreenState extends State<BuddyScreen>
   }
 
   Widget _buildMessageBubble(BuddyMessage message) {
-    return BuddyMessageBubble(
+    return EnhancedMessageBubble(
       message: message,
       onTypingComplete: () => _onTypingComplete(message.id),
     );
@@ -1513,14 +1738,14 @@ class _BuddyScreenState extends State<BuddyScreen>
                   icon: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
                     child: Icon(
-                      _isLoading
-                          ? Icons.hourglass_empty
+                      _isLoading || _isTyping
+                          ? Icons.stop_rounded
                           : _controller.text.isNotEmpty
                           ? Icons.send_rounded
                           : Icons.mic,
                       key: ValueKey(
-                        _isLoading
-                            ? 'loading'
+                        _isLoading || _isTyping
+                            ? 'stop'
                             : _controller.text.isNotEmpty
                             ? 'send'
                             : 'mic',
@@ -1529,16 +1754,16 @@ class _BuddyScreenState extends State<BuddyScreen>
                       size: 20,
                     ),
                   ),
-                  onPressed: _isLoading
-                      ? null
-                      : () {
-                          if (_controller.text.isNotEmpty) {
-                            _sendMessage();
-                          } else {
-                            // Could implement voice input here
-                            _showSnackBar('Voice input coming soon!');
-                          }
-                        },
+                  onPressed: () {
+                    if (_isLoading || _isTyping) {
+                      _stopGeneration();
+                    } else if (_controller.text.isNotEmpty) {
+                      _sendMessage();
+                    } else {
+                      // Could implement voice input here
+                      _showSnackBar('Voice input coming soon!');
+                    }
+                  },
                 ),
               ),
             ],
@@ -2262,9 +2487,12 @@ class _BuddyScreenState extends State<BuddyScreen>
 
   String _getModeName(String mode) {
     switch (mode) {
-      case 'local':
       case 'api':
-        return 'Standard'; // Both 'local' and 'api' show as Standard mode
+        return 'Standard';
+      case 'creative':
+        return 'Creative';
+      case 'local':
+        return 'Local';
       case 'ask':
         return 'Ask';
       case 'agent':
@@ -2279,6 +2507,23 @@ class _BuddyScreenState extends State<BuddyScreen>
         return 'Hybrid Beta';
       default:
         return 'Standard';
+    }
+  }
+
+  String _getSubModeName(String subMode) {
+    switch (subMode) {
+      case 'standard':
+        return 'Standard';
+      case 'ask':
+        return 'Ask';
+      case 'agent':
+        return 'Agent';
+      case 'reasoning':
+        return 'Reasoning';
+      case 'deepthink':
+        return 'Deep Think';
+      default:
+        return subMode;
     }
   }
 }

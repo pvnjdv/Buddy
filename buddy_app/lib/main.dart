@@ -2,6 +2,7 @@ import 'screens/profile_setup_screen.dart';
 import 'screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/login_screen.dart';
 import 'screens/buddy/buddy_screen.dart';
 import 'screens/flow/flow_screen.dart';
@@ -16,10 +17,21 @@ import 'services/databases/dock_database.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize all databases
-  await BuddyChatDatabase.initialize();
-  await FlowDatabase.initialize();
-  await DockDatabase.initialize();
+  // Get current user before initializing databases
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final currentUserId = prefs.getString('mobile_number');
+
+    // Initialize all databases with user context
+    await BuddyChatDatabase.initialize(currentUserId);
+    await FlowDatabase.initialize();
+    await DockDatabase.initialize();
+  } catch (e) {
+    // Fallback initialization without user context
+    await BuddyChatDatabase.initialize();
+    await FlowDatabase.initialize();
+    await DockDatabase.initialize();
+  }
 
   // Initialize services
   await BuddyService.initialize();
@@ -49,7 +61,7 @@ class _BuddyAppState extends State<BuddyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Buddy',
+      title: 'Buddy AI - Your Intelligent Assistant',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: AppTheme.isDarkMode ? ThemeMode.dark : ThemeMode.light,

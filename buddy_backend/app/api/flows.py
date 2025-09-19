@@ -14,6 +14,9 @@ from ..core.database import get_db
 from ..core.config import settings
 from ..models.flow import ProjectFlow, FlowCheckpoint, FlowResource, BuddyFlowMessage, FlowStatus, FlowDifficulty, CheckpointType, MessageContext, FlowAlarm as FlowAlarmModel, AlarmType, AlarmRepeat
 from ..models.flow import FlowCheckpointNote, FlowCheckpointAssignment
+from ..models.collaboration_enhanced import WorkContribution, AIAssistance
+from ..models.collaboration import CollaborationMember
+from ..models.flow import Repository  # Add Repository import
 from ..models.user import User
 from ..schemas.flow import (
     ProjectFlowCreate, ProjectFlowUpdate, ProjectFlowResponse,
@@ -28,6 +31,7 @@ from ..schemas.flow import (
 )
 from ..dependencies import get_current_user
 from ..ai.buddy_ai import BuddyAI
+from ..services.github_service import GitHubService
 
 router = APIRouter(prefix="/flows", tags=["flows"])
 
@@ -40,11 +44,20 @@ async def get_user_flows(
     result = await db.execute(
         select(ProjectFlow)
         .options(
-            selectinload(ProjectFlow.checkpoints).selectinload(FlowCheckpoint.resources)
+            selectinload(ProjectFlow.checkpoints).selectinload(FlowCheckpoint.resources),
+            selectinload(ProjectFlow.repository)  # Include repository
         )
         .filter(ProjectFlow.user_id == current_user.id)
     )
     flows = result.scalars().unique().all()
+    
+    # Add repository information to flow responses
+    for flow in flows:
+        if flow.repository:
+            # Add repository fields to flow object for JSON serialization
+            flow.repository_url = flow.repository.html_url
+            flow.local_path = flow.repository.local_path
+    
     return flows
 
 @router.post("/", response_model=ProjectFlowResponse)
@@ -364,10 +377,64 @@ async def generate_flow_from_description(
     db.add(generation_message)
     await db.commit()
     
-    return {
-        "flow": db_flow,
-        "message": f"Successfully generated flow '{db_flow.title}' with {len(flow_data['checkpoints'])} checkpoints!"
-    }
+    # Auto-create GitHub repository for the flow
+    github_service = GitHubService()
+    try:
+        repo_result = await github_service.create_flow_repository(
+            user_mobile=current_user.mobile_number,
+            project_name=db_flow.title,
+            description=f"AI-generated flow: {request.project_description}"
+        )
+        
+        if repo_result['success']:
+            # Save repository information to database
+            db_repo = Repository(
+                flow_id=db_flow.id,
+                github_id=repo_result['repository']['id'],
+                name=repo_result['repository']['name'],
+                full_name=repo_result['repository']['full_name'],
+                description=f"AI-generated flow: {request.project_description}",
+                html_url=repo_result['repository']['html_url'],
+                ssh_url=repo_result['repository']['ssh_url'],
+                clone_url=repo_result['repository']['clone_url'],
+                private=True,
+                local_path=repo_result['local_path'],
+                created_by_ai=True
+            )
+            db.add(db_repo)
+            await db.commit()
+            
+            # Log successful repository creation
+            repo_message = BuddyFlowMessage(
+                user_id=current_user.id,
+                flow_id=db_flow.id,
+                content=f"Created GitHub repository: {repo_result['repository']['html_url']}",
+                role="assistant",
+                context=MessageContext.flow_creation
+            )
+            db.add(repo_message)
+            await db.commit()
+            
+            return {
+                "flow": db_flow,
+                "repository": repo_result['repository'],
+                "local_path": repo_result['local_path'],
+                "message": f"Successfully generated flow '{db_flow.title}' with {len(flow_data['checkpoints'])} checkpoints and created GitHub repository!"
+            }
+        else:
+            # Repository creation failed, but flow was created successfully
+            return {
+                "flow": db_flow,
+                "repository_error": repo_result.get('error', 'Unknown error'),
+                "message": f"Successfully generated flow '{db_flow.title}' with {len(flow_data['checkpoints'])} checkpoints! (Repository creation failed: {repo_result.get('error', 'Unknown error')})"
+            }
+    except Exception as repo_error:
+        # Repository creation failed, but flow was created successfully
+        return {
+            "flow": db_flow,
+            "repository_error": str(repo_error),
+            "message": f"Successfully generated flow '{db_flow.title}' with {len(flow_data['checkpoints'])} checkpoints! (Repository creation failed: {str(repo_error)})"
+        }
 
 # Helper: Create default alarms sequentially for a flow
 async def _create_default_alarms_for_flow(
@@ -851,6 +918,35 @@ async def get_flow_dashboard(
     else:
         insights.append("Flow complete – archive or start the next one.")
 
+    # Team stats (handle missing tables gracefully during development)
+    try:
+        contributions_result = await db.execute(
+            select(WorkContribution).filter(WorkContribution.flow_id == flow_id)
+        )
+        contributions = contributions_result.scalars().all()
+        
+        ai_assistance_result = await db.execute(
+            select(AIAssistance).filter(AIAssistance.flow_id == flow_id)
+        )
+        ai_assistance_count = len(ai_assistance_result.scalars().all())
+        
+        team_members_result = await db.execute(
+            select(CollaborationMember).filter(CollaborationMember.project_id == flow_id)
+        )
+        team_members_count = len(team_members_result.scalars().all())
+        
+        total_hours = sum(contrib.hours_worked for contrib in contributions)
+        contributors_count = len(set(contrib.user_id for contrib in contributions))
+        last_activity = max((contrib.contributed_at for contrib in contributions), default=None)
+    except Exception as e:
+        # Tables might not exist yet during development
+        print(f"Team stats tables not available: {e}")
+        total_hours = 0.0
+        contributors_count = 0
+        ai_assistance_count = 0
+        team_members_count = 0
+        last_activity = None
+
     return {
         "flow": {
             "id": flow.id,
@@ -877,7 +973,14 @@ async def get_flow_dashboard(
                 "checkpoint_id": a.checkpoint_id
             } for a in upcoming_alarms
         ],
-        "insights": insights
+        "insights": insights,
+        "team_stats": {
+            "total_hours_worked": total_hours,
+            "total_contributors": contributors_count,
+            "ai_assistance_sessions": ai_assistance_count,
+            "team_members": team_members_count,
+            "last_activity": last_activity.isoformat() if last_activity else None
+        }
     }
 
 # --- Scaffold (placeholder) ---

@@ -113,6 +113,8 @@ class ProjectFlowResponse(ProjectFlowBase):
     created_at: datetime
     updated_at: datetime
     checkpoints: List[FlowCheckpointResponse] = []
+    repository_url: Optional[str] = None
+    local_path: Optional[str] = None
     
     class Config:
         from_attributes = True

@@ -6,20 +6,25 @@ class AppTheme {
   static const String _primaryColorKey = 'primary_color';
   static const String _accentColorKey = 'accent_color';
 
-  // Default colors
-  static const Color defaultPrimary = Color(0xFF6366F1); // Indigo
-  static const Color defaultAccent = Color(0xFF10B981); // Emerald
+  // Buddy AI Brand Colors
+  static const Color buddyPrimary = Color(0xFF667EEA); // Buddy Blue
+  static const Color buddySecondary = Color(0xFF764BA2); // Buddy Purple
+  static const Color buddyAccent = Color(0xFF10B981); // Emerald
 
-  // Available color options
+  // Default colors (updated for Buddy AI)
+  static const Color defaultPrimary = buddyPrimary;
+  static const Color defaultAccent = buddyAccent;
+
+  // Available color options (Buddy AI focused)
   static const List<Color> primaryColors = [
-    Color(0xFF6366F1), // Indigo
-    Color(0xFF8B5CF6), // Violet
+    buddyPrimary, // Buddy Blue
+    buddySecondary, // Buddy Purple
     Color(0xFF06B6D4), // Cyan
     Color(0xFF10B981), // Emerald
+    Color(0xFF8B5CF6), // Violet
     Color(0xFFF59E0B), // Amber
     Color(0xFFEF4444), // Red
     Color(0xFFEC4899), // Pink
-    Color(0xFF84CC16), // Lime
   ];
 
   static const List<Color> accentColors = [

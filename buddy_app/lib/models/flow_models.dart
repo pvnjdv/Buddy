@@ -887,6 +887,10 @@ class ProjectFlow {
   final List<String> tags;
   final ProjectCollaborationInfo?
   collaboration; // New field for collaboration info
+  final String? repositoryUrl; // GitHub repository URL
+  final String? localPath; // Local repository path
+  final List<String> notes; // Flow-specific notes
+  final List<String> alarms; // Critical alarms and reminders
 
   ProjectFlow({
     required this.id,
@@ -901,6 +905,10 @@ class ProjectFlow {
     this.difficulty = FlowDifficulty.medium,
     this.tags = const [],
     this.collaboration,
+    this.repositoryUrl,
+    this.localPath,
+    this.notes = const [],
+    this.alarms = const [],
   });
 
   factory ProjectFlow.fromJson(Map<String, dynamic> json) {
@@ -933,6 +941,10 @@ class ProjectFlow {
       collaboration: json['collaboration'] != null
           ? ProjectCollaborationInfo.fromJson(json['collaboration'])
           : null,
+      repositoryUrl: json['repository_url']?.toString(),
+      localPath: json['local_path']?.toString(),
+      notes: (json['notes'] as List<dynamic>?)?.cast<String>() ?? [],
+      alarms: (json['alarms'] as List<dynamic>?)?.cast<String>() ?? [],
     );
   }
 
@@ -952,6 +964,10 @@ class ProjectFlow {
       'difficulty': difficulty.name,
       'tags': tags,
       'collaboration': collaboration?.toJson(),
+      'repository_url': repositoryUrl,
+      'local_path': localPath,
+      'notes': notes,
+      'alarms': alarms,
     };
   }
 
@@ -968,6 +984,10 @@ class ProjectFlow {
     FlowDifficulty? difficulty,
     List<String>? tags,
     ProjectCollaborationInfo? collaboration,
+    String? repositoryUrl,
+    String? localPath,
+    List<String>? notes,
+    List<String>? alarms,
   }) {
     return ProjectFlow(
       id: id ?? this.id,
@@ -983,6 +1003,10 @@ class ProjectFlow {
       difficulty: difficulty ?? this.difficulty,
       tags: tags ?? this.tags,
       collaboration: collaboration ?? this.collaboration,
+      repositoryUrl: repositoryUrl ?? this.repositoryUrl,
+      localPath: localPath ?? this.localPath,
+      notes: notes ?? this.notes,
+      alarms: alarms ?? this.alarms,
     );
   }
 
@@ -1157,6 +1181,8 @@ class FlowCheckpoint {
   final List<String> acceptanceCriteria;
   final String? epicId; // Link to epic
   final int? epicRank; // Order within epic
+  final List<String> notes; // Checkpoint-specific notes
+  final List<String> alarms; // Critical alarms and reminders for this checkpoint
 
   FlowCheckpoint({
     required this.id,
@@ -1194,6 +1220,8 @@ class FlowCheckpoint {
     this.acceptanceCriteria = const [],
     this.epicId,
     this.epicRank,
+    this.notes = const [],
+    this.alarms = const [],
   }) : createdAt = createdAt ?? DateTime.now(),
        updatedAt = updatedAt ?? DateTime.now();
 
@@ -1301,6 +1329,8 @@ class FlowCheckpoint {
           const [],
       epicId: json['epic_id']?.toString(),
       epicRank: json['epic_rank'],
+      notes: (json['notes'] as List<dynamic>?)?.cast<String>() ?? [],
+      alarms: (json['alarms'] as List<dynamic>?)?.cast<String>() ?? [],
     );
   }
 
@@ -1341,6 +1371,8 @@ class FlowCheckpoint {
       'acceptance_criteria': acceptanceCriteria,
       'epic_id': epicId,
       'epic_rank': epicRank,
+      'notes': notes,
+      'alarms': alarms,
     };
   }
 
@@ -1380,6 +1412,8 @@ class FlowCheckpoint {
     List<String>? acceptanceCriteria,
     String? epicId,
     int? epicRank,
+    List<String>? notes,
+    List<String>? alarms,
   }) {
     return FlowCheckpoint(
       id: id ?? this.id,
@@ -1417,6 +1451,8 @@ class FlowCheckpoint {
       acceptanceCriteria: acceptanceCriteria ?? this.acceptanceCriteria,
       epicId: epicId ?? this.epicId,
       epicRank: epicRank ?? this.epicRank,
+      notes: notes ?? this.notes,
+      alarms: alarms ?? this.alarms,
     );
   }
 
@@ -1803,6 +1839,7 @@ class FlowDashboard {
   final int assignmentsCount;
   final List<_FlowDashAlarm> upcomingAlarms;
   final List<String> insights;
+  final TeamStats teamStats;
 
   FlowDashboard({
     required this.flow,
@@ -1812,6 +1849,7 @@ class FlowDashboard {
     this.assignmentsCount = 0,
     this.upcomingAlarms = const [],
     this.insights = const [],
+    required this.teamStats,
   });
 
   factory FlowDashboard.fromJson(Map<String, dynamic> json) => FlowDashboard(
@@ -1836,6 +1874,9 @@ class FlowDashboard {
             ?.map((e) => e.toString())
             .toList() ??
         const [],
+    teamStats: json['team_stats'] != null
+        ? TeamStats.fromJson(json['team_stats'] as Map<String, dynamic>)
+        : TeamStats(),
   );
 }
 
@@ -1919,6 +1960,33 @@ class _FlowDashAlarm {
     title: json['title']?.toString() ?? '',
     at: DateTime.tryParse(json['at']?.toString() ?? '') ?? DateTime.now(),
     checkpointId: json['checkpoint_id']?.toString(),
+  );
+}
+
+class TeamStats {
+  final double totalHoursWorked;
+  final int totalContributors;
+  final int aiAssistanceSessions;
+  final int teamMembers;
+  final DateTime? lastActivity;
+
+  TeamStats({
+    this.totalHoursWorked = 0.0,
+    this.totalContributors = 0,
+    this.aiAssistanceSessions = 0,
+    this.teamMembers = 0,
+    this.lastActivity,
+  });
+
+  factory TeamStats.fromJson(Map<String, dynamic> json) => TeamStats(
+    totalHoursWorked: (json['total_hours_worked'] as num?)?.toDouble() ?? 0.0,
+    totalContributors: (json['total_contributors'] as num?)?.toInt() ?? 0,
+    aiAssistanceSessions:
+        (json['ai_assistance_sessions'] as num?)?.toInt() ?? 0,
+    teamMembers: (json['team_members'] as num?)?.toInt() ?? 0,
+    lastActivity: json['last_activity'] != null
+        ? DateTime.tryParse(json['last_activity'].toString())
+        : null,
   );
 }
 

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Buddy AI Logo Generator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .logo-container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .logo {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 20px;
+            border-radius: 50px;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+        }
+        .brain-icon {
+            width: 120px;
+            height: 120px;
+            fill: white;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+        }
+        .title {
+            font-size: 2.5em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 1.2em;
+        }
+        .download-btn {
+            margin-top: 30px;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            transition: transform 0.2s;
+        }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        .sizes {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .size-option {
+            padding: 8px 16px;
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .size-option:hover, .size-option.active {
+            border-color: #667EEA;
+            background: rgba(102, 126, 234, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="logo-container">
+        <div class="logo" id="logoContainer">
+            <svg class="brain-icon" viewBox="0 0 24 24">
+                <path d="M12,2A3,3 0 0,1 15,5V7A3,3 0 0,1 18,10V12A3,3 0 0,1 15,15V17A3,3 0 0,1 12,20A3,3 0 0,1 9,17V15A3,3 0 0,1 6,12V10A3,3 0 0,1 9,7V5A3,3 0 0,1 12,2M12,4A1,1 0 0,0 11,5V7H13V5A1,1 0 0,0 12,4M7,9A1,1 0 0,0 8,10V12A1,1 0 0,0 7,13V11A1,1 0 0,0 6,10V12A1,1 0 0,0 7,11V9M17,9V11A1,1 0 0,0 18,10V12A1,1 0 0,0 17,13V11A1,1 0 0,0 16,12V10A1,1 0 0,0 17,9M12,18A1,1 0 0,0 13,17V15H11V17A1,1 0 0,0 12,18Z"/>
+            </svg>
+        </div>
+        
+        <div class="title">Buddy AI</div>
+        <div class="subtitle">Your Intelligent Assistant</div>
+        
+        <div class="sizes">
+            <div class="size-option active" onclick="setSize(512)">512px</div>
+            <div class="size-option" onclick="setSize(1024)">1024px</div>
+            <div class="size-option" onclick="setSize(48)">48px</div>
+            <div class="size-option" onclick="setSize(192)">192px</div>
+        </div>
+        
+        <button class="download-btn" onclick="downloadLogo()">Download Logo</button>
+    </div>
+
+    <script>
+        let currentSize = 512;
+        
+        function setSize(size) {
+            currentSize = size;
+            document.querySelectorAll('.size-option').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+        
+        function downloadLogo() {
+            const logoContainer = document.getElementById('logoContainer');
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = currentSize;
+            canvas.height = currentSize;
+            
+            // Create gradient
+            const gradient = ctx.createLinearGradient(0, 0, currentSize, currentSize);
+            gradient.addColorStop(0, '#667EEA');
+            gradient.addColorStop(1, '#764BA2');
+            
+            // Draw background with rounded corners
+            const radius = currentSize * 0.25;
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.roundRect(0, 0, currentSize, currentSize, radius);
+            ctx.fill();
+            
+            // Draw brain icon
+            const iconSize = currentSize * 0.6;
+            const iconOffset = (currentSize - iconSize) / 2;
+            
+            ctx.fillStyle = 'white';
+            ctx.font = `${iconSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🧠', currentSize/2, currentSize/2);
+            
+            // Download
+            const link = document.createElement('a');
+            link.download = `buddy-ai-logo-${currentSize}px.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        // Add roundRect polyfill for older browsers
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+                if (w < 2 * r) r = w / 2;
+                if (h < 2 * r) r = h / 2;
+                this.beginPath();
+                this.moveTo(x+r, y);
+                this.arcTo(x+w, y,   x+w, y+h, r);
+                this.arcTo(x+w, y+h, x,   y+h, r);
+                this.arcTo(x,   y+h, x,   y,   r);
+                this.arcTo(x,   y,   x+w, y,   r);
+                this.closePath();
+            };
+        }
+    </script>
+</body>
+</html>

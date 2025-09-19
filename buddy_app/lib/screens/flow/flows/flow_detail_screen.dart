@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../models/flow_models.dart';
 import '../../../models/collaboration_models.dart';
+import '../../../models/project_model.dart';
 import '../../../services/flow_service.dart';
 import '../../../services/ai/buddy_service.dart';
 import '../../../services/collaboration/team_collaboration_service.dart';
 import '../../../services/auth/auth_service.dart';
+import '../../buddy_code_editor/buddy_code_editor_screen.dart';
+import 'flow_specific_buddy_screen.dart';
 
 class FlowDetailScreen extends StatefulWidget {
   final ProjectFlow flow;
@@ -107,25 +111,72 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
 
       if (updatedFlow != null) {
         setState(() => _flow = updatedFlow);
+
+        // Enhanced success feedback with animation
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              newStatus
-                  ? 'Checkpoint completed! 🎉'
-                  : 'Checkpoint marked as incomplete',
+            content: Row(
+              children: [
+                Icon(
+                  newStatus ? Icons.check_circle : Icons.undo,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  newStatus
+                      ? 'Checkpoint completed! 🎉'
+                      : 'Checkpoint marked as incomplete',
+                ),
+              ],
             ),
-            backgroundColor: newStatus ? Colors.green : Colors.orange,
+            backgroundColor: newStatus
+                ? const Color(0xFF2D5016).withOpacity(
+                    0.9,
+                  ) // Dark green for success
+                : const Color(
+                    0xFF8B4513,
+                  ).withOpacity(0.9), // Dark orange for incomplete
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
+
+        // Add haptic feedback if available
+        // HapticFeedback.lightImpact();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error: Could not update checkpoint.')),
-        );
+        throw Exception('Failed to update checkpoint');
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error updating checkpoint: $e')));
+      // Enhanced error feedback
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Error updating checkpoint: ${e.toString()}'),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(
+            0xFF7F1D1D,
+          ).withOpacity(0.9), // Dark red for errors
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () => _toggleCheckpoint(checkpoint),
+          ),
+        ),
+      );
     } finally {
       setState(() => _isLoading = false);
     }
@@ -265,7 +316,9 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
                 descriptionController.text,
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: const Color(
+                  0xFF2D5016,
+                ), // Dark green for dark theme
                 foregroundColor: Colors.white,
               ),
               child: const Text('Add'),
@@ -309,9 +362,11 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
 
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Work contribution added successfully'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: const Text('Work contribution added successfully'),
+            backgroundColor: const Color(
+              0xFF2D5016,
+            ).withOpacity(0.9), // Dark green for dark theme
           ),
         );
         // Refresh the flow data to show new contribution
@@ -323,10 +378,30 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error adding contribution: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: const Color(
+            0xFF7F1D1D,
+          ).withOpacity(0.9), // Dark red for dark theme
         ),
       );
     }
+  }
+
+  // Open code editor for checkpoint
+  void _openCodeEditor(FlowCheckpoint checkpoint) {
+    // Create a ProjectModel from the flow
+    final project = ProjectModel(
+      name: _flow.title,
+      path: _flow.localPath ?? _flow.repositoryUrl ?? '/tmp/${_flow.id}',
+      description: _flow.description,
+      projectType: 'general', // Could be enhanced to detect project type
+    );
+
+    // Navigate to the code editor
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => BuddyCodeEditorScreen(project: project),
+      ),
+    );
   }
 
   // Show work contributions for checkpoint
@@ -410,7 +485,9 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
               _addWorkContribution(checkpoint);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: const Color(
+                0xFF2D5016,
+              ), // Dark green for dark theme
               foregroundColor: Colors.white,
             ),
             child: const Text('Add Work'),
@@ -481,7 +558,9 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
                 selectedType,
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple,
+                backgroundColor: const Color(
+                  0xFF4C1D95,
+                ), // Dark purple for dark theme
                 foregroundColor: Colors.white,
               ),
               child: const Text('Ask Buddy'),
@@ -755,7 +834,7 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
                 messageController.text,
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
+                backgroundColor: const Color(0xFF667EEA), // App accent color
                 foregroundColor: Colors.white,
               ),
               child: const Text('Send Invite'),
@@ -793,7 +872,9 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Collaboration invite sent to $mobile'),
-            backgroundColor: Colors.green,
+            backgroundColor: const Color(
+              0xFF2D5016,
+            ).withOpacity(0.9), // Dark green for dark theme
             action: SnackBarAction(
               label: 'View Chat',
               textColor: Colors.white,
@@ -810,7 +891,9 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error sending invite: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: const Color(
+            0xFF7F1D1D,
+          ).withOpacity(0.9), // Dark red for dark theme
         ),
       );
     }
@@ -875,10 +958,14 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
               ...(_flow.collaboration!.members.map((member) {
                 return ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: Colors.blue.withOpacity(0.1),
+                    backgroundColor: const Color(
+                      0xFF667EEA,
+                    ).withOpacity(0.1), // App accent color
                     child: Text(
                       member.userName[0].toUpperCase(),
-                      style: const TextStyle(color: Colors.blue),
+                      style: const TextStyle(
+                        color: const Color(0xFF667EEA),
+                      ), // App accent color
                     ),
                   ),
                   title: Text(member.userName),
@@ -902,7 +989,7 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
               _showInviteCollaboratorDialog();
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+              backgroundColor: const Color(0xFF667EEA), // App accent color
               foregroundColor: Colors.white,
             ),
             child: const Text('Invite More'),
@@ -1005,6 +1092,142 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
               ),
               const SizedBox(height: 12),
             ],
+            // Team Stats Section
+            const Text(
+              'Team Statistics',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _metric(
+                  'Hours Worked',
+                  d.teamStats.totalHoursWorked.toStringAsFixed(1),
+                  Icons.access_time,
+                  Colors.orange,
+                ),
+                const SizedBox(width: 12),
+                _metric(
+                  'Contributors',
+                  d.teamStats.totalContributors,
+                  Icons.people,
+                  Colors.green,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _metric(
+                  'AI Sessions',
+                  d.teamStats.aiAssistanceSessions,
+                  Icons.smart_toy,
+                  Colors.purple,
+                ),
+                const SizedBox(width: 12),
+                _metric(
+                  'Team Members',
+                  d.teamStats.teamMembers,
+                  Icons.group,
+                  Colors.blue,
+                ),
+              ],
+            ),
+            if (d.teamStats.lastActivity != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Last Activity: ${_formatDateTime(d.teamStats.lastActivity!)}',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+            ],
+            const SizedBox(height: 12),
+            // Repository Information Section
+            if (_flow.repositoryUrl != null || _flow.localPath != null) ...[
+              const Text(
+                'Repository',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.code, color: Colors.grey),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'GitHub Repository',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (_flow.repositoryUrl != null) ...[
+                      InkWell(
+                        onTap: () async {
+                          // Open repository URL in browser
+                          final Uri url = Uri.parse(_flow.repositoryUrl!);
+                          if (await canLaunchUrl(url)) {
+                            await launchUrl(
+                              url,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }
+                        },
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.link,
+                              size: 16,
+                              color: Colors.blue,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                _flow.repositoryUrl!,
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    if (_flow.localPath != null) ...[
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.folder,
+                            size: 16,
+                            color: Colors.green,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'Local: ${_flow.localPath!}',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
                 _metric('Notes', d.notesCount, Icons.note_alt, Colors.indigo),
@@ -1058,7 +1281,7 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
     );
   }
 
-  Widget _metric(String label, int value, IconData icon, Color color) {
+  Widget _metric(String label, dynamic value, IconData icon, Color color) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(12),
@@ -1079,6 +1302,21 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
         ),
       ),
     );
+  }
+
+  String _formatDateTime(DateTime dt) {
+    final now = DateTime.now();
+    final difference = now.difference(dt);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays} day${difference.inDays == 1 ? '' : 's'} ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hour${difference.inHours == 1 ? '' : 's'} ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minute${difference.inMinutes == 1 ? '' : 's'} ago';
+    } else {
+      return 'Just now';
+    }
   }
 
   // --- Checkpoint Notes / Assignments / Alarms ---
@@ -1466,13 +1704,45 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
     final progressPercentage = _flow.progressPercentage;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F9),
+      backgroundColor: const Color(0xFF0D1B2A),
       appBar: AppBar(
         title: Text(_flow.title),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 1,
+        backgroundColor: const Color(0xFF1A202C),
+        foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
+          // Flow-specific Buddy Chat
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF667EEA).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.psychology,
+                size: 20,
+                color: Colors.white,
+              ),
+            ),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => FlowSpecificBuddyScreen(flow: _flow),
+              ),
+            ),
+            tooltip: 'Flow-specific Buddy Chat',
+          ),
           IconButton(
             icon: const Icon(Icons.analytics_outlined),
             onPressed: _openDashboard,
@@ -1483,15 +1753,23 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
             onPressed: _scaffoldProject,
             tooltip: 'Scaffold Project',
           ),
-          // Add Team Member
-          IconButton(
-            icon: const Icon(Icons.person_add),
-            onPressed: _showInviteCollaboratorDialog,
-            tooltip: 'Add Team Member',
-          ),
         ],
       ),
-      body: _buildTimelineView(progressPercentage),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF667EEA)),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () async {
+                // Add refresh logic here
+                await Future.delayed(const Duration(seconds: 1));
+                setState(() {});
+              },
+              color: const Color(0xFF667EEA),
+              child: _buildTimelineView(progressPercentage),
+            ),
       floatingActionButton: _buildCollaborationFAB(),
     );
   }
@@ -1499,7 +1777,7 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
   Widget? _buildCollaborationFAB() {
     return FloatingActionButton.extended(
       onPressed: _showCollaborationOptionsDialog,
-      backgroundColor: Colors.purple,
+      backgroundColor: const Color(0xFF667EEA),
       foregroundColor: Colors.white,
       icon: const Icon(Icons.groups),
       label: const Text('Collaborate'),
@@ -1641,54 +1919,203 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
         children: [
           // Flow Info Card
           Card(
-            elevation: 2,
+            elevation: 0,
+            color: const Color(0xFF1A202C).withOpacity(0.9),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: const Color(0xFF4A5568).withOpacity(0.3),
+                width: 1,
+              ),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_flow.description, style: const TextStyle(fontSize: 16)),
+                  Text(
+                    _flow.description,
+                    style: const TextStyle(fontSize: 16, color: Colors.white),
+                  ),
                   const SizedBox(height: 16),
 
                   // Progress Bar
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Overall Progress',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            '${progressPercentage.toInt()}%',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2D3748).withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0xFF4A5568).withOpacity(0.3),
+                        width: 1,
                       ),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: LinearProgressIndicator(
-                          value: progressPercentage / 100,
-                          backgroundColor: Colors.grey[200],
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            _getProgressColor(progressPercentage),
-                          ),
-                          minHeight: 8,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFF667EEA),
+                                        Color(0xFF764BA2),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(
+                                          0xFF667EEA,
+                                        ).withOpacity(0.3),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Text(
+                                  'Overall Progress',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              '${progressPercentage.toInt()}%',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        // Enhanced Progress Bar with Milestones
+                        Container(
+                          height: 24,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: const Color(0xFF4A5568).withOpacity(0.3),
+                            border: Border.all(
+                              color: const Color(0xFF4A5568).withOpacity(0.5),
+                              width: 1,
+                            ),
+                          ),
+                          child: Stack(
+                            children: [
+                              // Animated gradient progress fill
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(11),
+                                child: LinearProgressIndicator(
+                                  value: progressPercentage / 100,
+                                  backgroundColor: Colors.transparent,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.transparent,
+                                  ),
+                                  minHeight: 22,
+                                ),
+                              ),
+                              // Gradient overlay
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(11),
+                                child: Container(
+                                  width:
+                                      MediaQuery.of(context).size.width *
+                                      (progressPercentage / 100) *
+                                      0.85, // Account for padding
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        _getProgressColor(
+                                          progressPercentage,
+                                        ).withOpacity(0.8),
+                                        _getProgressColor(progressPercentage),
+                                        _getProgressColor(
+                                          progressPercentage,
+                                        ).withOpacity(0.9),
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(11),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _getProgressColor(
+                                          progressPercentage,
+                                        ).withOpacity(0.3),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              // Milestone markers
+                              ..._buildMilestoneMarkers(),
+                              // Progress percentage overlay
+                              Positioned(
+                                right: 8,
+                                top: 0,
+                                bottom: 0,
+                                child: Center(
+                                  child: Text(
+                                    '${progressPercentage.toInt()}%',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black26,
+                                          blurRadius: 2,
+                                          offset: Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // Progress milestones text
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${_flow.completedCheckpoints.length} of ${_flow.checkpoints.length} checkpoints',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[400],
+                              ),
+                            ),
+                            Text(
+                              _getProgressMotivation(progressPercentage),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _getProgressColor(
+                                  progressPercentage,
+                                ).withOpacity(0.8),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
 
                   const SizedBox(height: 16),
@@ -1765,415 +2192,660 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
     final isCompleted = checkpoint.isCompleted;
     final hasChildren = checkpoint.children.isNotEmpty;
 
-    return Card(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
       margin: EdgeInsets.only(
-        bottom: 12,
-        left: depth * 16.0, // Indent nested checkpoints
+        bottom: 16,
+        left: depth * 20.0, // Increased indent for better hierarchy
       ),
-      elevation: isCurrent ? 4 : (depth > 0 ? 0.5 : 1),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isCurrent
-            ? const BorderSide(color: Colors.blue, width: 2)
-            : depth > 0
-            ? BorderSide(color: Colors.grey.shade300, width: 1)
-            : BorderSide.none,
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    // Depth indicator
-                    if (depth > 0) ...[
-                      SizedBox(width: (depth - 1) * 12.0),
-                      Icon(
-                        Icons.subdirectory_arrow_right,
-                        size: 16,
-                        color: Colors.grey.shade600,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-
-                    // Checkbox
-                    GestureDetector(
-                      onTap: _isLoading
-                          ? null
-                          : () => _toggleCheckpoint(checkpoint),
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isCompleted ? Colors.green : Colors.grey,
-                            width: 2,
+      child: Card(
+        elevation: isCurrent ? 8 : (depth > 0 ? 2 : 4),
+        shadowColor: isCurrent
+            ? Colors.blue.withOpacity(0.3)
+            : Colors.black.withOpacity(0.1),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: isCurrent
+              ? BorderSide(color: Colors.blue.withOpacity(0.5), width: 2)
+              : depth > 0
+              ? BorderSide(
+                  color: Colors.grey.shade300.withOpacity(0.5),
+                  width: 1,
+                )
+              : BorderSide.none,
+        ),
+        child: InkWell(
+          onTap: () {
+            // Add tap animation or expansion
+            setState(() {
+              // Could add expansion state here
+            });
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: isCurrent
+                  ? LinearGradient(
+                      colors: [
+                        Colors.blue.withOpacity(0.05),
+                        Colors.blue.withOpacity(0.02),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header Row with enhanced styling
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Enhanced checkbox with animation
+                      GestureDetector(
+                        onTap: _isLoading
+                            ? null
+                            : () => _toggleCheckpoint(checkpoint),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isCompleted
+                                  ? Colors.green
+                                  : isCurrent
+                                  ? Colors.blue
+                                  : Colors.grey,
+                              width: 2.5,
+                            ),
+                            color: isCompleted
+                                ? Colors.green
+                                : Colors.transparent,
+                            boxShadow: isCompleted
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.green.withOpacity(0.3),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
                           ),
-                          color: isCompleted
-                              ? Colors.green
-                              : Colors.transparent,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: isCompleted
+                                ? const Icon(
+                                    Icons.check,
+                                    key: ValueKey('check'),
+                                    color: Colors.white,
+                                    size: 18,
+                                  )
+                                : hasChildren
+                                ? Icon(
+                                    Icons.folder,
+                                    key: const ValueKey('folder'),
+                                    color: isCurrent
+                                        ? Colors.blue
+                                        : Colors.grey.shade600,
+                                    size: 14,
+                                  )
+                                : Icon(
+                                    Icons.radio_button_unchecked,
+                                    key: const ValueKey('unchecked'),
+                                    color: isCurrent
+                                        ? Colors.blue
+                                        : Colors.grey,
+                                    size: 18,
+                                  ),
+                          ),
                         ),
-                        child: isCompleted
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 16,
-                              )
-                            : hasChildren
-                            ? Icon(
-                                Icons.folder,
-                                color: Colors.grey.shade600,
-                                size: 12,
-                              )
-                            : null,
+                      ),
+
+                      const SizedBox(width: 16),
+
+                      // Title and type with better spacing
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    checkpoint.title,
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      decoration: isCompleted
+                                          ? TextDecoration.lineThrough
+                                          : TextDecoration.none,
+                                      color: isCompleted
+                                          ? Colors.grey[500]
+                                          : isCurrent
+                                          ? Colors.blue[900]
+                                          : Colors.black87,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                _buildCheckpointTypeChip(checkpoint.type),
+                              ],
+                            ),
+                            if (isCurrent) ...[
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Colors.blue, Colors.blueAccent],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.blue.withOpacity(0.2),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Text(
+                                  'CURRENT TASK',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+
+                      // Enhanced action buttons
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              onPressed: () => _getCheckpointHelp(checkpoint),
+                              icon: Icon(
+                                Icons.help_outline,
+                                color: Colors.blue[600],
+                                size: 20,
+                              ),
+                              tooltip: 'Get basic help from Buddy',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.blue.withOpacity(0.1),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              onPressed: () =>
+                                  _getEnhancedCheckpointHelp(checkpoint),
+                              icon: Icon(
+                                Icons.smart_toy,
+                                color: Colors.purple[600],
+                                size: 20,
+                              ),
+                              tooltip: 'Ask Buddy anything',
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.purple.withOpacity(0.1),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Enhanced description with better typography
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Text(
+                      checkpoint.description,
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 14,
+                        height: 1.5,
                       ),
                     ),
+                  ),
 
-                    const SizedBox(width: 12),
+                  const SizedBox(height: 16),
 
-                    // Title and type
-                    Expanded(
+                  // Requirements and Deliverables with improved layout
+                  if (checkpoint.requirements.isNotEmpty) ...[
+                    _buildEnhancedListSection(
+                      'Requirements',
+                      checkpoint.requirements,
+                      Icons.list,
+                      Colors.orange,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  if (checkpoint.deliverables.isNotEmpty) ...[
+                    _buildEnhancedListSection(
+                      'Deliverables',
+                      checkpoint.deliverables,
+                      Icons.delivery_dining,
+                      Colors.green,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Enhanced time information
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.schedule, size: 16, color: Colors.blue[600]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Estimated: ${checkpoint.estimatedTime}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.blue[800],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (checkpoint.completedAt != null) ...[
+                          const SizedBox(width: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.green[100],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  size: 14,
+                                  color: Colors.green[600],
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Completed ${_formatDate(checkpoint.completedAt!)}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.green[700],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Enhanced collaboration section
+                  if (checkpoint.workContributions.isNotEmpty ||
+                      checkpoint.assignedTo != null ||
+                      checkpoint.aiAssistance != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.purple.withOpacity(0.1),
+                            Colors.purple.withOpacity(0.05),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.purple.withOpacity(0.2),
+                        ),
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
+                              Icon(
+                                Icons.people_alt,
+                                size: 18,
+                                color: Colors.purple[600],
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Collaboration Hub',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.purple[800],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Assignment info
+                          if (checkpoint.assignedTo != null) ...[
+                            _buildCollaborationItem(
+                              Icons.assignment_ind,
+                              'Assigned to: ${checkpoint.assignedTo}',
+                              Colors.blue,
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+
+                          // Work contributions summary
+                          if (checkpoint.workContributions.isNotEmpty) ...[
+                            _buildCollaborationItem(
+                              Icons.work,
+                              '${checkpoint.workContributions.length} contributors, ${checkpoint.workContributions.fold(0.0, (sum, c) => sum + c.hoursWorked)}h total',
+                              Colors.green,
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+
+                          // AI assistance indicator
+                          if (checkpoint.aiAssistance != null) ...[
+                            _buildCollaborationItem(
+                              Icons.smart_toy,
+                              'AI assistance available',
+                              Colors.purple,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Enhanced action buttons with better layout
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        // Primary actions row
+                        Row(
+                          children: [
+                            if (checkpoint.workContributions.isNotEmpty)
                               Expanded(
-                                child: Text(
-                                  checkpoint.title,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    decoration: isCompleted
-                                        ? TextDecoration.lineThrough
-                                        : TextDecoration.none,
-                                    color: isCompleted
-                                        ? Colors.grey[600]
-                                        : Colors.black,
+                                child: ElevatedButton.icon(
+                                  onPressed: () =>
+                                      _showWorkContributions(checkpoint),
+                                  icon: const Icon(Icons.visibility, size: 16),
+                                  label: const Text('View Work'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
                                   ),
                                 ),
                               ),
-                              _buildCheckpointTypeChip(checkpoint.type),
-                            ],
-                          ),
-                          if (isCurrent) ...[
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
+
+                            if (checkpoint.workContributions.isNotEmpty)
+                              const SizedBox(width: 8),
+
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () =>
+                                    _addWorkContribution(checkpoint),
+                                icon: const Icon(Icons.add_task, size: 16),
+                                label: const Text('Add Work'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
                               ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue[50],
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Text(
-                                'CURRENT',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue,
+                            ),
+
+                            const SizedBox(width: 8),
+
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _openCodeEditor(checkpoint),
+                                icon: const Icon(Icons.code, size: 16),
+                                label: const Text('Code Editor'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF667EEA),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
                               ),
                             ),
                           ],
-                        ],
-                      ),
-                    ),
-
-                    // Help button
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => _getCheckpointHelp(checkpoint),
-                          icon: const Icon(
-                            Icons.help_outline,
-                            color: Colors.blue,
-                          ),
-                          tooltip: 'Get basic help from Buddy',
                         ),
-                        IconButton(
-                          onPressed: () =>
-                              _getEnhancedCheckpointHelp(checkpoint),
-                          icon: const Icon(
-                            Icons.smart_toy,
-                            color: Colors.purple,
-                          ),
-                          tooltip: 'Ask Buddy anything',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
 
-                const SizedBox(height: 12),
+                        const SizedBox(height: 12),
 
-                // Description
-                Text(
-                  checkpoint.description,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                ),
-
-                const SizedBox(height: 12),
-
-                // Requirements and Deliverables
-                if (checkpoint.requirements.isNotEmpty) ...[
-                  _buildListSection(
-                    'Requirements',
-                    checkpoint.requirements,
-                    Icons.list,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-
-                if (checkpoint.deliverables.isNotEmpty) ...[
-                  _buildListSection(
-                    'Deliverables',
-                    checkpoint.deliverables,
-                    Icons.delivery_dining,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-
-                // Estimated time
-                Row(
-                  children: [
-                    Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Estimated: ${checkpoint.estimatedTime}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    if (checkpoint.completedAt != null) ...[
-                      const SizedBox(width: 16),
-                      Icon(
-                        Icons.check_circle,
-                        size: 16,
-                        color: Colors.green[600],
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Completed: ${_formatDate(checkpoint.completedAt!)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.green[600],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // Collaboration Features Section
-                if (checkpoint.workContributions.isNotEmpty ||
-                    checkpoint.assignedTo != null ||
-                    checkpoint.aiAssistance != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.purple.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.purple.withOpacity(0.2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                        // Secondary actions row
                         Row(
                           children: [
-                            Icon(
-                              Icons.people_alt,
-                              size: 16,
-                              color: Colors.purple,
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () =>
+                                    _showCheckpointNotes(checkpoint),
+                                icon: const Icon(Icons.note_alt, size: 16),
+                                label: const Text('Notes'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.amber[800],
+                                  side: BorderSide(
+                                    color: Colors.amber.withOpacity(0.5),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Collaboration',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.purple,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _showAssignments(checkpoint),
+                                icon: const Icon(Icons.assignment, size: 16),
+                                label: const Text('Assign'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.teal[800],
+                                  side: BorderSide(
+                                    color: Colors.teal.withOpacity(0.5),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () =>
+                                    _showCheckpointAlarms(checkpoint),
+                                icon: const Icon(Icons.alarm, size: 16),
+                                label: const Text('Alarms'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.red[800],
+                                  side: BorderSide(
+                                    color: Colors.red.withOpacity(0.5),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-
-                        // Assignment info
-                        if (checkpoint.assignedTo != null) ...[
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.assignment_ind,
-                                size: 14,
-                                color: Colors.blue,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Assigned to: ${checkpoint.assignedTo}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey[700],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                        ],
-
-                        // Work contributions summary
-                        if (checkpoint.workContributions.isNotEmpty) ...[
-                          Row(
-                            children: [
-                              Icon(Icons.work, size: 14, color: Colors.green),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${checkpoint.workContributions.length} contributors, ',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey[700],
-                                ),
-                              ),
-                              Text(
-                                '${checkpoint.workContributions.fold(0.0, (sum, c) => sum + c.hoursWorked)}h total',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.green[700],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                        ],
-
-                        // AI assistance indicator
-                        if (checkpoint.aiAssistance != null) ...[
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.smart_toy,
-                                size: 14,
-                                color: Colors.purple,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'AI assistance available',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey[700],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                ],
 
-                // Action buttons
-                Row(
-                  children: [
-                    if (checkpoint.workContributions.isNotEmpty)
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => _showWorkContributions(checkpoint),
-                          icon: const Icon(Icons.visibility, size: 16),
-                          label: const Text(
-                            'View Work',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.green,
-                            side: BorderSide(
-                              color: Colors.green.withOpacity(0.5),
+                  // Children checkpoints
+                  if (hasChildren) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Sub-tasks',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
                             ),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
                           ),
-                        ),
-                      ),
-
-                    if (checkpoint.workContributions.isNotEmpty)
-                      const SizedBox(width: 8),
-
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _addWorkContribution(checkpoint),
-                        icon: const Icon(Icons.add_task, size: 16),
-                        label: const Text(
-                          'Add Work',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.blue,
-                          side: BorderSide(color: Colors.blue.withOpacity(0.5)),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                        ),
+                          const SizedBox(height: 8),
+                          ...checkpoint.children.map(
+                            (child) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _buildCheckpointCard(
+                                child,
+                                false,
+                                depth: depth + 1,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
-
-                const SizedBox(height: 8),
-
-                // New: Notes / Assign / Alarms actions
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showCheckpointNotes(checkpoint),
-                        icon: const Icon(Icons.note_alt, size: 16),
-                        label: const Text(
-                          'Notes',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showAssignments(checkpoint),
-                        icon: const Icon(Icons.assignment_ind, size: 16),
-                        label: const Text(
-                          'Assign',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _showCheckpointAlarms(checkpoint),
-                        icon: const Icon(Icons.alarm, size: 16),
-                        label: const Text(
-                          'Alarms',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Render nested children if they exist
-                if (hasChildren) ...[
-                  const SizedBox(height: 8),
-                  ...checkpoint.children
-                      .map(
-                        (child) => _buildCheckpointCard(
-                          child,
-                          false,
-                          depth: depth + 1,
-                        ),
-                      )
-                      .toList(),
                 ],
-              ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEnhancedListSection(
+    String title,
+    List<String> items,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: color.withOpacity(0.8),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(left: 24, bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '•',
+                    style: TextStyle(
+                      color: color.withOpacity(0.6),
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      item,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[700],
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -2181,31 +2853,25 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
     );
   }
 
-  Widget _buildListSection(String title, List<String> items, IconData icon) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildCollaborationItem(IconData icon, String text, Color color) {
+    return Row(
       children: [
-        Row(
-          children: [
-            Icon(icon, size: 16, color: Colors.grey[600]),
-            const SizedBox(width: 4),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[600],
-              ),
-            ),
-          ],
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(icon, size: 14, color: color),
         ),
-        const SizedBox(height: 4),
-        ...items.map(
-          (item) => Padding(
-            padding: const EdgeInsets.only(left: 20, bottom: 2),
-            child: Text(
-              '• $item',
-              style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[700],
+              height: 1.3,
             ),
           ),
         ),
@@ -2215,17 +2881,21 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
 
   Widget _buildInfoChip(IconData icon, String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFF2D3748).withOpacity(0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF4A5568).withOpacity(0.3),
+          width: 1,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.grey[600]),
-          const SizedBox(width: 4),
-          Text(text, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+          Icon(icon, size: 14, color: Colors.grey[300]),
+          const SizedBox(width: 6),
+          Text(text, style: TextStyle(fontSize: 12, color: Colors.grey[300])),
         ],
       ),
     );
@@ -2255,15 +2925,16 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.5), width: 1),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: color,
+          color: color.withOpacity(0.9),
           fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
@@ -2295,15 +2966,16 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.5), width: 1),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: color,
+          color: color.withOpacity(0.9),
           fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
@@ -2331,12 +3003,16 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
 
   Widget _buildTag(String tag) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFF4A5568).withOpacity(0.3),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: const Color(0xFF667EEA).withOpacity(0.3),
+          width: 1,
+        ),
       ),
-      child: Text(tag, style: TextStyle(color: Colors.grey[600], fontSize: 10)),
+      child: Text(tag, style: TextStyle(color: Colors.grey[300], fontSize: 10)),
     );
   }
 
@@ -2345,6 +3021,71 @@ class _FlowDetailScreenState extends State<FlowDetailScreen> {
     if (percentage < 50) return Colors.orange;
     if (percentage < 75) return Colors.blue;
     return Colors.green;
+  }
+
+  List<Widget> _buildMilestoneMarkers() {
+    final progressPercentage = _flow.progressPercentage;
+    final milestones = [25.0, 50.0, 75.0, 100.0];
+    final completedMilestones = milestones
+        .where((m) => m <= progressPercentage)
+        .toList();
+
+    return milestones.map((milestone) {
+      final isCompleted = completedMilestones.contains(milestone);
+      final position = milestone / 100.0;
+
+      return Positioned(
+        left:
+            (MediaQuery.of(context).size.width * position * 0.85) -
+            6, // Center the marker
+        top: 0,
+        bottom: 0,
+        child: Center(
+          child: Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isCompleted
+                  ? Colors.white
+                  : const Color(0xFF4A5568).withOpacity(0.5),
+              border: Border.all(
+                color: isCompleted
+                    ? _getProgressColor(progressPercentage)
+                    : Colors.grey[500]!,
+                width: 2,
+              ),
+              boxShadow: isCompleted
+                  ? [
+                      BoxShadow(
+                        color: _getProgressColor(
+                          progressPercentage,
+                        ).withOpacity(0.3),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: isCompleted
+                ? Icon(
+                    Icons.check,
+                    size: 6,
+                    color: _getProgressColor(progressPercentage),
+                  )
+                : null,
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  String _getProgressMotivation(double percentage) {
+    if (percentage >= 100) return '🎉 Complete!';
+    if (percentage >= 75) return 'Almost there!';
+    if (percentage >= 50) return 'Halfway done!';
+    if (percentage >= 25) return 'Great start!';
+    return 'Let\'s begin!';
   }
 
   String _formatDate(DateTime date) {

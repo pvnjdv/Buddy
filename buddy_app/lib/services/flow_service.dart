@@ -106,6 +106,33 @@ class FlowService {
     await _saveFlowsLocally(existingFlows);
   }
 
+  // Create a new project flow (backend first, fallback to local)
+  static Future<ProjectFlow> createProjectFlow(ProjectFlow flow) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/flows/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(flow.toJson()),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final flowJson = jsonDecode(response.body);
+        final createdFlow = ProjectFlow.fromJson(flowJson);
+        await _addFlowLocally(createdFlow);
+        return createdFlow;
+      } else {
+        throw Exception('Failed to create flow: ${response.statusCode}');
+      }
+    } catch (e) {
+      // Fallback to local creation
+      await _addFlowLocally(flow);
+      return flow;
+    }
+  }
+
   // Project Flow methods
   // Update a project flow (backend first, fallback to local)
   static Future<ProjectFlow> updateProjectFlow(ProjectFlow updatedFlow) async {
@@ -192,7 +219,7 @@ class FlowService {
   }
 
   // New: Generate a project flow using backend AI from a description
-  static Future<ProjectFlow> generateFlowFromDescription(
+  static Future<Map<String, dynamic>> generateFlowFromDescription(
     String description, {
     Map<String, dynamic>? preferences,
   }) async {
@@ -213,11 +240,27 @@ class FlowService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final flowJson = data['flow'] as Map<String, dynamic>;
+
+        // Add repository information to flow JSON
+        if (data['repository'] != null) {
+          final repo = data['repository'] as Map<String, dynamic>;
+          flowJson['repository_url'] = repo['html_url'];
+        }
+        if (data['local_path'] != null) {
+          flowJson['local_path'] = data['local_path'];
+        }
+
         final flow = ProjectFlow.fromJson(flowJson);
 
         // Auto-create alarms and notes for the generated flow
         await _autoCreateAlarmsAndNotes(flow);
-        return flow;
+
+        return {
+          'flow': flow,
+          'repository': data['repository'],
+          'local_path': data['local_path'],
+          'message': data['message'],
+        };
       } else {
         throw Exception('Failed to auto-generate flow: ${response.statusCode}');
       }
@@ -271,7 +314,13 @@ class FlowService {
 
       // Enrich fallback with alarms & notes (local/remote best-effort)
       await _autoCreateAlarmsAndNotes(fallbackFlow);
-      return fallbackFlow;
+      return {
+        'flow': fallbackFlow,
+        'repository': null,
+        'local_path': null,
+        'message':
+            'Created fallback flow (repository creation not available offline)',
+      };
     }
   }
 

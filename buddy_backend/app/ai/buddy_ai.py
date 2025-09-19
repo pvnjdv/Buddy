@@ -1418,7 +1418,7 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
             "confidence": 0.0
         }
 
-    async def generate_ai_response(self, prompt: str, user_id: str = None, db_session=None, chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
+    async def generate_ai_response(self, prompt: str, user_id: str = None, db_session=None, chat_history: List[Dict[str, str]] = None, sub_mode: str = "standard") -> Dict[str, Any]:
         """
         Enhanced AI response generation with RAG integration and intelligent routing
         Works like GPT-5 with full context awareness and GitHub Copilot capabilities
@@ -1560,7 +1560,7 @@ Context: {json.dumps(relevant_knowledge[:2], indent=2) if relevant_knowledge els
 Provide a helpful, natural response. Be conversational, not formal. Give exactly what the user needs - short for simple questions, detailed for complex ones.
 """
                 
-                response = await self.ai_client.generate_response(simple_prompt, chat_history=chat_history)
+                response = await self.ai_client.generate_response(simple_prompt, chat_history=chat_history, sub_mode=sub_mode)
                 
                 return {
                     "direct_answer": response,
@@ -1585,7 +1585,7 @@ Respond naturally and helpfully. Structure your response appropriately:
 Focus on being genuinely helpful rather than following rigid formats.
 """
                 
-                response = await self.ai_client.generate_response(enhanced_prompt, chat_history=chat_history)
+                response = await self.ai_client.generate_response(enhanced_prompt, chat_history=chat_history, sub_mode=sub_mode)
                 
                 # Check if the response warrants additional structure
                 if any(keyword in prompt.lower() for keyword in ['how to', 'steps', 'guide', 'tutorial', 'implement']):
