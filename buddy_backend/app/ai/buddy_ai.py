@@ -1515,7 +1515,7 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
             
             # Generate natural, context-aware response
             context_enhanced_response = await self.generate_context_aware_response(
-                prompt, user_context, relevant_knowledge, intent_analysis, chat_history=chat_history
+                prompt, user_context, relevant_knowledge, intent_analysis, chat_history=chat_history, sub_mode=sub_mode
             )
             return {
                 "type": "enhanced_response",
@@ -1537,7 +1537,8 @@ Need more specific guidance? Just ask me about any particular aspect you're stru
                                             user_context: Dict[str, Any],
                                             relevant_knowledge: List[Dict[str, Any]],
                                             intent_analysis: Dict[str, Any],
-                                            chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
+                                            chat_history: List[Dict[str, str]] = None,
+                                            sub_mode: str = "standard") -> Dict[str, Any]:
         """
         Generate natural, ChatGPT-like responses that adapt to complexity
         Simple questions get simple answers, complex ones get detailed responses

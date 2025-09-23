@@ -284,13 +284,24 @@ class _BuddyScreenState extends State<BuddyScreen>
         }
       } else {
         // Handle submode switching (standard, ask, agent, reasoning, deepthink)
-        setState(() {
-          _currentSubMode = newMode;
-        });
-        _showSnackBar(
-          'Mode: ${_getSubModeName(newMode)} • ${_currentInfrastructure == 'local' ? 'Local' : 'Cloud'}',
-        );
-        success = true;
+        final validSubModes = [
+          'standard',
+          'ask',
+          'agent',
+          'reasoning',
+          'deepthink',
+        ];
+        if (validSubModes.contains(newMode)) {
+          setState(() {
+            _currentSubMode = newMode;
+          });
+          _showSnackBar(
+            'Mode: ${_getSubModeName(newMode)} • ${_currentInfrastructure == 'local' ? 'Local' : 'Cloud'}',
+          );
+          success = true;
+        } else {
+          _showSnackBar('Invalid mode: $newMode');
+        }
       }
     } catch (e) {
       _showSnackBar('Error switching mode: $e');
@@ -1507,7 +1518,7 @@ class _BuddyScreenState extends State<BuddyScreen>
                         await _switchToMode('reasoning');
                         break;
                       case 'deep_think':
-                        await _switchToMode('deep_think');
+                        await _switchToMode('deepthink');
                         break;
                       case 'image_generation':
                         _showComingSoon('Image Generation');
@@ -1524,7 +1535,7 @@ class _BuddyScreenState extends State<BuddyScreen>
                         children: [
                           Icon(
                             Icons.cloud,
-                            color: _currentAIMode == 'api'
+                            color: _currentInfrastructure == 'cloud'
                                 ? const Color(0xFF667EEA)
                                 : Colors.white,
                           ),
@@ -1532,10 +1543,10 @@ class _BuddyScreenState extends State<BuddyScreen>
                           Text(
                             'Standard Mode',
                             style: TextStyle(
-                              color: _currentAIMode == 'api'
+                              color: _currentInfrastructure == 'cloud'
                                   ? const Color(0xFF667EEA)
                                   : Colors.white,
-                              fontWeight: _currentAIMode == 'api'
+                              fontWeight: _currentInfrastructure == 'cloud'
                                   ? FontWeight.bold
                                   : FontWeight.normal,
                             ),
@@ -1549,7 +1560,7 @@ class _BuddyScreenState extends State<BuddyScreen>
                         children: [
                           Icon(
                             Icons.help_outline,
-                            color: _currentAIMode == 'ask'
+                            color: _currentSubMode == 'ask'
                                 ? Colors.orange
                                 : Colors.white,
                           ),
@@ -1557,10 +1568,10 @@ class _BuddyScreenState extends State<BuddyScreen>
                           Text(
                             'Ask Mode',
                             style: TextStyle(
-                              color: _currentAIMode == 'ask'
+                              color: _currentSubMode == 'ask'
                                   ? Colors.orange
                                   : Colors.white,
-                              fontWeight: _currentAIMode == 'ask'
+                              fontWeight: _currentSubMode == 'ask'
                                   ? FontWeight.bold
                                   : FontWeight.normal,
                             ),
@@ -1574,7 +1585,7 @@ class _BuddyScreenState extends State<BuddyScreen>
                         children: [
                           Icon(
                             Icons.android,
-                            color: _currentAIMode == 'agent'
+                            color: _currentSubMode == 'agent'
                                 ? Colors.green
                                 : Colors.white,
                           ),
@@ -1582,10 +1593,10 @@ class _BuddyScreenState extends State<BuddyScreen>
                           Text(
                             'Agent Mode',
                             style: TextStyle(
-                              color: _currentAIMode == 'agent'
+                              color: _currentSubMode == 'agent'
                                   ? Colors.green
                                   : Colors.white,
-                              fontWeight: _currentAIMode == 'agent'
+                              fontWeight: _currentSubMode == 'agent'
                                   ? FontWeight.bold
                                   : FontWeight.normal,
                             ),
@@ -1624,7 +1635,7 @@ class _BuddyScreenState extends State<BuddyScreen>
                         children: [
                           Icon(
                             Icons.psychology_alt,
-                            color: _currentAIMode == 'deep_think'
+                            color: _currentSubMode == 'deepthink'
                                 ? Colors.indigo
                                 : Colors.white,
                           ),
@@ -1632,10 +1643,10 @@ class _BuddyScreenState extends State<BuddyScreen>
                           Text(
                             'Deep Think Mode',
                             style: TextStyle(
-                              color: _currentAIMode == 'deep_think'
+                              color: _currentSubMode == 'deepthink'
                                   ? Colors.indigo
                                   : Colors.white,
-                              fontWeight: _currentAIMode == 'deep_think'
+                              fontWeight: _currentSubMode == 'deepthink'
                                   ? FontWeight.bold
                                   : FontWeight.normal,
                             ),
@@ -2482,31 +2493,6 @@ class _BuddyScreenState extends State<BuddyScreen>
         return Colors.cyan;
       default:
         return const Color(0xFF667EEA);
-    }
-  }
-
-  String _getModeName(String mode) {
-    switch (mode) {
-      case 'api':
-        return 'Standard';
-      case 'creative':
-        return 'Creative';
-      case 'local':
-        return 'Local';
-      case 'ask':
-        return 'Ask';
-      case 'agent':
-        return 'Agent';
-      case 'reasoning':
-        return 'Reasoning';
-      case 'deep_think':
-        return 'Deep Think';
-      case 'image_generation':
-        return 'Image Gen';
-      case 'hybrid_beta':
-        return 'Hybrid Beta';
-      default:
-        return 'Standard';
     }
   }
 

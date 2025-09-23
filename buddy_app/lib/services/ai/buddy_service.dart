@@ -5,50 +5,7 @@ import '../../models/flow_models.dart';
 import '../../config/api_config.dart';
 import '../agent/buddy_orchestrator.dart';
 import '../databases/buddy_chat_database.dart';
-import '../auth/http_interceptor.dart';
 import 'on_device_ai_service.dart';
-
-// Simple response cache to improve performance
-class _ResponseCache {
-  static final Map<String, _CacheEntry> _cache = {};
-  static const Duration cacheTimeout = Duration(minutes: 5);
-
-  static String? get(String key) {
-    final entry = _cache[key];
-    if (entry != null &&
-        DateTime.now().difference(entry.timestamp) < cacheTimeout) {
-      return entry.response;
-    }
-    _cache.remove(key);
-    return null;
-  }
-
-  static void set(String key, String response) {
-    _cache[key] = _CacheEntry(response, DateTime.now());
-
-    // Clean old entries
-    _cache.removeWhere(
-      (key, entry) => DateTime.now().difference(entry.timestamp) > cacheTimeout,
-    );
-  }
-
-  static void clear() {
-    _cache.clear();
-  }
-
-  // Public method to clear response cache
-  static void clearResponseCache() {
-    _ResponseCache.clear();
-    print('📦 Response cache cleared');
-  }
-}
-
-class _CacheEntry {
-  final String response;
-  final DateTime timestamp;
-
-  _CacheEntry(this.response, this.timestamp);
-}
 
 class AIPersona {
   final String id;
@@ -188,8 +145,10 @@ class BuddyService {
   // Load all personas from backend
   static Future<void> loadSavedPersonas() async {
     try {
-      final response = await HttpInterceptor.get(
-        '${ApiConfig.baseUrl}/personas/',
+      final headers = await _getAuthHeaders();
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/personas/'),
+        headers: headers,
       );
 
       if (response.statusCode == 200) {
@@ -607,13 +566,6 @@ class BuddyService {
       };
     }
 
-    // Check cache first
-    final cachedResponse = _ResponseCache.get(prompt);
-    if (cachedResponse != null) {
-      print('📦 Returning cached response for: ${_truncateString(prompt, 50)}');
-      return {'success': true, 'response': cachedResponse, 'cached': true};
-    }
-
     _isProcessingRequest = true;
 
     // Add user message to chat history first
@@ -667,9 +619,6 @@ class BuddyService {
             'extra': agentResult.extra,
           };
 
-          // Cache the successful orchestrator response
-          _ResponseCache.set(prompt, msg);
-
           // Handle navigation actions from AppControlSkill
           if (agentResult.extra?['action'] == 'navigate') {
             response['navigate'] = {
@@ -720,9 +669,6 @@ class BuddyService {
           print(
             '💾 Saved local AI response: ${_truncateString(assistantMessage.content, 50)}',
           );
-
-          // Cache the successful local AI response
-          _ResponseCache.set(prompt, localResponse);
 
           _isProcessingRequest = false; // Reset flag before returning
           return {
@@ -799,9 +745,6 @@ class BuddyService {
 
         print('=== SUCCESS - RETURNING RESPONSE ===');
         print('AI Response: $aiResponse');
-
-        // Cache the successful response
-        _ResponseCache.set(prompt, aiResponse);
 
         _isProcessingRequest = false; // Reset flag before returning
         return {'success': true, 'response': aiResponse, 'message': aiResponse};
