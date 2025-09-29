@@ -22,7 +22,7 @@ class _AISettingsScreenState extends State<AISettingsScreen> {
   Future<void> _loadCurrentSettings() async {
     final mode = BuddyService.getCurrentAIMode();
     final localInfo = await BuddyService.getLocalAIInfo();
-    
+
     setState(() {
       _currentMode = mode;
       _localAIInfo = localInfo;
@@ -266,7 +266,9 @@ class _AISettingsScreenState extends State<AISettingsScreen> {
                     const SizedBox(height: 8),
                     const Text(
                       '• Cloud API: Fast, always up-to-date, requires internet\n'
-                      '• Local AI: Private, works offline, requires compatible model files (.gguf)\n'
+                      '• Local AI: Private, works offline, requires compatible model files (.gguf, .tflite)\n'
+                      '• GGUF format is recommended for language models\n'
+                      '• TFLite format is optimized for mobile devices\n'
                       '• Local mode requires sufficient device memory and processing power',
                       style: TextStyle(fontSize: 14),
                     ),

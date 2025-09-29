@@ -48,13 +48,29 @@ class OnDeviceAIService {
     return Platform.isAndroid || Platform.isIOS;
   }
 
-  /// Load a TensorFlow Lite model from file path
+  /// Load a model from file path
   Future<bool> loadModelFromFile(String filePath) async {
     try {
-      if (_useNativePlugin) {
-        return await _loadModelWithNativePlugin(filePath);
+      // Determine model type based on file extension
+      final fileName = filePath.toLowerCase();
+
+      if (fileName.endsWith('.gguf') ||
+          fileName.endsWith('.bin') ||
+          fileName.endsWith('.ggml')) {
+        // For GGUF models, just mark as loaded - processing handled by BuddyService
+        print('🔗 GGUF model detected: $filePath');
+        _currentModelPath = filePath;
+        _isModelLoaded = true;
+        return true;
+      } else if (fileName.endsWith('.tflite') || fileName.endsWith('.lite')) {
+        // Use native plugin for TFLite models
+        if (_useNativePlugin) {
+          return await _loadModelWithNativePlugin(filePath);
+        } else {
+          return await _loadModelWithTFLiteFlutter(filePath);
+        }
       } else {
-        return await _loadModelWithTFLiteFlutter(filePath);
+        throw Exception('Unsupported model format: $filePath');
       }
     } catch (e) {
       print('Error loading model: $e');
@@ -110,29 +126,44 @@ class OnDeviceAIService {
     }
   }
 
-  /// Select and load a TensorFlow Lite model using file picker
+  /// Select and load a local AI model using file picker
   Future<bool> selectAndLoadModel() async {
     try {
+      // Show user options for model types
+      // For now, let's focus on TFLite models for true local processing
+      // GGUF models will be supported via server-based local mode
+
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        dialogTitle: 'Select TensorFlow Lite Model (.tflite or .lite)',
+        type: FileType.custom,
+        allowedExtensions: ['tflite', 'lite', 'gguf', 'bin', 'ggml'],
+        dialogTitle: 'Select AI Model (.tflite for mobile, .gguf for server)',
       );
 
       if (result != null && result.files.single.path != null) {
         final filePath = result.files.single.path!;
+        final fileName = filePath.toLowerCase();
 
-        // Validate file extension
-        if (!filePath.toLowerCase().endsWith('.tflite') &&
-            !filePath.toLowerCase().endsWith('.lite')) {
-          print('❌ Invalid file format. Please select a .tflite or .lite file');
-          return false;
+        // Check if it's a GGUF model
+        if (fileName.endsWith('.gguf') ||
+            fileName.endsWith('.bin') ||
+            fileName.endsWith('.ggml')) {
+          print('🔄 GGUF model detected: $filePath');
+          print(
+            '📤 This will use server-based processing for optimal performance',
+          );
+
+          // For GGUF models, we'll indicate they're loaded but handle them via BuddyService
+          _currentModelPath = filePath;
+          _isModelLoaded = true;
+          return true;
         }
 
+        // For TFLite models, use the original loading logic
         return await loadModelFromFile(filePath);
       }
       return false;
     } catch (e) {
-      print('Error selecting TFLite model: $e');
+      print('Error selecting AI model: $e');
       return false;
     }
   }
@@ -149,6 +180,17 @@ class OnDeviceAIService {
     }
 
     try {
+      // Check if it's a GGUF model - these should be handled by BuddyService
+      final fileName = _currentModelPath!.toLowerCase();
+      if (fileName.endsWith('.gguf') ||
+          fileName.endsWith('.bin') ||
+          fileName.endsWith('.ggml')) {
+        throw Exception(
+          'GGUF models should be processed via BuddyService server API',
+        );
+      }
+
+      // Handle TFLite models with native plugin or desktop simulation
       if (_useNativePlugin) {
         final result = await _channel.invokeMethod('generateResponse', {
           'prompt': prompt,

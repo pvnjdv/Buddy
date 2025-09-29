@@ -231,9 +231,6 @@ class _BuddyScreenState extends State<BuddyScreen>
     String nextMode;
     switch (_currentAIMode) {
       case 'api':
-        nextMode = 'creative';
-        break;
-      case 'creative':
         nextMode = 'local';
         break;
       case 'local':

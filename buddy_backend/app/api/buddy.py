@@ -742,7 +742,10 @@ class LocalModeSwitch(BaseModel):
     model_path: str  # Path to the local model file
 
 @router.post("/buddy/switch-to-local")
-async def switch_to_local_mode(request: LocalModeSwitch):
+async def switch_to_local_mode(
+    request: LocalModeSwitch,
+    current_user: User = Depends(get_current_user)
+):
     """Switch to local mode with a specific model file"""
     try:
         if request.mode != "local":

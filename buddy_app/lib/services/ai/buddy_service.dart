@@ -942,6 +942,26 @@ class BuddyService {
       final success = await _onDeviceAI!.selectAndLoadModel();
 
       if (success) {
+        // Check if it's a GGUF model that needs server-based processing
+        final modelPath = _onDeviceAI!.currentModelPath;
+        if (modelPath != null) {
+          final fileName = modelPath.toLowerCase();
+          if (fileName.endsWith('.gguf') ||
+              fileName.endsWith('.bin') ||
+              fileName.endsWith('.ggml')) {
+            print(
+              '🔄 Setting up server-based local mode for GGUF model: $modelPath',
+            );
+
+            // Use the server API to load the GGUF model
+            final serverSuccess = await switchToServerLocalMode(modelPath);
+            if (!serverSuccess) {
+              print('❌ Failed to load GGUF model on server');
+              return false;
+            }
+          }
+        }
+
         _currentAIMode = 'local';
         print('✅ Successfully switched to local AI mode');
 
@@ -1139,6 +1159,51 @@ class BuddyService {
       if (_onDeviceAI == null || !_onDeviceAI!.isModelLoaded) {
         throw Exception('Local AI model not loaded');
       }
+
+      final modelPath = _onDeviceAI!.currentModelPath;
+
+      // Check if it's a GGUF model (server-based) or TFLite model (device-based)
+      if (modelPath != null) {
+        final fileName = modelPath.toLowerCase();
+        if (fileName.endsWith('.gguf') ||
+            fileName.endsWith('.bin') ||
+            fileName.endsWith('.ggml')) {
+          print('🔗 Using server-based processing for GGUF model');
+
+          // For GGUF models, use the standard API endpoint (server handles local processing)
+          final headers = await _getAuthHeaders();
+          final response = await http.post(
+            Uri.parse('${ApiConfig.baseUrl}/buddy/ask'),
+            headers: headers,
+            body: jsonEncode({
+              'prompt': prompt,
+              'chat_history': _chatHistory.length > 3
+                  ? _chatHistory
+                        .sublist(_chatHistory.length - 3)
+                        .map(
+                          (msg) => {'role': msg.role, 'content': msg.content},
+                        )
+                        .toList()
+                  : _chatHistory
+                        .map(
+                          (msg) => {'role': msg.role, 'content': msg.content},
+                        )
+                        .toList(),
+              'sub_mode': 'standard',
+            }),
+          );
+
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            return data['response'] ?? 'No response received';
+          } else {
+            throw Exception('Server response error: ${response.statusCode}');
+          }
+        }
+      }
+
+      // For TFLite models, use on-device processing
+      print('📱 Using on-device processing for TFLite model');
 
       // Create a simple prompt with some context from chat history
       String contextPrompt = prompt;
