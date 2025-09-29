@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Convert SVG to PNG</title>
+</head>
+<body>
+    <canvas id="canvas" width="128" height="128" style="display: none;"></canvas>
+    
+    <script>
+        // Create a simple 128x128 PNG icon programmatically
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Create gradient
+        const gradient = ctx.createLinearGradient(0, 0, 128, 128);
+        gradient.addColorStop(0, '#667EEA');
+        gradient.addColorStop(1, '#764BA2');
+        
+        // Background circle
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(64, 64, 60, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Robot head (simplified)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(40, 35, 48, 40);
+        
+        // Eyes
+        ctx.fillStyle = '#10B981';
+        ctx.beginPath();
+        ctx.arc(52, 50, 4, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(76, 50, 4, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Download the canvas as PNG
+        canvas.toBlob(function(blob) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'icon.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    </script>
+    
+    <p>The icon.png file should download automatically. If not, open this HTML file in a browser.</p>
+</body>
+</html>

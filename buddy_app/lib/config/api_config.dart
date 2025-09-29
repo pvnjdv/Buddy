@@ -3,7 +3,7 @@ class ApiConfig {
   static const bool useProduction = false; // Set to true for release/testing
 
   // Local development configuration
-  static const String _localIp = '10.172.224.3';
+  static const String _localIp = '10.31.112.3';
   static const String _localPort = '8000';
   static const String _localUrl = 'http://$_localIp:$_localPort';
 

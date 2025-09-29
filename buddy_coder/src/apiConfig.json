@@ -1,0 +1,34 @@
+{
+  "useProduction": false,
+  "environments": {
+    "local": {
+      "name": "Local Development",
+      "serverUrl": "http://10.31.112.3:8000",
+      "apiPrefix": "",
+      "description": "Local development server"
+    },
+    "production": {
+      "name": "Production Server",
+      "serverUrl": "https://buddy-production-11a1.up.railway.app",
+      "apiPrefix": "",
+      "description": "Production server on Railway"
+    }
+  },
+  "endpoints": {
+    "auth": {
+      "requestOtp": "/auth/request-otp",
+      "verifyOtp": "/auth/verify-otp", 
+      "refreshToken": "/auth/refresh-token",
+      "logout": "/auth/logout"
+    },
+    "chat": {
+      "vscode": "/api/vscode/chat",
+      "buddy": "/api/buddy/ask"
+    }
+  },
+  "settings": {
+    "timeout": 30000,
+    "retries": 3,
+    "autoRefreshToken": true
+  }
+}
