@@ -3,17 +3,17 @@ class ApiConfig {
   static const bool useProduction = false; // Set to true for release/testing
 
   // Local development configuration
-  static const String _localIp = '10.50.38.3';
-  static const String _localPort = '8000';
+  static const String _localIp = 'hostip';
+  static const String _localPort = 'hostport';
   static const String _localUrl = 'http://$_localIp:$_localPort';
 
   // Production Railway URL
   static const String _productionUrl =
-      'https://buddy-production-11a1.up.railway.app';
+      'https://your-production-url';
   // WebSocket URLs
   static const String _localWsUrl = 'ws://$_localIp:$_localPort';
   static const String _productionWsUrl =
-      'wss://buddy-production-11a1.up.railway.app';
+      'wss://your-production-url';
 
   // Current base URL based on environment
   static String get baseUrl => useProduction ? _productionUrl : _localUrl;
