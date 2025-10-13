@@ -1,4 +1,4 @@
-<img src="https://avatars.githubusercontent.com/u/140404124?v=4" width="120" align="right">
+<![Buddy Logo](https://github.com/pvnjdv/Buddy/blob/main/buddy_app/assets/logo.png?raw=true)
 
 # 🧑‍💻 Buddy: Cross-Platform AI Project Manager & Copilot Alternative
 
