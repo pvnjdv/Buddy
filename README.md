@@ -1,5 +1,3 @@
-![Buddy Logo](https://github.com/pvnjdv/Buddy/blob/main/buddy_app/assets/icon/app_icon.jpg?raw=true)
-
 # 🧑‍💻 Buddy: Cross-Platform AI Project Manager & Copilot Alternative
 
 **Buddy** is a cross-platform, AI-powered productivity suite for developers and teams. It acts as a GitHub Copilot alternative, offering project management, code assistance, remote device access, and seamless integration across desktop, mobile, and web.
