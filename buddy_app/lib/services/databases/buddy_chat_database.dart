@@ -4,29 +4,53 @@ import 'dart:convert';
 /// Separate database service for Buddy Chat conversations
 /// This provides isolated storage for chat data with better performance and scalability
 class BuddyChatDatabase {
-  static const String _chatHistoryKey = 'buddy_chat_history';
   static const String _conversationsKey = 'buddy_conversations';
-  static const String _activeConversationKey = 'buddy_active_conversation';
   static const String _conversationMetadataKey = 'buddy_conversation_metadata';
+
+  // User-specific keys
+  static String? _currentUserId;
+  static String _getUserChatHistoryKey() =>
+      'buddy_chat_history_${_currentUserId ?? 'default'}';
+  static String _getUserConversationsKey() =>
+      'buddy_conversations_${_currentUserId ?? 'default'}';
+  static String _getUserActiveConversationKey() =>
+      'buddy_active_conversation_${_currentUserId ?? 'default'}';
 
   // Current active conversation ID
   static String? _activeConversationId;
 
-  /// Initialize the database
-  static Future<void> initialize() async {
+  /// Initialize the database with user context
+  static Future<void> initialize([String? userId]) async {
+    // Set current user ID from auth service or parameter
+    if (userId != null) {
+      _currentUserId = userId;
+    } else {
+      // Try to get user ID from auth service
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        _currentUserId = prefs.getString('mobile_number') ?? 'default';
+      } catch (e) {
+        _currentUserId = 'default';
+      }
+    }
+
     final prefs = await SharedPreferences.getInstance();
-    _activeConversationId = prefs.getString(_activeConversationKey);
+    _activeConversationId = prefs.getString(_getUserActiveConversationKey());
 
     // Only create a new conversation if there are existing conversations
     // or if this is the very first time the app is run
     if (_activeConversationId == null) {
-      final conversationsJson = prefs.getString(_conversationsKey) ?? '[]';
+      final conversationsJson =
+          prefs.getString(_getUserConversationsKey()) ?? '[]';
       final List<dynamic> conversations = json.decode(conversationsJson);
 
       // Only auto-create if this is truly the first time (no conversations at all)
-      if (conversations.isEmpty && !prefs.containsKey(_conversationsKey)) {
+      if (conversations.isEmpty &&
+          !prefs.containsKey(_getUserConversationsKey())) {
         await startNewConversation();
-        print('🆕 First time setup: Created initial conversation');
+        print(
+          '🆕 First time setup: Created initial conversation for user $_currentUserId',
+        );
       } else if (conversations.isNotEmpty) {
         // Load the most recent conversation
         conversations.sort(
@@ -35,9 +59,13 @@ class BuddyChatDatabase {
         );
         final mostRecentConv = conversations.first;
         await loadConversation(mostRecentConv['id']);
-        print('🔄 Loaded most recent conversation: ${mostRecentConv['id']}');
+        print(
+          '🔄 Loaded most recent conversation: ${mostRecentConv['id']} for user $_currentUserId',
+        );
       } else {
-        print('📭 No active conversation - waiting for user to start one');
+        print(
+          '📭 No active conversation - waiting for user $_currentUserId to start one',
+        );
       }
     }
   }
@@ -54,14 +82,17 @@ class BuddyChatDatabase {
 
     // Set new active conversation
     _activeConversationId = conversationId;
-    await prefs.setString(_activeConversationKey, conversationId);
+    await prefs.setString(_getUserActiveConversationKey(), conversationId);
 
     // Clear current chat history for new conversation
-    await prefs.remove(_chatHistoryKey);
+    await prefs.remove(_getUserChatHistoryKey());
 
     // Save conversation metadata
     await _saveConversationMetadata(conversationId, []);
 
+    print(
+      '🆕 Started new conversation: $conversationId for user $_currentUserId',
+    );
     return conversationId;
   }
 
@@ -70,7 +101,7 @@ class BuddyChatDatabase {
     if (_activeConversationId == null) return;
 
     final prefs = await SharedPreferences.getInstance();
-    final chatHistory = prefs.getStringList(_chatHistoryKey) ?? [];
+    final chatHistory = prefs.getStringList(_getUserChatHistoryKey()) ?? [];
 
     // Parse messages to generate title
     List<Map<String, dynamic>> parsedMessages = [];
@@ -98,10 +129,12 @@ class BuddyChatDatabase {
       'messages': chatHistory,
       'timestamp': DateTime.now().toIso8601String(),
       'messageCount': chatHistory.length,
+      'userId': _currentUserId,
     };
 
     // Get existing conversations
-    final conversationsJson = prefs.getString(_conversationsKey) ?? '[]';
+    final conversationsJson =
+        prefs.getString(_getUserConversationsKey()) ?? '[]';
     final List<dynamic> conversations = json.decode(conversationsJson);
 
     // Remove existing conversation with same ID and add updated one
@@ -109,7 +142,10 @@ class BuddyChatDatabase {
     conversations.add(conversationData);
 
     // Save back to storage
-    await prefs.setString(_conversationsKey, json.encode(conversations));
+    await prefs.setString(
+      _getUserConversationsKey(),
+      json.encode(conversations),
+    );
   }
 
   /// Load a specific conversation
@@ -123,7 +159,8 @@ class BuddyChatDatabase {
     }
 
     // Load the requested conversation
-    final conversationsJson = prefs.getString(_conversationsKey) ?? '[]';
+    final conversationsJson =
+        prefs.getString(_getUserConversationsKey()) ?? '[]';
     final List<dynamic> conversations = json.decode(conversationsJson);
 
     final conversation = conversations.firstWhere(
@@ -134,17 +171,18 @@ class BuddyChatDatabase {
     if (conversation != null) {
       // Set as active conversation
       _activeConversationId = conversationId;
-      await prefs.setString(_activeConversationKey, conversationId);
+      await prefs.setString(_getUserActiveConversationKey(), conversationId);
 
       // Load messages
       final List<String> messages = List<String>.from(
         conversation['messages'] ?? [],
       );
-      await prefs.setStringList(_chatHistoryKey, messages);
+      await prefs.setStringList(_getUserChatHistoryKey(), messages);
+      print('📥 Loaded conversation: $conversationId for user $_currentUserId');
     }
   }
 
-  /// Get all conversations
+  /// Get all conversations for current user
   static Future<List<Map<String, dynamic>>> getAllConversations() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -153,7 +191,8 @@ class BuddyChatDatabase {
       await _saveCurrentConversation();
     }
 
-    final conversationsJson = prefs.getString(_conversationsKey) ?? '[]';
+    final conversationsJson =
+        prefs.getString(_getUserConversationsKey()) ?? '[]';
     final List<dynamic> conversations = json.decode(conversationsJson);
 
     return conversations.cast<Map<String, dynamic>>().map((conv) {
@@ -259,10 +298,10 @@ class BuddyChatDatabase {
       await startNewConversation();
     }
 
-    final chatHistory = prefs.getStringList(_chatHistoryKey) ?? [];
+    final chatHistory = prefs.getStringList(_getUserChatHistoryKey()) ?? [];
 
     chatHistory.add(messageJson);
-    await prefs.setStringList(_chatHistoryKey, chatHistory);
+    await prefs.setStringList(_getUserChatHistoryKey(), chatHistory);
 
     print(
       '💬 Added message to conversation ${_activeConversationId}. Total messages: ${chatHistory.length}',
@@ -282,13 +321,13 @@ class BuddyChatDatabase {
   /// Get current conversation messages
   static Future<List<String>> getCurrentMessages() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_chatHistoryKey) ?? [];
+    return prefs.getStringList(_getUserChatHistoryKey()) ?? [];
   }
 
   /// Clear current conversation
   static Future<void> clearCurrentConversation() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_chatHistoryKey);
+    await prefs.remove(_getUserChatHistoryKey());
 
     if (_activeConversationId != null) {
       await _saveConversationMetadata(_activeConversationId!, []);
@@ -325,9 +364,11 @@ class BuddyChatDatabase {
       } else {
         // No conversations left, just clear everything
         _activeConversationId = null;
-        await prefs.remove(_activeConversationKey);
-        await prefs.remove(_chatHistoryKey);
-        print('🗑️ All conversations deleted. Chat history cleared.');
+        await prefs.remove(_getUserActiveConversationKey());
+        await prefs.remove(_getUserChatHistoryKey());
+        print(
+          '🗑️ All conversations deleted. Chat history cleared for user $_currentUserId.',
+        );
       }
     }
   }
@@ -340,7 +381,8 @@ class BuddyChatDatabase {
     final prefs = await SharedPreferences.getInstance();
 
     // Update in conversations list
-    final conversationsJson = prefs.getString(_conversationsKey) ?? '[]';
+    final conversationsJson =
+        prefs.getString(_getUserConversationsKey()) ?? '[]';
     final List<dynamic> conversations = json.decode(conversationsJson);
     for (var conv in conversations) {
       if (conv['id'] == conversationId) {
@@ -349,7 +391,10 @@ class BuddyChatDatabase {
         break;
       }
     }
-    await prefs.setString(_conversationsKey, json.encode(conversations));
+    await prefs.setString(
+      _getUserConversationsKey(),
+      json.encode(conversations),
+    );
 
     // Update in metadata
     final metadataListJson = prefs.getString(_conversationMetadataKey) ?? '[]';
@@ -372,9 +417,10 @@ class BuddyChatDatabase {
     final prefs = await SharedPreferences.getInstance();
 
     return {
-      'conversations': prefs.getString(_conversationsKey) ?? '[]',
+      'conversations': prefs.getString(_getUserConversationsKey()) ?? '[]',
       'metadata': prefs.getString(_conversationMetadataKey) ?? '[]',
       'exportTimestamp': DateTime.now().toIso8601String(),
+      'userId': _currentUserId,
     };
   }
 
@@ -383,7 +429,7 @@ class BuddyChatDatabase {
     final prefs = await SharedPreferences.getInstance();
 
     if (data.containsKey('conversations')) {
-      await prefs.setString(_conversationsKey, data['conversations']);
+      await prefs.setString(_getUserConversationsKey(), data['conversations']);
     }
 
     if (data.containsKey('metadata')) {

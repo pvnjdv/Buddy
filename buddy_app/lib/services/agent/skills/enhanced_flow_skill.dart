@@ -18,7 +18,8 @@ class FlowSkill {
   Future<AgentResult> execute(String prompt) async {
     try {
       // Enhanced flow generation with integrated components
-      final flow = await FlowService.generateFlowFromDescription(prompt);
+      final result = await FlowService.generateFlowFromDescription(prompt);
+      final flow = result['flow'] as ProjectFlow;
 
       // Auto-generate related components
       final components = await _generateFlowComponents(flow, prompt);

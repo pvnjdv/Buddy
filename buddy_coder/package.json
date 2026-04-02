@@ -1,0 +1,201 @@
+{
+  "name": "buddy-coder",
+  "displayName": "Buddy AI - Your Intelligent Coding Assistant",
+  "description": "AI-powered coding assistant that helps with code generation, explanation, and project management",
+  "version": "0.0.1",
+  "publisher": "buddy-ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/buddy-coder"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning",
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "ai",
+    "assistant",
+    "coding",
+    "copilot",
+    "chat"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "buddy-coder.openChat",
+        "title": "Open Buddy Chat",
+        "category": "Buddy AI",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "buddy-coder.clearChat",
+        "title": "Clear Chat History",
+        "category": "Buddy AI",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "buddy-coder.switchEnvironment",
+        "title": "Switch API Environment",
+        "category": "Buddy AI",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "buddy-coder.askAboutSelection",
+        "title": "Ask Buddy AI about Selection",
+        "category": "Buddy AI",
+        "icon": "$(question)"
+      },
+      {
+        "command": "buddy-coder.explainCode",
+        "title": "Explain Code",
+        "category": "Buddy AI",
+        "icon": "$(info)"
+      },
+      {
+        "command": "buddy-coder.generateCode",
+        "title": "Generate Code",
+        "category": "Buddy AI",
+        "icon": "$(code)"
+      },
+      {
+        "command": "buddy-coder.reviewCode",
+        "title": "Review Code",
+        "category": "Buddy AI",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "buddy-coder.refactorCode",
+        "title": "Refactor Code",
+        "category": "Buddy AI",
+        "icon": "$(wrench)"
+      },
+      {
+        "command": "buddy-coder.generateFlow",
+        "title": "Generate Project Flow",
+        "category": "Buddy AI",
+        "icon": "$(project)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "buddy-coder",
+          "title": "Buddy AI",
+          "icon": "$(robot)"
+        }
+      ]
+    },
+    "views": {
+      "buddy-coder": [
+        {
+          "type": "webview",
+          "id": "buddy-coder.chatView",
+          "name": "Buddy AI Chat",
+          "when": "true"
+        }
+      ]
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "buddy-coder.askAboutSelection",
+          "when": "editorHasSelection",
+          "group": "buddy-ai@1"
+        },
+        {
+          "command": "buddy-coder.explainCode",
+          "when": "editorHasSelection",
+          "group": "buddy-ai@2"
+        },
+        {
+          "command": "buddy-coder.reviewCode",
+          "when": "editorHasSelection",
+          "group": "buddy-ai@3"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "buddy-coder.switchEnvironment",
+          "when": "view == buddy-coder.chatView",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "buddy-coder.openChat",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b"
+      },
+      {
+        "command": "buddy-coder.askAboutSelection",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "buddy-coder.generateCode",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g"
+      }
+    ],
+    "configuration": {
+      "title": "Buddy AI",
+      "properties": {
+        "buddy-coder.useProduction": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use production server instead of local development server"
+        },
+        "buddy-coder.mobileNumber": {
+          "type": "string",
+          "default": "",
+          "description": "Mobile number for authentication"
+        },
+        "buddy-coder.enableInlineSuggestions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable inline code suggestions"
+        },
+        "buddy-coder.autoContextCapture": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically capture file context when asking questions"
+        },
+        "buddy-coder.maxContextLines": {
+          "type": "number",
+          "default": 100,
+          "description": "Maximum number of lines to include in context"
+        },
+        "buddy-coder.theme": {
+          "type": "string",
+          "enum": ["auto", "light", "dark"],
+          "default": "auto",
+          "description": "Chat interface theme"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}

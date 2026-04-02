@@ -55,9 +55,14 @@ class OnDeviceAIPlugin(private val context: Context) : MethodCallHandler {
                     return@execute
                 }
                 
-                // Check if file is a TFLite model
-                if (!modelFilePath.endsWith(".tflite") && !modelFilePath.endsWith(".lite")) {
-                    result.error("INVALID_FORMAT", "Only .tflite and .lite files are supported", null)
+                // Check if file is a supported model format
+                val supportedExtensions = listOf(".tflite", ".lite", ".gguf", ".bin", ".ggml")
+                val isSupported = supportedExtensions.any { ext -> 
+                    modelFilePath.lowercase().endsWith(ext) 
+                }
+                
+                if (!isSupported) {
+                    result.error("INVALID_FORMAT", "Supported formats: .gguf, .tflite, .lite, .bin, .ggml", null)
                     return@execute
                 }
                 

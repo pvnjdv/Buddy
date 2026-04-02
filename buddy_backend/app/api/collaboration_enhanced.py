@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from app.core.database import get_db
@@ -14,7 +14,7 @@ from app.schemas.collaboration import (
     WorkContributionCreate, WorkContributionResponse,
     AIAssistanceCreate, AIAssistanceResponse,
     CheckpointAssignmentCreate, CheckpointCommentCreate,
-    TeamStatsResponse
+    TeamStatsResponse, CollaborationInvitationCreate
 )
 
 router = APIRouter(prefix="/collaboration", tags=["collaboration"])
@@ -203,9 +203,13 @@ async def get_team_stats(
         ).count()
         
         # Get team members (if collaboration exists)
-        team_members = db.query(CollaborationMember).filter(
-            CollaborationMember.project_id == flow_id
-        ).count()
+        try:
+            team_members = db.query(CollaborationMember).filter(
+                CollaborationMember.project_id == flow_id
+            ).count()
+        except Exception:
+            # Table might not exist yet
+            team_members = 0
         
         return TeamStatsResponse(
             total_hours_worked=total_hours,
@@ -215,30 +219,42 @@ async def get_team_stats(
             last_activity=max(contrib.contributed_at for contrib in contributions) if contributions else None
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return empty stats if tables don't exist yet
+        return TeamStatsResponse(
+            total_hours_worked=0.0,
+            total_contributors=0,
+            ai_assistance_sessions=0,
+            team_members=0,
+            last_activity=None
+        )
 
 # Invitation endpoints (enhanced)
 @router.post("/invitations", response_model=dict)
 async def create_invitation(
-    invitation_data: dict,
+    invitation: CollaborationInvitationCreate,
     db: Session = Depends(get_db)
 ):
     """Create a collaboration invitation"""
     try:
+        # Set default expiration (24 hours from now)
+        expires_at = invitation.expires_at or (datetime.utcnow() + timedelta(hours=24))
+
         # Create invitation record
         db_invitation = CollaborationInvitation(
-            project_id=invitation_data["project_id"],
-            receiver_mobile=invitation_data["receiver_mobile"],
-            role=invitation_data["role"],
-            message=invitation_data.get("message"),
-            expires_at=datetime.fromisoformat(invitation_data["expires_at"]),
+            project_id=invitation.project_id,
+            receiver_mobile=invitation.receiver_mobile,
+            inviter_id=invitation.inviter_id,
+            inviter_name=invitation.inviter_name,
+            role=invitation.role,
+            message=invitation.message,
+            expires_at=expires_at,
             created_at=datetime.utcnow()
         )
-        
+
         db.add(db_invitation)
         db.commit()
         db.refresh(db_invitation)
-        
+
         return {"success": True, "invitation_id": str(db_invitation.id)}
     except Exception as e:
         db.rollback()

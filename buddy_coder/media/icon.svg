@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667EEA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764BA2;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#667EEA;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="url(#gradient1)"/>
+  
+  <!-- Robot head -->
+  <rect x="40" y="35" width="48" height="40" rx="8" fill="white" opacity="0.9"/>
+  
+  <!-- Eyes -->
+  <circle cx="52" cy="50" r="4" fill="url(#gradient2)"/>
+  <circle cx="76" cy="50" r="4" fill="url(#gradient2)"/>
+  
+  <!-- Mouth -->
+  <rect x="56" y="62" width="16" height="2" rx="1" fill="url(#gradient2)"/>
+  
+  <!-- Antenna -->
+  <rect x="62" y="25" width="4" height="12" fill="white" opacity="0.8"/>
+  <circle cx="64" cy="23" r="3" fill="url(#gradient2)"/>
+  
+  <!-- Body -->
+  <rect x="35" y="75" width="58" height="35" rx="12" fill="white" opacity="0.9"/>
+  
+  <!-- Code brackets -->
+  <text x="45" y="95" font-family="monospace" font-size="12" fill="url(#gradient2)" font-weight="bold">&lt;/&gt;</text>
+  
+  <!-- Glow effect -->
+  <circle cx="64" cy="64" r="60" fill="none" stroke="url(#gradient2)" stroke-width="2" opacity="0.3"/>
+</svg>

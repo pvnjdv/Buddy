@@ -24,7 +24,8 @@ from app.api.knowledge import router as knowledge_router
 from app.api.dock import router as dock_router
 from app.api.code_execution import router as code_execution_router
 from app.api.collaboration import router as collaboration_router
-
+from app.api.sync import router as sync_router
+from app.vscode import router as vscode_router
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -59,4 +60,6 @@ app.include_router(knowledge_router, prefix="/api/knowledge", tags=["knowledge"]
 app.include_router(dock_router, prefix="/api/dock", tags=["dock"])
 app.include_router(code_execution_router, prefix="/api/code", tags=["code-execution"])
 app.include_router(collaboration_router, prefix="/api/collaboration", tags=["collaboration"])
+app.include_router(sync_router, prefix="/api/sync", tags=["sync"])
+app.include_router(vscode_router, prefix="/api", tags=["vscode"])
 

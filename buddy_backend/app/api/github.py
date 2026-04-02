@@ -39,6 +39,40 @@ class CreateRepoRequest(BaseModel):
     repository_name: str
     description: Optional[str] = None
 
+class CreateFlowRepoRequest(BaseModel):
+    user_mobile: str
+    project_name: str
+    description: Optional[str] = None
+
+@router.post("/create-flow-repo")
+async def create_flow_repository(
+    request: CreateFlowRepoRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a GitHub repository for a flow with naming convention: {user_mobile}_{project_name}"""
+    try:
+        logger.info(f"User {current_user.id} creating flow repository: {request.user_mobile}_{request.project_name}")
+        
+        result = await github_service.create_flow_repository(
+            user_mobile=request.user_mobile,
+            project_name=request.project_name,
+            description=request.description or f"Flow repository for {request.project_name}"
+        )
+        
+        if result['success']:
+            return {
+                "success": True,
+                "repository": result['repository'],
+                "local_path": result['local_path'],
+                "repo_name": result['repo_name']
+            }
+        else:
+            raise HTTPException(status_code=400, detail=result['error'])
+            
+    except Exception as e:
+        logger.error(f"Error creating flow repository: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/clone")
 async def clone_repository(
     request: CloneRequest,

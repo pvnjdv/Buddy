@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import '../../config/api_config.dart';
+import 'http_interceptor.dart';
 
 class UserProfile {
   final String id;
@@ -91,22 +92,9 @@ class UserService {
   // Fetch user profile from API
   static Future<UserProfile?> fetchUserProfileFromApi() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      // FIX: use the same JWT key used across the app
-      final accessToken = prefs.getString('jwt');
-
-      if (accessToken == null) {
-        print('UserService: No access token found');
-        throw Exception('No access token found');
-      }
-
       print('UserService: Fetching profile from API...');
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/users/me'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
-        },
+      final response = await HttpInterceptor.get(
+        '${ApiConfig.baseUrl}/users/me',
       );
 
       print('UserService: API response status: ${response.statusCode}');
@@ -140,36 +128,29 @@ class UserService {
     String? profession,
   }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      // FIX: use JWT key
-      final accessToken = prefs.getString('jwt');
-
-      if (accessToken == null) {
-        throw Exception('No access token found');
-      }
-
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${ApiConfig.baseUrl}/users/profile'),
-      );
-
-      request.headers['Authorization'] = 'Bearer $accessToken';
+      final fields = <String, String>{};
+      final files = <http.MultipartFile>[];
 
       if (name != null) {
-        request.fields['name'] = name;
+        fields['name'] = name;
       }
 
       if (profession != null) {
-        request.fields['profession'] = profession;
+        fields['profession'] = profession;
       }
 
       if (profileImage != null) {
-        request.files.add(
+        files.add(
           await http.MultipartFile.fromPath('profile_photo', profileImage.path),
         );
       }
 
-      final response = await request.send();
+      final response = await HttpInterceptor.multipartRequest(
+        'POST',
+        '${ApiConfig.baseUrl}/users/profile',
+        fields: fields,
+        files: files,
+      );
       final responseData = await response.stream.bytesToString();
 
       if (response.statusCode == 200) {
@@ -192,20 +173,8 @@ class UserService {
   // Delete profile image
   static Future<bool> deleteProfileImage() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      // FIX: use JWT key
-      final accessToken = prefs.getString('jwt');
-
-      if (accessToken == null) {
-        throw Exception('No access token found');
-      }
-
-      final response = await http.delete(
-        Uri.parse('${ApiConfig.baseUrl}/user/profile/image'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
-        },
+      final response = await HttpInterceptor.delete(
+        '${ApiConfig.baseUrl}/user/profile/image',
       );
 
       if (response.statusCode == 200) {

@@ -35,6 +35,7 @@ class BuddyQuery(BaseModel):
     is_task_continuation: Optional[bool] = False  # For task continuation detection
     recent_context: Optional[str] = None  # Recent conversation context for task continuation
     session_id: Optional[str] = None  # Session identifier for conversation management
+    sub_mode: Optional[str] = "standard"  # AI submode: standard, ask, agent, reasoning, deepthink
 
 class BuddyRequest(BaseModel):
     message: str
@@ -376,7 +377,7 @@ This is a task continuation request. Please modify or add to the previous task b
             
             # Use buddy AI directly for task continuation with context
             user_id = str(current_user.id) if current_user else None
-            buddy_response = await buddy_ai.generate_ai_response(enhanced_prompt, user_id, chat_history=request.chat_history)
+            buddy_response = await buddy_ai.generate_ai_response(enhanced_prompt, user_id, chat_history=request.chat_history, sub_mode=request.sub_mode)
             
             # Extract response text from dynamic AI response
             if isinstance(buddy_response, dict):
@@ -426,8 +427,9 @@ This is a task continuation request. Please modify or add to the previous task b
             # Direct routing without AI thinking overhead for natural ChatGPT-like responses
             logger.info(f"Direct routing (no thinking overhead) for user {current_user.id if current_user else 'anonymous'}")
             
+            # Use buddy AI for standard response generation (default to simple but intelligent)
             user_id = str(current_user.id) if current_user else None
-            buddy_response = await buddy_ai.generate_ai_response(request.prompt, user_id, chat_history=request.chat_history)
+            buddy_response = await buddy_ai.generate_ai_response(request.prompt, user_id, chat_history=request.chat_history, sub_mode=request.sub_mode)
             
             # Format response naturally
             if isinstance(buddy_response, dict):
@@ -595,12 +597,12 @@ This is a task continuation request. Please modify or add to the previous task b
             
             if is_simple_code_request:
                 # Direct code generation without AI strategy interference 
-                buddy_response = await buddy_ai.generate_ai_response(request.prompt, user_id, chat_history=request.chat_history)
+                buddy_response = await buddy_ai.generate_ai_response(request.prompt, user_id, chat_history=request.chat_history, sub_mode=request.sub_mode)
             else:
                 # For non-code requests, we can add some light strategy context
                 strategy = ai_thinking_service.generate_response_strategy(thinking_result)
                 enhanced_message = f"{request.prompt}\n\nContext: {strategy.get('approach', '')}"
-                buddy_response = await buddy_ai.generate_ai_response(enhanced_message, user_id, chat_history=request.chat_history)
+                buddy_response = await buddy_ai.generate_ai_response(enhanced_message, user_id, chat_history=request.chat_history, sub_mode=request.sub_mode)
             
             # Extract response text from dynamic AI response
             if isinstance(buddy_response, dict):
@@ -701,7 +703,7 @@ def _parse_estimated_duration(text: str) -> timedelta:
     return timedelta(days=1)
 
 class ModeSwitch(BaseModel):
-    mode: str  # "local" or "api"
+    mode: str  # "local", "api", or "creative"
 
 @router.get("/buddy/status")
 async def get_ai_status():
@@ -721,10 +723,10 @@ async def get_ai_status():
 
 @router.post("/buddy/switch-mode")
 async def switch_ai_mode(mode_request: ModeSwitch):
-    """Switch between local and API AI modes"""
+    """Switch between local, API, and creative AI modes"""
     try:
-        if mode_request.mode not in ["local", "api"]:
-            raise HTTPException(status_code=400, detail="Mode must be 'local' or 'api'")
+        if mode_request.mode not in ["local", "api", "creative"]:
+            raise HTTPException(status_code=400, detail="Mode must be 'local', 'api', or 'creative'")
         
         buddy_ai.ai_client.switch_mode(mode_request.mode)
         
@@ -740,7 +742,10 @@ class LocalModeSwitch(BaseModel):
     model_path: str  # Path to the local model file
 
 @router.post("/buddy/switch-to-local")
-async def switch_to_local_mode(request: LocalModeSwitch):
+async def switch_to_local_mode(
+    request: LocalModeSwitch,
+    current_user: User = Depends(get_current_user)
+):
     """Switch to local mode with a specific model file"""
     try:
         if request.mode != "local":

@@ -11,17 +11,121 @@ from pathlib import Path
 from datetime import datetime
 import json
 import logging
+import requests
+from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
 class GitHubService:
     def __init__(self):
         self.default_workspace = "/tmp/buddy_workspace"
+        self.github_api_base = "https://api.github.com"
+        # Get GitHub token from environment
+        self.github_token = os.getenv("GITHUB_PAT")
+        self.github_username = os.getenv("GITHUB_USERNAME", "buddy-ai")  # Default to buddy-ai account
         self.ensure_workspace()
     
     def ensure_workspace(self):
         """Ensure default workspace directory exists"""
         Path(self.default_workspace).mkdir(parents=True, exist_ok=True)
+    
+    def _get_github_headers(self) -> Dict[str, str]:
+        """Get headers for GitHub API requests"""
+        return {
+            "Authorization": f"token {self.github_token}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json"
+        }
+    
+    async def create_github_repository(self, repo_name: str, description: str = "", private: bool = False) -> Dict[str, Any]:
+        """Create a new repository on GitHub under the Buddy account"""
+        try:
+            if not self.github_token:
+                raise Exception("GitHub PAT not configured")
+            
+            url = f"{self.github_api_base}/user/repos"
+            data = {
+                "name": repo_name,
+                "description": description,
+                "private": private,
+                "auto_init": True  # Create initial commit with README
+            }
+            
+            # Use requests in a thread pool since it's synchronous
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: requests.post(url, headers=self._get_github_headers(), json=data)
+            )
+            
+            if response.status_code == 201:
+                repo_data = response.json()
+                return {
+                    'success': True,
+                    'repository': {
+                        'id': repo_data['id'],
+                        'name': repo_data['name'],
+                        'full_name': repo_data['full_name'],
+                        'html_url': repo_data['html_url'],
+                        'ssh_url': repo_data['ssh_url'],
+                        'clone_url': repo_data['clone_url']
+                    }
+                }
+            else:
+                error_msg = response.json().get('message', 'Unknown error')
+                return {
+                    'success': False,
+                    'error': f"Failed to create repository: {error_msg}"
+                }
+                
+        except Exception as e:
+            logger.error(f"Error creating GitHub repository: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    async def create_flow_repository(self, user_mobile: str, project_name: str, description: str = "") -> Dict[str, Any]:
+        """Create a repository for a flow with naming convention: {user_mobile}_{project_name}"""
+        try:
+            # Create repository name with convention
+            repo_name = f"{user_mobile}_{project_name}".replace(" ", "_").lower()
+            
+            # Create on GitHub
+            github_result = await self.create_github_repository(
+                repo_name=repo_name,
+                description=description,
+                private=True  # Keep private for user projects
+            )
+            
+            if not github_result['success']:
+                return github_result
+            
+            # Clone locally for development
+            clone_url = github_result['repository']['clone_url']
+            local_path = os.path.join(self.default_workspace, repo_name)
+            
+            clone_result = await self.clone_repository(clone_url, local_path)
+            
+            if not clone_result['success']:
+                return {
+                    'success': False,
+                    'error': f"Repository created on GitHub but failed to clone locally: {clone_result.get('error', 'Unknown error')}"
+                }
+            
+            return {
+                'success': True,
+                'repository': github_result['repository'],
+                'local_path': local_path,
+                'repo_name': repo_name
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creating flow repository: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
     
     async def clone_repository(self, repo_url: str, target_dir: Optional[str] = None) -> Dict[str, Any]:
         """Clone a repository from GitHub"""
@@ -34,9 +138,16 @@ class GitHubService:
             # Ensure target directory parent exists
             os.makedirs(os.path.dirname(target_dir), exist_ok=True)
             
+            # For private repositories, include PAT in the URL
+            if self.github_token and 'https://' in repo_url:
+                # Insert token into URL: https://oauth2:token@github.com/user/repo.git
+                auth_url = repo_url.replace('https://', f'https://oauth2:{self.github_token}@')
+            else:
+                auth_url = repo_url
+            
             # Execute git clone
             process = await asyncio.create_subprocess_exec(
-                'git', 'clone', repo_url, target_dir,
+                'git', 'clone', auth_url, target_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self.default_workspace
